@@ -10,5 +10,5 @@ config:
       version: "2.0"
       path: /workspaces/example/data/physionet.org/files/eicu-crd/2.0
     - name: nweicu
-      version: "1.0"
+      version: "0.1.0"
       path: /workspaces/example/data/physionet.org/files/nweicu/1.0
