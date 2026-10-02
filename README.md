@@ -74,10 +74,10 @@ WeavEHR requires **Python 3.13+**. You can install WeavEHR via PyPI or from sour
 ### With PyPI
 ```bash
 # with pip
-pip install open-icu
+pip install weavehr
 
 # with uv
-uv add open-icu
+uv add weavehr
 ```
 
 ### With GitHub
