@@ -2,7 +2,7 @@
 
 Configurations for the [eICU Collaborative Research Database demo](https://physionet.org/content/eicu-crd-demo/),
 the freely accessible ~2,500-patient subset of eICU-CRD (no credentialing
-required — useful for trying OpenICU end-to-end).
+required — useful for trying WeavEHR end-to-end).
 
 ## Versions
 

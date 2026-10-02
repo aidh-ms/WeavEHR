@@ -5,7 +5,7 @@ from datetime import datetime
 import polars as pl
 import pytest
 
-from open_icu.callbacks._callbacks.algebra import (
+from weavehr.callbacks._callbacks.algebra import (
     Add,
     Divide,
     FloorDivide,
@@ -17,14 +17,14 @@ from open_icu.callbacks._callbacks.algebra import (
     Subtract,
     Sum,
 )
-from open_icu.callbacks._callbacks.conditional import Replace
-from open_icu.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
-from open_icu.callbacks._callbacks.reshape import SplitExplode
-from open_icu.callbacks._callbacks.selector import FirstNotNull, Max
-from open_icu.callbacks._callbacks.shortcuts import Col, Const
-from open_icu.callbacks._callbacks.time import AddOffset, SetTime, ToDatetime
-from open_icu.callbacks._callbacks.type import Cast
-from open_icu.callbacks.proto import CallbackProtocol
+from weavehr.callbacks._callbacks.conditional import Replace
+from weavehr.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
+from weavehr.callbacks._callbacks.reshape import SplitExplode
+from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
+from weavehr.callbacks._callbacks.shortcuts import Col, Const
+from weavehr.callbacks._callbacks.time import AddOffset, SetTime, ToDatetime
+from weavehr.callbacks._callbacks.type import Cast
+from weavehr.callbacks.proto import CallbackProtocol
 
 
 @pytest.fixture
@@ -107,7 +107,7 @@ class TestShortcutsAndConditional:
         assert apply(lf, Const(1)) == [1, 1, 1]
 
     def test_replace(self, lf: pl.LazyFrame) -> None:
-        from open_icu.callbacks._callbacks.comparison import GreaterThan
+        from weavehr.callbacks._callbacks.comparison import GreaterThan
 
         callback = Replace(GreaterThan("a", 3), 0, "a")
         assert apply(lf, callback) == [2.0, 0.0, 0.0]
@@ -146,7 +146,7 @@ class TestFilters:
         assert out["maybe"].to_list() == [5.0]
 
     def test_drop_if(self, lf: pl.LazyFrame) -> None:
-        from open_icu.callbacks._callbacks.comparison import GreaterThan
+        from weavehr.callbacks._callbacks.comparison import GreaterThan
 
         out = collect(lf.filter(DropIf(GreaterThan("a", 3))(lf)))
         assert out["a"].to_list() == [2.0]

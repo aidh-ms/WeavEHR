@@ -3,12 +3,12 @@
 from pathlib import Path
 from typing import ClassVar
 
-from open_icu.config.base import BaseConfig
-from open_icu.config.registry import BaseConfigRegistry, load_configs
+from weavehr.config.base import BaseConfig
+from weavehr.config.registry import BaseConfigRegistry, load_configs
 
 
 class RegConfig(BaseConfig):
-    __open_icu_config_type__: ClassVar[str] = "regtest"
+    __weavehr_config_type__: ClassVar[str] = "regtest"
 
 
 class RegConfigRegistry(BaseConfigRegistry[RegConfig]):
@@ -60,9 +60,9 @@ class TestRegistry:
         registry = RegConfigRegistry()
         registry.load(config_dir)
         assert sorted(registry.keys()) == [
-            "openicu.config.regtest.a.1.0",
-            "openicu.config.regtest.b.1.0",
-            "openicu.config.regtest.c.1.0",
+            "weavehr.config.regtest.a.1.0",
+            "weavehr.config.regtest.b.1.0",
+            "weavehr.config.regtest.c.1.0",
         ]
 
     def test_load_with_includes_and_excludes(self, tmp_path: Path) -> None:
@@ -70,13 +70,13 @@ class TestRegistry:
 
         registry = RegConfigRegistry()
         registry.load(config_dir, includes=["a.1.0"])
-        assert registry.keys() == ["openicu.config.regtest.a.1.0"]
+        assert registry.keys() == ["weavehr.config.regtest.a.1.0"]
 
         registry = RegConfigRegistry()
-        registry.load(config_dir, excludes=["openicu.config.regtest.b.1.0"])
+        registry.load(config_dir, excludes=["weavehr.config.regtest.b.1.0"])
         assert sorted(registry.keys()) == [
-            "openicu.config.regtest.a.1.0",
-            "openicu.config.regtest.c.1.0",
+            "weavehr.config.regtest.a.1.0",
+            "weavehr.config.regtest.c.1.0",
         ]
 
     def test_save_round_trip(self, tmp_path: Path) -> None:

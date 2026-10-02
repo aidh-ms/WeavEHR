@@ -1,11 +1,11 @@
-"""Tests for the expression DSL interpreter (open_icu.callbacks.interpreter)."""
+"""Tests for the expression DSL interpreter (weavehr.callbacks.interpreter)."""
 
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
 
-from open_icu.callbacks.interpreter import ExprInterpreter, parse_expr
-from open_icu.callbacks.proto import CallbackProtocol
+from weavehr.callbacks.interpreter import ExprInterpreter, parse_expr
+from weavehr.callbacks.proto import CallbackProtocol
 
 
 @pytest.fixture

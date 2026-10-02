@@ -66,7 +66,7 @@ Not yet mapped / not cleanly mappable as `simple`:
 - **in_hospital_mortality / outcomes**: from `cases.DischargeState`/`OffsetOfDeath`,
   whose code semantics still need decoding.
 - Concepts with **no SICdb source** in ricu are simply absent (e.g. `tri`/triglycerides
-  has a SICdb id but no OpenICU concept, so it is skipped).
+  has a SICdb id but no WeavEHR concept, so it is skipped).
 
 ## Conventions
 

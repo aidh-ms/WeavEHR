@@ -4,9 +4,9 @@ from typing import cast
 
 import polars as pl
 
-from open_icu.callbacks.proto import CallbackProtocol
-from open_icu.callbacks.registry import register_callback_cls, registry
-from open_icu.utils.name import camel_to_snake
+from weavehr.callbacks.proto import CallbackProtocol
+from weavehr.callbacks.registry import register_callback_cls, registry
+from weavehr.utils.name import camel_to_snake
 
 
 def test_builtins_are_registered_under_snake_case() -> None:

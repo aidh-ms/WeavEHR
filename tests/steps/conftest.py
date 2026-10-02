@@ -10,12 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from open_icu.config.registry import load_configs
-from open_icu.steps.concept.config.concept import ConceptConfig
-from open_icu.steps.concept.registry import concept_config_registry
-from open_icu.steps.extraction.config.table import TableConfig
-from open_icu.steps.extraction.registry import dataset_config_registry
-from open_icu.steps.sharding.registry import sharding_config_registry
+from weavehr.config.registry import load_configs
+from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.registry import concept_config_registry
+from weavehr.steps.extraction.config.table import TableConfig
+from weavehr.steps.extraction.registry import dataset_config_registry
+from weavehr.steps.sharding.registry import sharding_config_registry
 
 VITALS_CSV = """\
 subject_id,stay_id,charttime,itemid,valuenum,valueuom,value

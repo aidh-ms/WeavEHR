@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from open_icu.steps.concept.config.concept import ConceptConfig
-from open_icu.steps.concept.config.derived import DerivedDatasetConceptConfig
-from open_icu.steps.concept.config.simple import MappingConfig, SimpleDatasetConceptConfig
+from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
+from weavehr.steps.concept.config.simple import MappingConfig, SimpleDatasetConceptConfig
 
 
 class TestConceptConfig:
@@ -77,7 +77,7 @@ class TestComplexConcept:
         )
         monkeypatch.syspath_prepend(str(tmp_path))
 
-        from open_icu.steps.concept.config.complex import ComplexDatasetConceptConfig
+        from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 
         config = ComplexDatasetConceptConfig(
             name="windows",
@@ -89,8 +89,8 @@ class TestComplexConcept:
         )
 
         assert config.dependencies == {
-            "openicu.config.concept.ventilation_start.1.0.0",
-            "openicu.config.concept.ventilation_end.1.0.0",
+            "weavehr.config.concept.ventilation_start.1.0.0",
+            "weavehr.config.concept.ventilation_end.1.0.0",
         }
 
         config.build_transformer("test_step")()  # ty: ignore[invalid-argument-type]
@@ -120,8 +120,8 @@ class TestDerivedConcept:
     def test_dependencies_include_table_and_join_concepts(self) -> None:
         derived = self.make_derived()
         assert derived.dependencies == {
-            "openicu.config.concept.patient_weight.1.0.0",
-            "openicu.config.concept.patient_height.1.0.0",
+            "weavehr.config.concept.patient_weight.1.0.0",
+            "weavehr.config.concept.patient_height.1.0.0",
         }
 
     def test_join_defaults(self) -> None:

@@ -6,10 +6,10 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from open_icu.storage.base import FileStorage
-from open_icu.storage.meds import MEDSDataset
-from open_icu.storage.project import OpenICUProject
-from open_icu.storage.workspace import WorkspaceDir
+from weavehr.storage.base import FileStorage
+from weavehr.storage.meds import MEDSDataset
+from weavehr.storage.project import WeavEHRProject
+from weavehr.storage.workspace import WorkspaceDir
 
 
 class TestFileStorage:
@@ -51,16 +51,16 @@ class TestWorkspaceDir:
         assert workspace.content == [nested / "data.parquet"]
 
 
-class TestOpenICUProject:
+class TestWeavEHRProject:
     def test_context_manager_and_paths(self, tmp_path: Path) -> None:
-        with OpenICUProject(tmp_path / "project") as project:
+        with WeavEHRProject(tmp_path / "project") as project:
             assert project.path.is_dir()
             assert project.datasets_path == project.path / "datasets"
             assert project.workspace_path == project.path / "workspace"
             assert project.configs_path == project.path / "configs"
 
     def test_add_workspace_and_dataset(self, tmp_path: Path) -> None:
-        project = OpenICUProject(tmp_path / "project")
+        project = WeavEHRProject(tmp_path / "project")
 
         workspace = project.add_workspace_dir("extraction")
         dataset = project.add_dataset("extraction")
@@ -79,14 +79,14 @@ class TestOpenICUProject:
         project_path = tmp_path / "project"
 
         # First session: produce an extraction dataset with one data file.
-        first = OpenICUProject(project_path)
+        first = WeavEHRProject(project_path)
         extraction = first.add_dataset("extraction")
         table_dir = extraction.data_path / "aumc" / "1.5.0" / "measurement"
         table_dir.mkdir(parents=True)
         pl.DataFrame({"code": ["aumc//measurement//1"]}).write_parquet(table_dir / "MEASUREMENT.parquet")
 
         # Second session: a fresh project instance at the same path.
-        reopened = OpenICUProject(project_path)
+        reopened = WeavEHRProject(project_path)
 
         assert "extraction" in reopened.datasets
         rediscovered = reopened.datasets["extraction"]
@@ -95,7 +95,7 @@ class TestOpenICUProject:
         assert (table_dir / "MEASUREMENT.parquet").exists()
 
     def test_fresh_project_discovers_no_datasets(self, tmp_path: Path) -> None:
-        project = OpenICUProject(tmp_path / "project")
+        project = WeavEHRProject(tmp_path / "project")
         assert project.datasets == {}
 
 
@@ -106,7 +106,7 @@ class TestMEDSDataset:
 
         metadata = json.loads((dataset.metadata_path / "dataset.json").read_text())
         assert metadata["dataset_name"] == "test"
-        assert metadata["etl_name"] == "OpenICU"
+        assert metadata["etl_name"] == "WeavEHR"
         assert "meds_version" in metadata
         assert "created_at" in metadata
 

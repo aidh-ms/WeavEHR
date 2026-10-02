@@ -2,7 +2,7 @@
 
 Configurations for the [MIMIC-IV Clinical Database Demo](https://physionet.org/content/mimic-iv-demo/),
 the openly available 100-patient subset of MIMIC-IV (no credentialing
-required — useful for trying OpenICU end-to-end).
+required — useful for trying WeavEHR end-to-end).
 
 ## Versions
 

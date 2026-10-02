@@ -29,10 +29,10 @@ from typing import cast
 import polars as pl
 import pytest
 
-from open_icu import ConceptStep, ExtractionStep, OpenICUProject
-from open_icu.steps.concept.config.complex import ComplexDatasetConceptConfig
-from open_icu.steps.concept.config.concept import ConceptConfig
-from open_icu.steps.concept.transformer.sofa import (
+from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
+from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
+from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.transformer.sofa import (
     SofaCardiovascularTransformer,
     SofaCnsTransformer,
     SofaCoagulationTransformer,
@@ -41,7 +41,7 @@ from open_icu.steps.concept.transformer.sofa import (
     SofaRespiratoryTransformer,
     SofaTransformer,
 )
-from open_icu.steps.concept.transformer.windowed import WindowedConceptTransformer
+from weavehr.steps.concept.transformer.windowed import WindowedConceptTransformer
 from tests.steps.conftest import load_concept_config, load_extracation_config
 
 T0 = datetime(2024, 1, 1, 0, 0)
@@ -416,7 +416,7 @@ def _run_pipeline(
     labs_csv: str,
     concepts: list[tuple[str, str]] | list[tuple[str, str, tuple[str, ...]]],
     mappings: dict[str, str],
-) -> OpenICUProject:
+) -> WeavEHRProject:
     """Write a minimal project around one labs table and run both steps."""
     data_dir = tmp_path / "data" / DATASET
     data_dir.mkdir(parents=True)
@@ -448,7 +448,7 @@ def _run_pipeline(
         f'  mapping_configs:\n    - name: {DATASET}\n      version: "1.0"\n'
     )
 
-    project = OpenICUProject(tmp_path / "project")
+    project = WeavEHRProject(tmp_path / "project")
     load_extracation_config(table_dir)
     load_concept_config(concept_dir, [mapping_dir])
     ExtractionStep.load(project, tmp_path / "extraction.yml").run()
@@ -456,7 +456,7 @@ def _run_pipeline(
     return project
 
 
-def _concept_output(project: OpenICUProject, name: str) -> pl.DataFrame:
+def _concept_output(project: WeavEHRProject, name: str) -> pl.DataFrame:
     path = project.datasets_path / "concept" / "data" / name / "1.0.0" / f"{DATASET}.parquet"
     return pl.read_parquet(path).sort("time")
 
@@ -480,7 +480,7 @@ subject_id,charttime,itemid,valuenum
 
 def test_end_to_end_sofa_renal_concept(tmp_path: Path) -> None:
     """Extraction -> simple crea/urine concepts -> the complex renal component."""
-    renal_transformer = "open_icu.steps.concept.transformer.sofa.SofaRenalTransformer"
+    renal_transformer = "weavehr.steps.concept.transformer.sofa.SofaRenalTransformer"
     project = _run_pipeline(
         tmp_path,
         RENAL_LABS_CSV,
@@ -518,10 +518,10 @@ def test_end_to_end_total_sofa_chain(tmp_path: Path) -> None:
     and sofa (total) -> both components. Exercises ordering and cross-timestamp
     alignment through the real ConceptStep.
     """
-    win_sum = "open_icu.steps.concept.transformer.windowed.WindowedSumTransformer"
-    sofa_total = "open_icu.steps.concept.transformer.sofa.SofaTransformer"
-    sofa_cns = "open_icu.steps.concept.transformer.sofa.SofaCnsTransformer"
-    sofa_coag = "open_icu.steps.concept.transformer.sofa.SofaCoagulationTransformer"
+    win_sum = "weavehr.steps.concept.transformer.windowed.WindowedSumTransformer"
+    sofa_total = "weavehr.steps.concept.transformer.sofa.SofaTransformer"
+    sofa_cns = "weavehr.steps.concept.transformer.sofa.SofaCnsTransformer"
+    sofa_coag = "weavehr.steps.concept.transformer.sofa.SofaCoagulationTransformer"
 
     project = _run_pipeline(
         tmp_path,

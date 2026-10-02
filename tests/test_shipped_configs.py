@@ -5,7 +5,7 @@ model and that every embedded expression string is valid in the expression
 DSL (correct syntax, only registered callbacks). Dataset configs are resolved
 through the version inheritance mechanism (extends.yml) first, so both
 physical files and inherited/merged configs are validated. They guard the
-configuration library — the part of OpenICU most contributors will touch.
+configuration library — the part of WeavEHR most contributors will touch.
 """
 
 from pathlib import Path
@@ -14,12 +14,12 @@ from typing import Any
 import polars as pl
 import pytest
 
-from open_icu.callbacks.interpreter import ExprInterpreter
-from open_icu.config.inheritance import resolve_effective_configs
-from open_icu.steps.concept.config.concept import ConceptConfig
-from open_icu.steps.concept.config.derived import DerivedDatasetConceptConfig
-from open_icu.steps.concept.config.simple import SimpleDatasetConceptConfig
-from open_icu.steps.extraction.config.table import BaseTableConfig, TableConfig
+from weavehr.callbacks.interpreter import ExprInterpreter
+from weavehr.config.inheritance import resolve_effective_configs
+from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
+from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
+from weavehr.steps.extraction.config.table import BaseTableConfig, TableConfig
 
 REPO_ROOT = Path(__file__).parents[1]
 CONFIG_ROOT = REPO_ROOT / "configs"
@@ -196,7 +196,7 @@ def test_aumc_inherits_omop_tables() -> None:
     measurement = load_effective_table(CONFIG_ROOT / "datasets" / "aumc" / "1.5.0" / "tables", "measurement")
     assert measurement.dataset == "aumc"
     assert measurement.version == "1.5.0"
-    assert measurement.identifier == "openicu.config.table.aumc.1.5.0.measurement"
+    assert measurement.identifier == "weavehr.config.table.aumc.1.5.0.measurement"
     assert measurement.type == "parquet"  # parquet default flows through inheritance
     assert measurement.events  # inherited from omop
 
@@ -230,7 +230,7 @@ def test_mimic_versions_inherit_reference_configs() -> None:
     labevents = load_effective_table(CONFIG_ROOT / "datasets" / "mimic-iv" / "3.1" / "tables", "labevents")
     assert labevents.dataset == "mimic-iv"
     assert labevents.version == "3.1"
-    assert labevents.identifier == "openicu.config.table.mimic-iv.3.1.labevents"
+    assert labevents.identifier == "weavehr.config.table.mimic-iv.3.1.labevents"
 
     demo_labevents = load_effective_table(CONFIG_ROOT / "datasets" / "mimic-iv-demo" / "2.2" / "tables", "labevents")
     assert demo_labevents.dataset == "mimic-iv-demo"

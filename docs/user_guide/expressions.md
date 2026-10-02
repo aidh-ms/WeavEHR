@@ -84,8 +84,8 @@ The callback set is extensible from Python. A callback is a class with an `__ini
 import polars as pl
 from polars import LazyFrame
 
-from open_icu.callbacks import register_callback_cls
-from open_icu.callbacks.proto import AstValue, CallbackResult, to_expr
+from weavehr.callbacks import register_callback_cls
+from weavehr.callbacks.proto import AstValue, CallbackResult, to_expr
 
 
 @register_callback_cls

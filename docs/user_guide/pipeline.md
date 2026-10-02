@@ -1,10 +1,10 @@
 # Projects and the pipeline
 
-OpenICU organises all processing as a sequence of **steps** that run inside a **project**. This page explains both, and the conventions they share.
+WeavEHR organises all processing as a sequence of **steps** that run inside a **project**. This page explains both, and the conventions they share.
 
 ## The project
 
-`OpenICUProject` manages an output directory with three areas:
+`WeavEHRProject` manages an output directory with three areas:
 
 ```
 <project>/
@@ -15,9 +15,9 @@ OpenICU organises all processing as a sequence of **steps** that run inside a **
 
 ```python
 from pathlib import Path
-from open_icu import OpenICUProject
+from weavehr import WeavEHRProject
 
-with OpenICUProject(Path("output/project")) as project:
+with WeavEHRProject(Path("output/project")) as project:
     ...
 ```
 
@@ -30,7 +30,7 @@ The `configs/` snapshot is what makes runs reproducible: every step writes the m
 A step is loaded from a YAML file and executed with `run()`:
 
 ```python
-from open_icu import ExtractionStep
+from weavehr import ExtractionStep
 
 step = ExtractionStep.load(project, Path("config/extraction.yml"))
 step.run()
@@ -84,10 +84,10 @@ config:                   # step-specific settings, see the respective guide
 Every configuration object (table, concept, …) has a `name` and a `version` and derives a stable, hierarchical identifier from them:
 
 ```
-openicu.config.<type>.<...>.<name|version>
+WeavEHR.config.<type>.<...>.<name|version>
 ```
 
-For example, the bundled MIMIC-IV labevents table config is `openicu.config.table.mimic-iv.3.1.labevents`, and the heart rate concept is `openicu.config.concept.heart_rate.1.0.0`. These identifiers are what you list in `includes`/`excludes`, and they determine the file layout when configs are snapshotted into the project. A deterministic UUID is derived from each identifier as well.
+For example, the bundled MIMIC-IV labevents table config is `WeavEHR.config.table.mimic-iv.3.1.labevents`, and the heart rate concept is `WeavEHR.config.concept.heart_rate.1.0.0`. These identifiers are what you list in `includes`/`excludes`, and they determine the file layout when configs are snapshotted into the project. A deterministic UUID is derived from each identifier as well.
 
 For dataset-bound configs the name, dataset, and version are inferred from the file's location (`configs/datasets/<dataset>/<version>/tables/<name>.yml`), so the YAML files themselves stay minimal.
 
@@ -96,15 +96,15 @@ For dataset-bound configs the name, dataset, and version are inferred from the f
 Each step's `datasets/<step name>/` directory is a self-contained [MEDS](https://github.com/Medical-Event-Data-Standard/meds) dataset:
 
 - `data/**/*.parquet` — event streams with the columns `subject_id` (int64), `time` (datetime, microseconds), `code` (string), `numeric_value` (float32), `text_value` (string), plus any configured extension columns (e.g. `hadm_id`, `stay_id`, `available_time`).
-- `metadata/dataset.json` — dataset metadata, validated against the MEDS schema, including the OpenICU ETL version and creation timestamp.
+- `metadata/dataset.json` — dataset metadata, validated against the MEDS schema, including the WeavEHR ETL version and creation timestamp.
 - `metadata/codes.parquet` — every distinct code in the dataset. Browse this file to discover what was extracted; it is also the natural starting point for writing [concept mappings](concepts.md).
 
 ## Logging
 
-OpenICU uses standard Python logging under the `open_icu` logger:
+WeavEHR uses standard Python logging under the `weavehr` logger:
 
 ```python
-from open_icu.logging import configure_logging, set_log_level
+from weavehr.logging import configure_logging, set_log_level
 
 configure_logging(level="INFO")   # console logging
 set_log_level("DEBUG")            # change verbosity later

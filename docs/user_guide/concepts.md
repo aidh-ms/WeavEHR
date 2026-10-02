@@ -7,7 +7,7 @@ Concepts are configured in two parts:
 1. a **concept definition** — dataset-independent, shared by everyone (`configs/concepts/<category>/<name>.yml`), and
 2. one **concept mapping per dataset** — how to find that concept in a specific dataset (`configs/datasets/<dataset>/<version>/mappings/<name>.yml`).
 
-The two are connected by file name: when a concept named `heart_rate` is loaded, OpenICU looks for `heart_rate.yml` in every directory listed under the step's `dataset_configs`.
+The two are connected by file name: when a concept named `heart_rate` is loaded, WeavEHR looks for `heart_rate.yml` in every directory listed under the step's `dataset_configs`.
 
 ## Step configuration
 
@@ -73,7 +73,7 @@ A concept may have any number of mappings; their results are concatenated. See t
 
 ### Derived concepts
 
-Derived concepts are computed **from other concepts** rather than from raw events. OpenICU resolves the dependency graph automatically (topological ordering), so derived concepts can build on other derived concepts.
+Derived concepts are computed **from other concepts** rather than from raw events. WeavEHR resolves the dependency graph automatically (topological ordering), so derived concepts can build on other derived concepts.
 
 ```yaml
 type: derived
@@ -106,12 +106,12 @@ concepts:                           # dependencies, processed first
 kwargs: {}                          # extra arguments for the transformer
 ```
 
-The transformer is instantiated with the concept configuration and called with the `OpenICUProject`, giving it full access to read prior outputs and write its own:
+The transformer is instantiated with the concept configuration and called with the `WeavEHRProject`, giving it full access to read prior outputs and write its own:
 
 ```python
 class VentilationWindows:
     def __init__(self, concept, complex_config, **kwargs): ...
-    def __call__(self, project: OpenICUProject) -> None: ...
+    def __call__(self, project: WeavEHRProject) -> None: ...
 ```
 
 ## Output layout

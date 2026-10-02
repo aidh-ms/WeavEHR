@@ -1,4 +1,4 @@
 type: complex
-concept_transformer: open_icu.steps.concept.transformer.sofa.SofaCoagulationTransformer
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaCoagulationTransformer
 concepts:
   - platelet_count.1.0.0

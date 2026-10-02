@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from open_icu.config.inheritance import (
+from weavehr.config.inheritance import (
     deep_merge,
     has_extends,
     resolve_effective_configs,
     resolve_version_chain,
 )
-from open_icu.config.registry import load_configs
-from open_icu.steps.extraction.config.table import TableConfig
+from weavehr.config.registry import load_configs
+from weavehr.steps.extraction.config.table import TableConfig
 
 
 def make_version(
@@ -139,7 +139,7 @@ class TestLoadConfigsWithInheritance:
         assert configs[0].dataset == "db-demo"
         assert configs[0].version == "2.0"
         assert configs[0].name == "t"
-        assert configs[0].identifier == "openicu.config.table.db-demo.2.0.t"
+        assert configs[0].identifier == "weavehr.config.table.db-demo.2.0.t"
         assert configs[0].path == "t.csv"
 
     def test_includes_excludes_apply_to_inherited_configs(self, tmp_path: Path) -> None:

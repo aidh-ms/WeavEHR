@@ -1,6 +1,6 @@
 services:
-  openicu:
-    container_name: openicu
+  weavehr:
+    container_name: weavehr
     extra_hosts:
       - host.docker.internal:host-gateway
     init: true

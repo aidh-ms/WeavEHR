@@ -1,4 +1,4 @@
-site_name: OpenICU
+site_name: WeavEHR
 docs_dir: docs
 nav:
   - Home: index.md
@@ -29,7 +29,7 @@ nav:
   - API Reference: reference/
 
 copyright: Copyright &copy; 2023 AIDH MS
-repo_url: "https://github.com/aidh-ms/OpenICU"
+repo_url: "https://github.com/aidh-ms/WeavEHR"
 
 theme:
   name: material
@@ -40,7 +40,7 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/aidh-ms/OpenICU
+      link: https://github.com/aidh-ms/WeavEHR
 
 extra_css:
   - assets/css/code_select.css

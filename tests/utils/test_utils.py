@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from open_icu.utils.importer import import_callable
-from open_icu.utils.type import get_generic_type
+from weavehr.utils.importer import import_callable
+from weavehr.utils.type import get_generic_type
 
 
 class TestImportCallable:

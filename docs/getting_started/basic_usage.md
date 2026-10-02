@@ -1,19 +1,19 @@
 # Basic Usage
 
-This walkthrough extracts MIMIC-IV into MEDS format and harmonises it into clinical concepts. It assumes you have [installed OpenICU](installation.md), cloned the repository (for the bundled configs in `configs/`), and downloaded MIMIC-IV 3.1 from PhysioNet.
+This walkthrough extracts MIMIC-IV into MEDS format and harmonises it into clinical concepts. It assumes you have [installed WeavEHR](installation.md), cloned the repository (for the bundled configs in `configs/`), and downloaded MIMIC-IV 3.1 from PhysioNet.
 
-A complete, runnable version of this walkthrough is in [`example/pipeline.ipynb`](https://github.com/aidh-ms/OpenICU/blob/main/example/pipeline.ipynb).
+A complete, runnable version of this walkthrough is in [`example/pipeline.ipynb`](https://github.com/aidh-ms/WeavEHR/blob/main/example/pipeline.ipynb).
 
 ## 1. Configure the extraction step
 
-Create `config/extraction.yml` in your working directory. It tells OpenICU which table configurations to load and where your raw data lives:
+Create `config/extraction.yml` in your working directory. It tells WeavEHR which table configurations to load and where your raw data lives:
 
 ```yaml
 name: Extraction
 version: 1.0.0
 
 config_files:
-  - path: /path/to/OpenICU/configs/datasets/mimic-iv/3.1/tables/
+  - path: /path/to/WeavEHR/configs/datasets/mimic-iv/3.1/tables/
 
 config:
   data:
@@ -33,13 +33,13 @@ name: Concept
 version: 1.0.0
 
 config_files:
-  - path: /path/to/OpenICU/configs/concepts
+  - path: /path/to/WeavEHR/configs/concepts
 
 config:
   extraction_step: Extraction
   dataset_configs:
     - name: mimic-iv
-      path: /path/to/OpenICU/configs/datasets/mimic-iv/3.1/mappings/
+      path: /path/to/WeavEHR/configs/datasets/mimic-iv/3.1/mappings/
 ```
 
 - `config_files` points at the dataset-agnostic concept dictionary.
@@ -51,12 +51,12 @@ config:
 ```python
 from pathlib import Path
 
-from open_icu import OpenICUProject, ExtractionStep, ConceptStep
+from weavehr import WeavEHRProject, ExtractionStep, ConceptStep
 
 config_path = Path.cwd() / "config"
 project_path = Path.cwd() / "output" / "project"
 
-with OpenICUProject(project_path) as project:
+with WeavEHRProject(project_path) as project:
     extraction_step = ExtractionStep.load(project, config_path / "extraction.yml")
     extraction_step.run()
 
@@ -69,7 +69,7 @@ By default a step is **skipped** if its output already exists, so re-running the
 To see what is happening during a run, enable logging:
 
 ```python
-from open_icu.logging import configure_logging
+from weavehr.logging import configure_logging
 
 configure_logging(level="INFO")  # or "DEBUG"
 ```
