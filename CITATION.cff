@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: If you use this software, please cite it using these metadata.
-title: "OpenICU"
+title: "WeavEHR"
 authors:
 - family-names: "Brauckmann"
   given-names: "Paul"
@@ -24,11 +24,11 @@ type: software
 version: 0.0.1
 date-released: 2025-01-01
 license: MIT
-url: https://github.com/aidh-ms/OpenICU
-repository-code: https://github.com/aidh-ms/OpenICU
+url: https://github.com/aidh-ms/WeavEHR
+repository-code: https://github.com/aidh-ms/WeavEHR
 identifiers:
 - type: url
-  value: https://github.com/aidh-ms/OpenICU
+  value: https://github.com/aidh-ms/WeavEHR
 keywords:
 - python library
 - icu datasets

@@ -3,8 +3,8 @@
 import polars as pl
 import pytest
 
-from open_icu.steps.extraction.config.step import CustomConfig
-from open_icu.steps.extraction.config.table import JoinTableConfig, TableConfig, TableType
+from weavehr.steps.extraction.config.step import CustomConfig
+from weavehr.steps.extraction.config.table import JoinTableConfig, TableConfig, TableType
 
 
 def make_table_config(**overrides) -> TableConfig:
@@ -59,7 +59,7 @@ class TestTableConfig:
     def test_identifier_includes_dataset(self) -> None:
         table = make_table_config()
         assert table.identifier_tuple == ("table", "mimic-iv", "3.1", "labevents")
-        assert table.identifier == "openicu.config.table.mimic-iv.3.1.labevents"
+        assert table.identifier == "weavehr.config.table.mimic-iv.3.1.labevents"
 
 
 class TestTableTypeInference:
@@ -210,14 +210,14 @@ class TestEventNameCodeSettings:
 
 class TestGlobalEventNameCodeSettings:
     def test_global_setting_defaults_to_true(self) -> None:
-        from open_icu.steps.extraction.config.step import CustomConfig
+        from weavehr.steps.extraction.config.step import CustomConfig
 
         config = CustomConfig()
 
         assert config.settings.include_event_name_in_code is True
 
     def test_global_setting_can_be_disabled(self) -> None:
-        from open_icu.steps.extraction.config.step import CustomConfig
+        from weavehr.steps.extraction.config.step import CustomConfig
 
         config = CustomConfig(
             settings={

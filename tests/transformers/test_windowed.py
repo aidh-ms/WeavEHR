@@ -34,13 +34,13 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from open_icu.logging import get_logger
-from open_icu.steps.concept.config.complex import ComplexDatasetConceptConfig
-from open_icu.steps.concept.transformer.base import BaseConceptTransformer
+from weavehr.logging import get_logger
+from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
+from weavehr.steps.concept.transformer.base import BaseConceptTransformer
 
 if TYPE_CHECKING:
-    from open_icu.steps.concept.config.concept import ConceptConfig
-    from open_icu.steps.concept.step import ConceptStep
+    from weavehr.steps.concept.config.concept import ConceptConfig
+    from weavehr.steps.concept.step import ConceptStep
 
 logger = get_logger(__name__)
 

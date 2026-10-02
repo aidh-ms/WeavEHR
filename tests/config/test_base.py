@@ -6,21 +6,21 @@ from typing import ClassVar
 import pytest
 import yaml
 
-from open_icu.config.base import BaseConfig, BaseDatasetConfig
+from weavehr.config.base import BaseConfig, BaseDatasetConfig
 
 
 class DemoConfig(BaseConfig):
-    __open_icu_config_type__: ClassVar[str] = "demo"
+    __weavehr_config_type__: ClassVar[str] = "demo"
 
 
 class DemoDatasetConfig(BaseDatasetConfig):
-    __open_icu_config_type__: ClassVar[str] = "demo"
+    __weavehr_config_type__: ClassVar[str] = "demo"
 
 
 class TestIdentity:
     def test_identifier_format(self) -> None:
         config = DemoConfig(name="Heart_Rate", version="1.0.0")
-        assert config.identifier == "openicu.config.demo.heart_rate.1.0.0"
+        assert config.identifier == "weavehr.config.demo.heart_rate.1.0.0"
         assert config.identifier_tuple == ("demo", "Heart_Rate", "1.0.0")
         assert str(config) == config.identifier
 
@@ -32,9 +32,9 @@ class TestIdentity:
         assert a.uuid != c.uuid
 
     def test_prefix_and_ensure_prefix(self) -> None:
-        assert DemoConfig.prefix() == "openicu.config.demo"
-        assert DemoConfig.ensure_prefix("foo") == "openicu.config.demo.foo"
-        assert DemoConfig.ensure_prefix("openicu.config.demo.foo") == "openicu.config.demo.foo"
+        assert DemoConfig.prefix() == "weavehr.config.demo"
+        assert DemoConfig.ensure_prefix("foo") == "weavehr.config.demo.foo"
+        assert DemoConfig.ensure_prefix("weavehr.config.demo.foo") == "weavehr.config.demo.foo"
 
 
 class TestSerialization:

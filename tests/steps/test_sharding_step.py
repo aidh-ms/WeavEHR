@@ -4,9 +4,9 @@ from pathlib import Path
 
 import polars as pl
 
-from open_icu.steps.sharding.config.step import ShardingStepConfig
-from open_icu.steps.sharding.step import ShardingStep
-from open_icu.storage.project import OpenICUProject
+from weavehr.steps.sharding.config.step import ShardingStepConfig
+from weavehr.steps.sharding.step import ShardingStep
+from weavehr.storage.project import WeavEHRProject
 
 
 def write_concept_file(path: Path, subject_ids: list[int], code: str) -> None:
@@ -67,7 +67,7 @@ config:
 """
     )
 
-    with OpenICUProject(project_path) as project:
+    with WeavEHRProject(project_path) as project:
         concept_dataset = project.add_dataset("concept")
         write_concept_file(
             concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb.parquet",
@@ -111,7 +111,7 @@ config:
 """
     )
 
-    with OpenICUProject(project_path) as project:
+    with WeavEHRProject(project_path) as project:
         concept_dataset = project.add_dataset("concept")
         write_concept_file(
             concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb.parquet",
@@ -146,7 +146,7 @@ config:
 """
     )
 
-    with OpenICUProject(project_path) as project:
+    with WeavEHRProject(project_path) as project:
         concept_dataset = project.add_dataset("concept")
 
         write_concept_file(

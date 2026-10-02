@@ -1,5 +1,5 @@
 type: complex
-concept_transformer: open_icu.steps.concept.transformer.sofa.SofaCardiovascularTransformer
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaCardiovascularTransformer
 concepts:
   - mean_arterial_pressure.1.0.0
   - dopamine_rate.1.0.0

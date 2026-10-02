@@ -10,7 +10,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from open_icu import ExtractionStep, OpenICUProject
+from weavehr import ExtractionStep, WeavEHRProject
 from tests.steps.conftest import load_extracation_config
 
 
@@ -19,7 +19,7 @@ def run_extraction(
     extraction_config: Path,
     *,
     include_event_name_in_code: bool | None = None,
-) -> OpenICUProject:
+) -> WeavEHRProject:
     if include_event_name_in_code is not None:
         text = extraction_config.read_text()
         text = text.replace(
@@ -29,7 +29,7 @@ def run_extraction(
         )
         extraction_config.write_text(text)
 
-    project = OpenICUProject(tmp_path / "project")
+    project = WeavEHRProject(tmp_path / "project")
 
     load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
 
@@ -193,7 +193,7 @@ config:
 """
         )
 
-        project = OpenICUProject(tmp_path / "project")
+        project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         ExtractionStep.load(project, config_file).run()  # must not raise
 
@@ -205,7 +205,7 @@ config:
     ) -> None:
         (data_dir / "vitals.csv").unlink()
 
-        project = OpenICUProject(tmp_path / "project")
+        project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         ExtractionStep.load(project, extraction_config).run()  # must not raise
 
@@ -272,7 +272,7 @@ config:
 """
         )
 
-        project = OpenICUProject(tmp_path / "project")
+        project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(config_dir)
         ExtractionStep.load(project, config_file).run()
 
@@ -344,7 +344,7 @@ config:
 """)
         )
 
-        project = OpenICUProject(tmp_path / "project")
+        project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(config_dir)
         ExtractionStep.load(project, config_file).run()
 
@@ -415,7 +415,7 @@ config:
 """
         )
 
-        project = OpenICUProject(tmp_path / "project")
+        project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(tmp_path / "config" / "partdb" / "1.0" / "tables")
         ExtractionStep.load(project, config_file).run()
 

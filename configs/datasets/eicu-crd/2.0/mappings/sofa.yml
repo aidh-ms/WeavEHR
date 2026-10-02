@@ -1,5 +1,5 @@
 type: complex
-concept_transformer: open_icu.steps.concept.transformer.sofa.SofaTransformer
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaTransformer
 concepts:
   - sofa_respiratory.1.0.0
   - sofa_coagulation.1.0.0

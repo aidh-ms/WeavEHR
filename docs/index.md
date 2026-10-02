@@ -1,17 +1,17 @@
-# OpenICU
+# WeavEHR
 
 <p style="text-align:center;" markdown="1">
 _A Python framework for extracting and harmonising ICU data into the MEDS standard._ <br>
-[![Coverage Status](https://coveralls.io/repos/github/aidh-ms/OpenICU/badge.svg?branch=main)](https://coveralls.io/github/aidh-ms/OpenICU?branch=main)
+[![Coverage Status](https://coveralls.io/repos/github/aidh-ms/WeavEHR/badge.svg?branch=main)](https://coveralls.io/github/aidh-ms/WeavEHR?branch=main)
 </p>
 
 ---
 
-**Source Code:** [https://github.com/aidh-ms/OpenICU](https://github.com/aidh-ms/OpenICU) <br>
+**Source Code:** [https://github.com/aidh-ms/WeavEHR](https://github.com/aidh-ms/WeavEHR) <br>
 
 ---
 
-OpenICU converts heterogeneous intensive care datasets — MIMIC-IV, eICU-CRD, NWICU, or your own institutional exports — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format using declarative, versioned YAML configurations.
+WeavEHR converts heterogeneous intensive care datasets — MIMIC-IV, eICU-CRD, NWICU, or your own institutional exports — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format using declarative, versioned YAML configurations.
 
 - **One concept, many datasets** — define clinical concepts once, map them per dataset, and run the same study code everywhere.
 - **MEDS-native output** — Parquet event streams with full metadata, ready for the MEDS ecosystem.

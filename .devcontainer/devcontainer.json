@@ -1,6 +1,6 @@
 {
-	"name": "OpenICU",
-	"service": "openicu",
+	"name": "WeavEHR",
+	"service": "weavehr",
 	"remoteUser": "vscode",
 	"workspaceFolder": "/workspaces",
 	"dockerComposeFile": "docker-compose.yml",

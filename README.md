@@ -1,23 +1,23 @@
-# OpenICU
+# WeavEHR
 
-[![CI](https://github.com/aidh-ms/OpenICU/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/aidh-ms/OpenICU/actions/workflows/continuous_integration.yml)
-[![Coverage Status](https://coveralls.io/repos/github/aidh-ms/OpenICU/badge.svg?branch=main)](https://coveralls.io/github/aidh-ms/OpenICU?branch=main)
-[![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://github.com/aidh-ms/OpenICU/blob/main/pyproject.toml)
+[![CI](https://github.com/aidh-ms/WeavEHR/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/aidh-ms/WeavEHR/actions/workflows/continuous_integration.yml)
+[![Coverage Status](https://coveralls.io/repos/github/aidh-ms/WeavEHR/badge.svg?branch=main)](https://coveralls.io/github/aidh-ms/WeavEHR?branch=main)
+[![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://github.com/aidh-ms/WeavEHR/blob/main/pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**OpenICU** is an open-source Python framework for extracting and harmonising intensive care unit (ICU) data from heterogeneous sources — such as [MIMIC-IV](https://physionet.org/content/mimiciv/), [eICU-CRD](https://physionet.org/content/eicu-crd/), [AmsterdamUMCdb](https://github.com/AmsterdamUMC/AmsterdamUMCdb) (via OMOP CDM), and your own institutional or [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) database exports — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format.
+**WeavEHR** is an open-source Python framework for extracting and harmonising intensive care unit (ICU) data from heterogeneous sources — such as [MIMIC-IV](https://physionet.org/content/mimiciv/), [eICU-CRD](https://physionet.org/content/eicu-crd/), [AmsterdamUMCdb](https://github.com/AmsterdamUMC/AmsterdamUMCdb) (via OMOP CDM), and your own institutional or [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) database exports — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format.
 
-Instead of writing one-off SQL or pandas scripts for every dataset and every study, you describe *what* to extract in declarative YAML configurations and let OpenICU handle the *how*: typed reading, joins, timestamp reconstruction, unit-aware event codes, and cross-dataset concept harmonisation. OpenICU ships with curated configurations for public ICU datasets and a growing dictionary of clinical concepts (vital signs, laboratory values, vasopressors, ventilation, and more), so the same study code can run against any supported dataset.
+Instead of writing one-off SQL or pandas scripts for every dataset and every study, you describe *what* to extract in declarative YAML configurations and let WeavEHR handle the *how*: typed reading, joins, timestamp reconstruction, unit-aware event codes, and cross-dataset concept harmonisation. WeavEHR ships with curated configurations for public ICU datasets and a growing dictionary of clinical concepts (vital signs, laboratory values, vasopressors, ventilation, and more), so the same study code can run against any supported dataset.
 
-OpenICU is the spiritual successor to dataset-harmonisation tools like [`ricu`](https://github.com/eth-mds/ricu) (R), rebuilt in Python on a modern stack: [Polars](https://pola.rs) for fast, out-of-core streaming processing, [Pydantic](https://docs.pydantic.dev) for validated configuration, and MEDS for an interoperable output format that plugs directly into the wider MEDS ecosystem of modelling and evaluation tools.
-
----
-
-**Source code:** <https://github.com/aidh-ms/OpenICU> · **Issues:** <https://github.com/aidh-ms/OpenICU/issues>
+WeavEHR is the spiritual successor to dataset-harmonisation tools like [`ricu`](https://github.com/eth-mds/ricu) (R), rebuilt in Python on a modern stack: [Polars](https://pola.rs) for fast, out-of-core streaming processing, [Pydantic](https://docs.pydantic.dev) for validated configuration, and MEDS for an interoperable output format that plugs directly into the wider MEDS ecosystem of modelling and evaluation tools.
 
 ---
 
-## Why OpenICU?
+**Source code:** <https://github.com/aidh-ms/WeavEHR> · **Issues:** <https://github.com/aidh-ms/WeavEHR/issues>
+
+---
+
+## Why WeavEHR?
 
 - **One concept, many datasets.** Define a clinical concept (e.g. *heart rate*, *norepinephrine rate*, *antibiotics*) once; map it per dataset with small YAML files. Extraction code stays identical across MIMIC-IV, eICU-CRD, NWICU, and custom sources.
 - **MEDS-native output.** All output is written as MEDS-compliant Parquet (`subject_id`, `time`, `code`, `numeric_value`, `text_value`, plus configurable extension columns) with full metadata (`dataset.json`, `codes.parquet`) — ready for MEDS-compatible downstream tooling.
@@ -29,7 +29,7 @@ OpenICU is the spiritual successor to dataset-harmonisation tools like [`ricu`](
 
 ## How it works
 
-OpenICU organises processing as a pipeline of **steps** that operate inside a **project** directory:
+WeavEHR organises processing as a pipeline of **steps** that operate inside a **project** directory:
 
 ```mermaid
 flowchart LR
@@ -46,7 +46,7 @@ Each step reads its inputs and writes its outputs as a self-contained MEDS datas
 
 ## Supported datasets
 
-OpenICU ships with ready-to-use extraction and concept configurations under [`configs/`](configs/):
+WeavEHR ships with ready-to-use extraction and concept configurations under [`configs/`](configs/):
 
 | Dataset | Version | Extraction configs | Concept mappings |
 | --- | --- | --- | --- |
@@ -65,35 +65,35 @@ The **OMOP CDM 5.4** entry is a reusable *model* configuration rather than a sin
 The shared concept dictionary in [`configs/concepts/`](configs/concepts/) currently covers ~90 concepts across vital signs, blood gas, clinical chemistry, hematology, medications (incl. vasopressors and antibiotics), neurological scores, respiratory parameters, fluid output, and demographics.
 
 > [!NOTE]
-> Access to the public datasets themselves requires the usual credentialing (e.g. [PhysioNet](https://physionet.org/) for MIMIC-IV/eICU/NWICU, a data-use agreement for AmsterdamUMCdb). OpenICU works on the downloaded files directly — Parquet (e.g. OMOP exports), CSV, or gzipped CSV — with no database setup needed.
+> Access to the public datasets themselves requires the usual credentialing (e.g. [PhysioNet](https://physionet.org/) for MIMIC-IV/eICU/NWICU, a data-use agreement for AmsterdamUMCdb). WeavEHR works on the downloaded files directly — Parquet (e.g. OMOP exports), CSV, or gzipped CSV — with no database setup needed.
 
 ## Installation
 
-OpenICU requires **Python 3.13+**. You can install OpenICU via PyPI or from source.
+WeavEHR requires **Python 3.13+**. You can install WeavEHR via PyPI or from source.
 
 ### With PyPI
 ```bash
 # with pip
-pip install open-icu
+pip install weavehr
 
 # with uv
-uv add open-icu
+uv add weavehr
 ```
 
 ### With GitHub
 ```bash
 # with pip
-pip install git+https://github.com/aidh-ms/OpenICU
+pip install git+https://github.com/aidh-ms/WeavEHR
 
 # with uv
-uv add git+https://github.com/aidh-ms/OpenICU
+uv add git+https://github.com/aidh-ms/WeavEHR
 ```
 
 For development, clone the repository and use the included dev container or [`uv`](https://docs.astral.sh/uv/):
 
 ```bash
-git clone https://github.com/aidh-ms/OpenICU.git
-cd OpenICU
+git clone https://github.com/aidh-ms/WeavEHR.git
+cd WeavEHR
 uv sync --all-groups
 ```
 
@@ -101,7 +101,7 @@ uv sync --all-groups
 
 A pipeline is two small YAML files plus a few lines of Python.
 
-**1. Configure the extraction step** (`config/extraction.yml`) — point OpenICU at the bundled dataset configs and your local data:
+**1. Configure the extraction step** (`config/extraction.yml`) — point WeavEHR at the bundled dataset configs and your local data:
 
 ```yaml
 name: Extraction
@@ -132,12 +132,12 @@ config:
 ```python
 from pathlib import Path
 
-from open_icu import OpenICUProject, ExtractionStep, ConceptStep
+from weavehr import WeavEHRProject, ExtractionStep, ConceptStep
 
 config_path = Path.cwd() / "config"
 project_path = Path.cwd() / "output" / "project"
 
-with OpenICUProject(project_path) as project:
+with WeavEHRProject(project_path) as project:
     extraction_step = ExtractionStep.load(project, config_path / "extraction.yml")
     extraction_step.run()
 
@@ -174,7 +174,7 @@ A complete runnable example lives in [`example/pipeline.ipynb`](example/pipeline
 
 ## Configuration at a glance
 
-OpenICU is configured at three levels — see the [documentation](#documentation) for the full reference.
+WeavEHR is configured at three levels — see the [documentation](#documentation) for the full reference.
 
 **Dataset/table configs** (`configs/datasets/<dataset>/<version>/tables/*.yml`) describe how to turn one raw table into MEDS events: typed columns, joins, and event definitions.
 
@@ -258,7 +258,7 @@ Arithmetic, comparisons, and boolean logic work as ordinary expressions (`col(we
 
 ## Project status & roadmap
 
-OpenICU is in active development (pre-1.0); configuration formats may still change between minor versions. Current focus areas:
+WeavEHR is in active development (pre-1.0); configuration formats may still change between minor versions. Current focus areas:
 
 
 - Completing concept mappings for eICU-CRD, NWICU, AmsterdamUMCdb, HiRID, and SICdb
@@ -282,15 +282,15 @@ See the [contributing guide](docs/getting_started/contributing.md) for details, 
 
 ## Citation
 
-If you use OpenICU in your research, please cite it via the metadata in [`CITATION.cff`](CITATION.cff) (use the *"Cite this repository"* button on GitHub).
+If you use WeavEHR in your research, please cite it via the metadata in [`CITATION.cff`](CITATION.cff) (use the *"Cite this repository"* button on GitHub).
 
 ## Related projects
 
-- [MEDS](https://github.com/Medical-Event-Data-Standard/meds) — the Medical Event Data Standard that OpenICU targets
-- [ricu](https://github.com/eth-mds/ricu) — R package for ICU data harmonisation that inspired OpenICU's concept dictionary
+- [MEDS](https://github.com/Medical-Event-Data-Standard/meds) — the Medical Event Data Standard that WeavEHR targets
+- [ricu](https://github.com/eth-mds/ricu) — R package for ICU data harmonisation that inspired WeavEHR's concept dictionary
 - [YAIB](https://github.com/rvandewater/YAIB) — Yet Another ICU Benchmark, a complementary benchmarking framework
 
 ## License
 
-OpenICU is released under the [MIT License](LICENSE).
+WeavEHR is released under the [MIT License](LICENSE).
 Developed by the [AIDH MS](https://github.com/aidh-ms) team at the University of Münster and the Medical University of Innsbruck.

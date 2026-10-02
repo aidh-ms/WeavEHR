@@ -48,7 +48,7 @@ respiratory numerics (SpO2, respiratory rate, FiO2) and urine output.
 The AUMC mappings were validated against `ricu` over the first 168 hours of
 each ICU admission. Both pipelines ultimately originate from the same
 AmsterdamUMCdb source data, but they consume different representations:
-OpenICU reads the AMSTEL-derived OMOP CDM export, whereas `ricu` reads the
+WeavEHR reads the AMSTEL-derived OMOP CDM export, whereas `ricu` reads the
 legacy AmsterdamUMCdb tables directly. Consequently, discrepancies can arise
 from the AMSTEL ETL or from differences in admission-relative timestamp
 handling even when the concept mapping itself is correct.
@@ -78,7 +78,7 @@ Urine output is a separate AMSTEL ETL case. The relevant legacy urine events
 are duplicated in the OMOP representation because the corresponding unit
 source code occurs twice in AMSTEL's source-to-concept mapping. This produces
 the remaining urine coverage and value discrepancy and is not corrected in
-the OpenICU concept mapping.
+the WeavEHR concept mapping.
 
 Neutrophils and lymphocytes are intentionally not considered fully reproduced
 by the current `simple` mappings. The corresponding `ricu` concepts can use

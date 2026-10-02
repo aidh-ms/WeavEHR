@@ -5,7 +5,7 @@ The extraction step turns raw source tables into MEDS event streams. It is drive
 1. a **step config** that selects which table configs to load and where the raw data lives, and
 2. one **table config** per source table that describes columns, joins, and the events to emit.
 
-OpenICU ships table configs for MIMIC-IV 3.1, eICU-CRD 2.0, and NWICU 0.1.0 under `configs/datasets/<dataset>/<version>/tables/`. This page explains how they work, so you can adapt them or add your own datasets.
+WeavEHR ships table configs for MIMIC-IV 3.1, eICU-CRD 2.0, and NWICU 0.1.0 under `configs/datasets/<dataset>/<version>/tables/`. This page explains how they work, so you can adapt them or add your own datasets.
 
 ## Step configuration
 

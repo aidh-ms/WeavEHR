@@ -2,7 +2,7 @@
 
 Dataset configurations live under `configs/datasets/<dataset>/<version>/`. Without further measures, supporting a new dataset *version* (MIMIC-IV 3.0 → 3.1) or a *variant* (the eICU demo subset) would mean copying every table and concept YAML — and keeping the copies in sync forever.
 
-OpenICU avoids this with **configuration inheritance**: a version can declare a reference version and spell out only its differences, like a diff applied on top of a base.
+WeavEHR avoids this with **configuration inheritance**: a version can declare a reference version and spell out only its differences, like a diff applied on top of a base.
 
 ## Declaring a base version
 
@@ -34,7 +34,7 @@ When a version with an `extends.yml` is loaded, its effective configuration is b
 
 Bases may themselves extend other versions — chains resolve recursively, and cycles are rejected with an error. Diffs stack forward in time: the oldest fully-specified version is the reference, and each newer version (or variant) states only its changes — e.g. `mimic-iv/3.1` extends the `mimic-iv/2.2` reference, and `mimic-iv-demo/2.2` extends it too.
 
-**Identity always comes from the extending version's directory**: a table inherited by `eicu-demo/2.0` is registered as `openicu.config.table.eicu-demo.2.0.<table>`, produces event codes prefixed `eicu-demo//…`, and inherited concept mappings match against those codes automatically. Nothing about the base leaks into the output.
+**Identity always comes from the extending version's directory**: a table inherited by `eicu-demo/2.0` is registered as `WeavEHR.config.table.eicu-demo.2.0.<table>`, produces event codes prefixed `eicu-demo//…`, and inherited concept mappings match against those codes automatically. Nothing about the base leaks into the output.
 
 ## Example: the eICU demo
 

@@ -9,7 +9,7 @@ critical care database from the Beth Israel Deaconess Medical Center
 - `2.2/` — **reference configuration**: 2 table configs (`tables/`,
   covering notes) and the per-dataset concept
   mappings (`mappings/`) for the shared dictionary in `configs/concepts/`.
-  This is the most complete dataset configuration in OpenICU.
+  This is the most complete dataset configuration in WeavEHR.
 
 ## Layout
 

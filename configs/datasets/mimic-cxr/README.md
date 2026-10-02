@@ -10,7 +10,7 @@ Chest X-Rays
 - `2.0/` — **reference configuration**: 2 table configs (`tables/`,
   covering notes) and the per-dataset concept
   mappings (`mappings/`) for the shared dictionary in `configs/concepts/`.
-  This is the most complete dataset configuration in OpenICU.
+  This is the most complete dataset configuration in WeavEHR.
 - `2.1/` — **extends `2.0`**
 
 ## Layout

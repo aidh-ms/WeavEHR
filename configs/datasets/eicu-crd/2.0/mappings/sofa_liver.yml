@@ -1,4 +1,4 @@
 type: complex
-concept_transformer: open_icu.steps.concept.transformer.sofa.SofaLiverTransformer
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaLiverTransformer
 concepts:
   - total_bilirubin.1.0.0

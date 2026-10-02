@@ -12,7 +12,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from open_icu import ConceptStep, ExtractionStep, OpenICUProject
+from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
 from tests.steps.conftest import load_concept_config, load_extracation_config
 
 
@@ -66,8 +66,8 @@ config:
 
 
 @pytest.fixture
-def project(tmp_path: Path, demo_dirs: None) -> OpenICUProject:
-    project = OpenICUProject(tmp_path / "project")
+def project(tmp_path: Path, demo_dirs: None) -> WeavEHRProject:
+    project = WeavEHRProject(tmp_path / "project")
 
     load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
     load_extracation_config(tmp_path / "config" / "testdb-demo" / "1.0" / "tables")
@@ -85,7 +85,7 @@ def project(tmp_path: Path, demo_dirs: None) -> OpenICUProject:
 
 
 class TestInheritedExtraction:
-    def test_inherited_table_with_path_override(self, project: OpenICUProject) -> None:
+    def test_inherited_table_with_path_override(self, project: WeavEHRProject) -> None:
         output = project.datasets_path / "extraction" / "data" / "testdb-demo" / "1.0" / "vitals" / "CHART.parquet"
         assert output.exists()
 
@@ -93,18 +93,18 @@ class TestInheritedExtraction:
         assert df.height == 4
         assert "CHART//220045//Heart Rate//bpm" in df["code"].to_list()
 
-    def test_tombstoned_table_is_not_extracted(self, project: OpenICUProject) -> None:
+    def test_tombstoned_table_is_not_extracted(self, project: WeavEHRProject) -> None:
         demo_data = project.datasets_path / "extraction" / "data" / "testdb-demo"
         assert not (demo_data / "1.0" / "measurements").exists()
 
-    def test_base_dataset_is_unaffected(self, project: OpenICUProject) -> None:
+    def test_base_dataset_is_unaffected(self, project: WeavEHRProject) -> None:
         base_data = project.datasets_path / "extraction" / "data" / "testdb" / "1.0"
         assert (base_data / "vitals" / "CHART.parquet").exists()
         assert (base_data / "measurements" / "WEIGHT.parquet").exists()
 
 
 class TestInheritedConcepts:
-    def test_concept_mapping_is_inherited_by_demo(self, project: OpenICUProject) -> None:
+    def test_concept_mapping_is_inherited_by_demo(self, project: WeavEHRProject) -> None:
         output = project.datasets_path / "concept" / "data" / "heart_rate" / "1.0.0" / "testdb-demo.parquet"
         assert output.exists()
 
@@ -113,6 +113,6 @@ class TestInheritedConcepts:
         assert df["code"].unique().to_list() == ["heart_rate//bpm"]
         assert df["dataset"].unique().to_list() == ["testdb-demo"]
 
-    def test_base_concept_still_extracted(self, project: OpenICUProject) -> None:
+    def test_base_concept_still_extracted(self, project: WeavEHRProject) -> None:
         output = project.datasets_path / "concept" / "data" / "heart_rate" / "1.0.0" / "testdb.parquet"
         assert output.exists()

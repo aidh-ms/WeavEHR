@@ -8,24 +8,24 @@ The supported Python versions for this Python library are the following:
 
 ## Installing
 
-You can install OpenICU via PyPI or from source.
+You can install WeavEHR via PyPI or from source.
 
 ### With PyPI
 ```bash
 # with pip
-pip install open-icu
+pip install weavehr
 
 # with uv
-uv add open-icu
+uv add weavehr
 ```
 
 ### With GitHub
 ```bash
 # with pip
-pip install git+https://github.com/aidh-ms/OpenICU
+pip install git+https://github.com/aidh-ms/WeavEHR
 
 # with uv
-uv add git+https://github.com/aidh-ms/OpenICU
+uv add git+https://github.com/aidh-ms/WeavEHR
 ```
 
 ## Installing for development
@@ -33,8 +33,8 @@ uv add git+https://github.com/aidh-ms/OpenICU
 Clone the repository and either open it in the included dev container (recommended, see [contributing](contributing.md)) or set up the environment with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-git clone https://github.com/aidh-ms/OpenICU.git
-cd OpenICU
+git clone https://github.com/aidh-ms/WeavEHR.git
+cd WeavEHR
 uv sync --all-groups
 ```
 
@@ -42,7 +42,7 @@ Cloning the repository is also currently the easiest way to get the bundled data
 
 ## Dependencies
 
-OpenICU builds on a small set of core libraries, installed automatically:
+WeavEHR builds on a small set of core libraries, installed automatically:
 
 | Package | Role |
 | --- | --- |
@@ -56,7 +56,7 @@ OpenICU builds on a small set of core libraries, installed automatically:
 
 ## Getting the data
 
-OpenICU operates on locally downloaded dataset files (CSV/CSV.GZ) — no database setup is required. The public ICU datasets are distributed via [PhysioNet](https://physionet.org/) and require credentialed access:
+WeavEHR operates on locally downloaded dataset files (CSV/CSV.GZ) — no database setup is required. The public ICU datasets are distributed via [PhysioNet](https://physionet.org/) and require credentialed access:
 
 - [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/)
 - [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) (a freely accessible [demo subset](https://physionet.org/content/eicu-crd-demo/2.0/) is also available)

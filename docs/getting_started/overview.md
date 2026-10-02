@@ -1,14 +1,14 @@
 # Package overview
 
-OpenICU is an open-source Python framework for extracting, preprocessing, and harmonising intensive care unit (ICU) time series data from diverse sources. It converts heterogeneous ICU datasets — public ones such as [MIMIC-IV](https://physionet.org/content/mimiciv/) and [eICU-CRD](https://physionet.org/content/eicu-crd/), as well as custom institutional data — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format.
+WeavEHR is an open-source Python framework for extracting, preprocessing, and harmonising intensive care unit (ICU) time series data from diverse sources. It converts heterogeneous ICU datasets — public ones such as [MIMIC-IV](https://physionet.org/content/mimiciv/) and [eICU-CRD](https://physionet.org/content/eicu-crd/), as well as custom institutional data — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format.
 
 ## The problem
 
-ICU research routinely needs the same clinical variables — heart rate, creatinine, norepinephrine doses, ventilation episodes — but every dataset stores them differently: different table layouts, item identifiers, units, and timestamp conventions. Studies therefore accumulate one-off, dataset-specific extraction scripts that are hard to validate, hard to reuse, and hard to reproduce. Tools like the R package [`ricu`](https://github.com/eth-mds/ricu) showed that a shared, dataset-agnostic concept dictionary solves this; OpenICU brings that approach to the Python ecosystem and combines it with the MEDS output standard.
+ICU research routinely needs the same clinical variables — heart rate, creatinine, norepinephrine doses, ventilation episodes — but every dataset stores them differently: different table layouts, item identifiers, units, and timestamp conventions. Studies therefore accumulate one-off, dataset-specific extraction scripts that are hard to validate, hard to reuse, and hard to reproduce. Tools like the R package [`ricu`](https://github.com/eth-mds/ricu) showed that a shared, dataset-agnostic concept dictionary solves this; WeavEHR brings that approach to the Python ecosystem and combines it with the MEDS output standard.
 
 ## The approach
 
-OpenICU separates *what* to extract from *how* to extract it:
+WeavEHR separates *what* to extract from *how* to extract it:
 
 - **Declarative YAML configurations** describe source tables, joins, events, and clinical concepts. They are versioned, carry stable identifiers, and are snapshotted into every output project for reproducibility.
 - **A processing pipeline** of steps executes those configurations:
@@ -20,7 +20,7 @@ See the [user guide](../user_guide/pipeline.md) for a detailed walk through the 
 
 ## Key properties
 
-| Property | How OpenICU achieves it |
+| Property | How WeavEHR achieves it |
 | --- | --- |
 | Reproducibility | Versioned configs with deterministic identifiers; merged config snapshot stored in each project |
 | Privacy | Fully offline operation; no data ever leaves your machine |

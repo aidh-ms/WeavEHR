@@ -31,7 +31,7 @@ for path in sorted(src.rglob("*.py")):
     if not parts:
         continue
 
-    # Skip private modules (e.g. open_icu.callbacks._callbacks); their public
+    # Skip private modules (e.g. weavehr.callbacks._callbacks); their public
     # members are re-exported and documented via the parent package.
     if any(part.startswith("_") for part in parts):
         continue
