@@ -420,7 +420,15 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             table = mapping.pattern.table
             event = mapping.pattern.event
 
-            table_path = self.extraction_dataset.data_path / dataset / version / table
+            extraction_dataset = self.extraction_dataset
+            if not extraction_dataset:
+                logger.warning(
+                    "skipping concept %s: extraction dataset not found",
+                    concept.identifier,
+                )
+                return
+
+            table_path = extraction_dataset.data_path / dataset / version / table
 
             if event is None:
                 data_paths = sorted(table_path.glob("*.parquet"))
