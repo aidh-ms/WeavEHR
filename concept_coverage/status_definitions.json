@@ -26,5 +26,9 @@
   "medical_reviewed": {
     "short": "M",
     "definition": "The concept, its definition, or its resulting representation was reviewed by a medically qualified team member."
+  },
+  "mimic_code": {
+    "short": "C",
+    "definition": "An equivalent or reference concept exists in MIT-LCP mimic-code."
   }
 }
