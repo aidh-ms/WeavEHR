@@ -1,0 +1,30 @@
+{
+  "weavehr": {
+    "short": "W",
+    "definition": "A valid dataset-specific mapping for this concept exists in WeavEHR."
+  },
+  "ricu": {
+    "short": "R",
+    "definition": "An equivalent concept exists in RICU for this dataset."
+  },
+  "ricu_validated": {
+    "short": "R+",
+    "definition": "The WeavEHR concept output for this dataset was technically compared against the corresponding RICU output."
+  },
+  "ricu_not_comparable": {
+    "short": "R!",
+    "definition": "An equivalent concept exists in RICU, but a direct technical comparison is not meaningful or possible."
+  },
+  "yaib": {
+    "short": "Y",
+    "definition": "The concept is used or required in the YAIB workflow."
+  },
+  "yaib_transform_tested": {
+    "short": "YT",
+    "definition": "The WeavEHR output for this concept and dataset was successfully transformed into and processed by the YAIB workflow. This only describes technical integration and does not imply medical or semantic validation."
+  },
+  "medical_reviewed": {
+    "short": "M",
+    "definition": "The concept, its definition, or its resulting representation was reviewed by a medically qualified team member."
+  }
+}
