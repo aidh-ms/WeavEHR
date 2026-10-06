@@ -192,21 +192,29 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
     ) -> list[T]:
         """Filter configurations by identifier components.
 
+        Each argument is compared exactly (case-insensitively) against the
+        corresponding component of a configuration's ``identifier_tuple``,
+        following the config type. The given arguments must equal the leading
+        components of the identifier, so ``filter("mimic-iv", "2.2")`` selects
+        all tables of mimic-iv 2.2, while ``filter("mimic-iv", "2")`` does not.
+
         Args:
-            *args: Identifier components to filter by (e.g., class_name, version, name)
+            *args: Leading identifier components to filter by, one component per
+                argument (e.g., dataset, version for table configurations)
             includes: If specified, only include configurations with these identifiers
             excludes: If specified, skip configurations with these identifiers
 
         Returns:
             List of configuration objects matching the filter criteria
         """
-        term = self.get_identifier(".".join(args))
+        components = tuple(arg.lower() for arg in args)
         _excludes = [self.get_identifier(id) for id in excludes or []]
         _includes = [self.get_identifier(id) for id in includes or []]
 
         filtered_configs = []
         for config in self._registry.values():
-            if term not in config.identifier:
+            config_components = tuple(part.lower() for part in config.identifier_tuple[1:])
+            if config_components[: len(components)] != components:
                 continue
 
             if (_excludes and config.identifier in _excludes) or (_includes and config.identifier not in _includes):
