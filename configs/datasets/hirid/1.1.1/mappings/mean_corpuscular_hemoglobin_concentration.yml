@@ -1,4 +1,5 @@
-# HiRID v1.1.1 -- observations variableid(s) 24000170 [ricu mchc]; converts to the concept unit (* 0.16114)
+# HiRID v1.1.1 -- observations variableid(s) 24000170 [ricu mchc]; reported in g/L (reference range 260-400),
+# converted to the concept unit g/dL = % (* 0.1). ricu's factor 0.16114 does not fit this unit.
 type: simple
 mappings:
   - pattern:
@@ -6,5 +7,5 @@ mappings:
       event: OBSERVATION
       code: "(24000170)(//.*)?$"
     columns:
-      numeric_value: col(numeric_value) * 0.16114
+      numeric_value: col(numeric_value) * 0.1
       text_value: col(text_value)
