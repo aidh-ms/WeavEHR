@@ -1,5 +1,6 @@
 """End-to-end tests for the extraction step on synthetic fixture data."""
 
+import shutil
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -174,9 +175,52 @@ class TestExtractionStep:
 
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
 
+        assert (project.datasets_path / "extraction" / ".complete").exists()
         step = ExtractionStep.load(project, extraction_config)
         step.run()
         assert output.stat().st_mtime_ns == first_mtime
+
+    def test_rerun_after_interrupted_run_starts_from_scratch(
+        self, tmp_path: Path, extraction_config: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        step = ExtractionStep.load(project, extraction_config)
+
+        def crash() -> None:
+            raise RuntimeError("simulated crash after extraction, before collect")
+
+        # Both step directories exist after the crash, but the run never completed.
+        monkeypatch.setattr(step, "hooks", crash)
+        with pytest.raises(RuntimeError):
+            step.run()
+        marker = project.datasets_path / "extraction" / ".complete"
+        assert (project.workspace_path / "extraction").exists()
+        assert (project.datasets_path / "extraction").exists()
+        assert not marker.exists()
+
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        ExtractionStep.load(project, extraction_config).run()
+
+        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        assert dataset_output.exists(), "interrupted run was treated as complete and skipped"
+        assert pl.read_parquet(workspace_output).height == 4
+        assert pl.read_parquet(dataset_output).height == 4
+        assert (project.datasets_path / "extraction" / "metadata" / "codes.parquet").exists()
+        assert marker.exists()
+
+    def test_rerun_after_dataset_removed_does_not_duplicate_rows(self, tmp_path: Path, extraction_config: Path) -> None:
+        project = run_extraction(tmp_path, extraction_config)
+        shutil.rmtree(project.datasets_path / "extraction")
+
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        ExtractionStep.load(project, extraction_config).run()
+
+        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        assert pl.read_parquet(workspace_output).height == 4
+        assert pl.read_parquet(dataset_output).height == 4
 
     def test_missing_dataset_path_is_skipped(self, tmp_path: Path, table_config_dir: Path) -> None:
         config_file = tmp_path / "extraction.yml"

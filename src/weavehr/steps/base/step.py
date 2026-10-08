@@ -42,6 +42,9 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         _step_name: Normalized name of this step (lowercase)
     """
 
+    COMPLETION_MARKER = ".complete"
+    """File written to the step's dataset directory as the last action of a successful run."""
+
     def __init__(self, project: WeavEHRProject, config: SCT, registry: BaseConfigRegistry[CT]) -> None:
         """Initialize the processing step.
 
@@ -80,34 +83,46 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         """
         pass
 
+    @property
+    def completion_marker(self) -> Path:
+        """Path of the marker that records a successful run of this step.
+
+        Returns:
+            ``<project>/datasets/<step>/.complete``
+        """
+        return self._project.datasets_path / self._step_name / self.COMPLETION_MARKER
+
     def run(self) -> WorkspaceDir:
         """Execute the complete step workflow.
 
         Orchestrates the full processing pipeline:
         1. Load and save configurations
         2. Set up workspace and dataset directories
-        3. Execute extraction (if not skipping due to existing output)
+        3. Execute extraction (if not skipping due to a completed earlier run)
         4. Run post-processing hooks
         5. Collect results into the dataset
+        6. Write the completion marker
 
         Returns:
             The workspace directory containing intermediate results
 
         Note:
-            Skip execution if overwrite=False and both workspace and dataset exist
+            The step is skipped if overwrite=False, its workspace exists, and an
+            earlier run wrote the completion marker. Otherwise the step's
+            workspace and dataset directories are emptied and the step runs from
+            scratch, so an interrupted run is redone rather than reused or
+            appended to.
         """
-        skip = (
-            not self._config.overwrite
-            and (self._project.workspace_path / self._step_name).exists()
-            and (self._project.datasets_path / self._step_name).exists()
-        )
+        workspace_exists = (self._project.workspace_path / self._step_name).exists()
+        completed = self.completion_marker.exists()
+        skip = not self._config.overwrite and workspace_exists and completed
 
         logger.debug(
-            "Step '%s': overwrite=%s, workspace_exists=%s, dataset_exists=%s, skip=%s",
+            "Step '%s': overwrite=%s, workspace_exists=%s, completed=%s, skip=%s",
             self._step_name,
             self._config.overwrite,
-            (self._project.workspace_path / self._step_name).exists(),
-            (self._project.datasets_path / self._step_name).exists(),
+            workspace_exists,
+            completed,
             skip,
         )
 
@@ -115,7 +130,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         logger.debug("Step '%s': setting up config", self._step_name)
         self.setup_config()
         logger.debug("Step '%s': setting up project", self._step_name)
-        self.setup_project()
+        self.setup_project(reset=not skip)
         if not skip:
             logger.debug("Step '%s': starting extraction", self._step_name)
             self.extract()
@@ -123,9 +138,10 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             self.hooks()
             logger.debug("Step '%s': collecting results", self._step_name)
             self.collect()
+            self.completion_marker.touch()
         else:
             logger.info(
-                "Skipping step '%s' because overwrite=False and both workspace and dataset already exist",
+                "Skipping step '%s' because overwrite=False and a completed run already exists",
                 self._step_name,
             )
 
@@ -148,15 +164,22 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         )
         self._registry.save(self._project.configs_path)
 
-    def setup_project(self) -> None:
+    def setup_project(self, reset: bool = False) -> None:
         """Create workspace and dataset directories for this step.
 
         Initializes the workspace directory (for intermediate files) and
         dataset directory (for final MEDS output) within the project structure.
+
+        Args:
+            reset: Discard existing contents of this step's workspace and dataset
+                directories, including the completion marker. Set when the step
+                is about to run, so output of an earlier interrupted or partial
+                run is neither appended to nor merged into the new output.
         """
+        overwrite = self._config.overwrite or reset
         self._workspace_dir = self._project.add_workspace_dir(
             name=self._step_name,
-            overwrite=self._config.overwrite,
+            overwrite=overwrite,
         )
 
         logger.debug(
@@ -167,7 +190,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
 
         self._dataset = self._project.add_dataset(
             name=self._step_name,
-            overwrite=self._config.overwrite,
+            overwrite=overwrite,
         )
 
         logger.debug(

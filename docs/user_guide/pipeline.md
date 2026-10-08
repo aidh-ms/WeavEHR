@@ -53,7 +53,7 @@ Every step's `run()` follows the same lifecycle:
 
 ### Skipping and overwriting
 
-If a step's workspace **and** dataset already exist and the step config has `overwrite: false` (the default), the step is skipped entirely. Set `overwrite: true` in the step YAML to force re-computation. This makes pipeline scripts safely re-runnable.
+A step that finishes successfully writes a marker file, `datasets/<step>/.complete`. If that marker and the step's workspace exist and the step config has `overwrite: false` (the default), the step is skipped entirely. Otherwise, including after an interrupted run, the step empties its own workspace and dataset directories and runs from scratch, so partial output is never reused or appended to. Set `overwrite: true` in the step YAML to force re-computation. This makes pipeline scripts safely re-runnable.
 
 ### Common step configuration
 
@@ -62,7 +62,7 @@ All step YAML files share this structure:
 ```yaml
 name: Extraction          # step name; lowercased, it names the output directories
 version: 1.0.0
-overwrite: false          # re-run even if output exists
+overwrite: false          # true: re-run even if a completed run exists
 
 config_files:             # configurations to load into the step's registry
   - path: /path/to/configs/
