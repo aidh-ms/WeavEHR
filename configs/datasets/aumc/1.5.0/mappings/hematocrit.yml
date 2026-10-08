@@ -1,5 +1,6 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
 #   42869588 = Hematocrit [Pure volume fraction] of Blood by Automated count
+# AUMCdb reports hematocrit as a decimal fraction (normal 0.35-0.5), converted to % (* 100) as ricu does.
 type: simple
 mappings:
   - pattern:
@@ -7,5 +8,5 @@ mappings:
       event: MEASUREMENT
       code: "42869588(//.*)?$"
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: col(numeric_value) * 100
       text_value: col(text_value)
