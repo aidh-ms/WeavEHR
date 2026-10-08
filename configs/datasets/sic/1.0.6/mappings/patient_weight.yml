@@ -4,6 +4,6 @@ mappings:
   - pattern:
       table: cases
       event: WEIGHT
-      code: "(weight)(//.*)?$"
+      code: "^(weight)(//.*)?$"
     columns:
       numeric_value: col(numeric_value) * 0.001

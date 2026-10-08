@@ -277,6 +277,7 @@ def test_config_inventory_is_nonempty() -> None:
 # ``2200`` end-tidal CO2 matching ``20002200`` CRP).
 START_ANCHORED_MAPPING_DIRS = [
     CONFIG_ROOT / "datasets" / "hirid" / "1.1.1" / "mappings",
+    CONFIG_ROOT / "datasets" / "sic" / "1.0.6" / "mappings",
 ]
 
 
