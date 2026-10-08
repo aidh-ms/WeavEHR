@@ -632,6 +632,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     ),
                     how=join_table.how,  # ty: ignore[invalid-argument-type]
                     suffix=join_table.suffix,
+                    # Full joins don't coalesce keys by default, which would leave
+                    # subject_id/time null for rows present only on the right side.
+                    coalesce=True,
                     **join_table.join_params,  # ty: ignore[invalid-argument-type]
                 )
                 post_callbacks.extend(join_table.post_callbacks)
