@@ -4,7 +4,7 @@ mappings:
   - pattern:
       table: observations
       event: OBSERVATION
-      code: "(24000548|24000836|20000900)(//.*)?$"
+      code: "^(24000548|24000836|20000900)(//.*)?$"
     columns:
       numeric_value: col(numeric_value) * 0.1
       text_value: col(text_value)
