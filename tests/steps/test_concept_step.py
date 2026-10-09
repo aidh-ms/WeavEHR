@@ -199,6 +199,40 @@ mappings:
 
         assert not (project.datasets_path / "concept" / "data" / "orphan").exists()
 
+    def test_full_join_keeps_keys_of_right_only_rows(
+        self, tmp_path: Path, extraction_config: Path, concept_config: Path
+    ) -> None:
+        # heart_rate has subject 1 at 08:00/09:00; patient_weight has subject 1 at 08:00 and subject 2 at 10:00.
+        (tmp_path / "config" / "concepts" / "hr_weight.yml").write_text("name: hr_weight\nversion: 1.0.0\nunit: x\n")
+        (tmp_path / "config" / "testdb" / "1.0" / "mappings" / "hr_weight.yml").write_text(
+            """\
+type: derived
+table:
+  concept: heart_rate.1.0.0
+  columns: [subject_id, time, numeric_value]
+join:
+  - concept: patient_weight.1.0.0
+    columns: [subject_id, time, numeric_value]
+    how: full
+event:
+  numeric_value: col(numeric_value_right)
+"""
+        )
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        load_concept_config(
+            tmp_path / "config" / "concepts",
+            [tmp_path / "config" / "testdb" / "1.0" / "mappings"],
+        )
+        ExtractionStep.load(project, extraction_config).run()
+        ConceptStep.load(project, concept_config).run()
+
+        df = pl.read_parquet(concept_path(project, "hr_weight")).sort("subject_id", "time")
+        assert df["subject_id"].to_list() == [1, 1, 2]
+        assert df["time"].null_count() == 0
+        assert df["numeric_value"].to_list() == [80.0, None, 60.0]
+
     def test_missing_extraction_event_is_skipped(
         self, tmp_path: Path, extraction_config: Path, concept_config: Path
     ) -> None:

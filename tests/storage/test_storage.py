@@ -4,7 +4,9 @@ import json
 from pathlib import Path
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
+from meds.schema import CodeMetadataSchema
 
 from weavehr.storage.base import FileStorage
 from weavehr.storage.meds import MEDSDataset
@@ -135,3 +137,13 @@ class TestMEDSDataset:
         codes = pl.read_parquet(dataset.metadata_path / "codes.parquet")
         assert codes.height == 0
         assert "code" in codes.columns
+
+    @pytest.mark.parametrize("with_data", [True, False])
+    def test_write_codes_matches_meds_schema(self, tmp_path: Path, with_data: bool) -> None:
+        dataset = MEDSDataset(tmp_path / "ds")
+        if with_data:
+            pl.DataFrame({"code": ["a//1", "b//2"]}).write_parquet(dataset.data_path / "x.parquet")
+
+        dataset.write_codes()
+
+        CodeMetadataSchema.validate(pq.read_table(dataset.metadata_path / "codes.parquet"))

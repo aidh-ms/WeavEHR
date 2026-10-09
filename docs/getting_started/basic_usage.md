@@ -64,7 +64,7 @@ with WeavEHRProject(project_path) as project:
     concept_step.run()
 ```
 
-By default a step is **skipped** if its output already exists, so re-running the script is cheap. Set `overwrite: true` in a step's YAML to force re-computation.
+By default a step is **skipped** if an earlier run of it completed, so re-running the script is cheap; an interrupted step runs again from scratch. Set `overwrite: true` in a step's YAML to force re-computation.
 
 To see what is happening during a run, enable logging:
 

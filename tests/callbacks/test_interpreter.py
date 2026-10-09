@@ -92,6 +92,19 @@ class TestOperators:
     def test_boolean_logic(self, lf: pl.LazyFrame, expr: str, expected: list[bool]) -> None:
         assert evaluate(lf, expr).to_list() == expected
 
+    @pytest.mark.parametrize(
+        ("expr", "expected"),
+        [
+            ("col(g) == None", [False, True, False]),
+            ("None == col(g)", [False, True, False]),
+            ("col(g) != None", [True, False, True]),
+            ('(col(g) == "") or (col(g) == None)', [False, True, True]),
+        ],
+    )
+    def test_comparison_with_none_is_null_check(self, expr: str, expected: list[bool]) -> None:
+        lf = pl.LazyFrame({"g": ["Male", None, ""]})
+        assert evaluate(lf, expr).to_list() == expected
+
     def test_multi_value_bool_op(self, lf: pl.LazyFrame) -> None:
         result = evaluate(lf, "col(flag) and col(a) > 1 and col(b) >= 30")
         assert result.to_list() == [False, False, True]
