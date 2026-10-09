@@ -166,3 +166,50 @@ class ParseDateTime(CallbackProtocol):
         if self.output is None:
             return expr
         return expr.alias(self.output)
+
+
+@register_callback_cls
+class DatetimeDiff(CallbackProtocol):
+    """Compute the difference between two datetime columns as a fractional number of units.
+
+    Attributes:
+        start: Column/expression for the earlier (or reference) datetime.
+        end: Column/expression for the later datetime; the result is
+            (end - start) in the given unit.
+        unit: One of "years", "weeks", "days", "hours", "minutes" or
+            "seconds". Years are Julian years of 365.25 days.
+        output: Output column name. If None, the expression is
+            returned unaliased.
+    """
+
+    SECONDS_PER_UNIT: dict[str, float] = {
+        "years": 365.25 * 86400.0,
+        "weeks": 7 * 86400.0,
+        "days": 86400.0,
+        "hours": 3600.0,
+        "minutes": 60.0,
+        "seconds": 1.0,
+    }
+
+    def __init__(
+        self,
+        start: AstValue,
+        end: AstValue,
+        unit: str = "days",
+        output: Optional[str] = None,
+    ) -> None:
+        if unit not in self.SECONDS_PER_UNIT:
+            raise ValueError(f"Unsupported unit: {unit}")
+
+        self.start = start
+        self.end = end
+        self.unit = unit
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        duration_expr = to_expr(lf, self.end) - to_expr(lf, self.start)
+        expr = duration_expr.dt.total_seconds() / self.SECONDS_PER_UNIT[self.unit]
+
+        if self.output is None:
+            return expr
+        return expr.alias(self.output)

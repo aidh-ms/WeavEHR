@@ -123,3 +123,38 @@ class SliceStr(CallbackProtocol):
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.value).cast(pl.Utf8).str.slice(self.offset, self.length)
         return expr if self.output is None else expr.alias(self.output)
+
+
+@register_callback_cls
+class DenseRankEncode(CallbackProtocol):
+    """Map string (or any) ids to dense integer codes via rank.
+
+    Uses `.rank(method="dense")` instead of casting, so it works for
+    non-numeric ids and never leaves the query graph — no separate
+    unique/join step, no collect. Ranks are deterministic for a given
+    set of distinct values but only within this LazyFrame's evaluation
+    (not stable across separately-processed frames/chunks).
+
+    Attributes:
+        id: Column/expression holding the id to encode.
+        descending: Passed through to rank's descending flag.
+        output: Output column name. If None, the expression is
+            returned unaliased.
+    """
+
+    def __init__(
+        self,
+        id: AstValue,
+        descending: bool = False,
+        output: Optional[str] = None,
+    ) -> None:
+        self.id = id
+        self.descending = descending
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        expr = to_expr(lf, self.id).rank(method="dense", descending=self.descending).cast(pl.Int64)
+
+        if self.output is None:
+            return expr
+        return expr.alias(self.output)

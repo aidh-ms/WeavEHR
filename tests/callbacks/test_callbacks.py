@@ -22,7 +22,8 @@ from weavehr.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
 from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
-from weavehr.callbacks._callbacks.time import AddOffset, SetTime, ToDatetime
+from weavehr.callbacks._callbacks.string import DenseRankEncode
+from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
 from weavehr.callbacks.proto import CallbackProtocol
 
@@ -201,9 +202,60 @@ class TestTime:
         with pytest.raises(ValueError, match="Unsupported offset_unit"):
             AddOffset("dt", "off", offset_unit="decades")(lf)
 
+    @pytest.mark.parametrize(
+        ("unit", "expected"),
+        [
+            ("years", 14 / 365.25),
+            ("weeks", 2.0),
+            ("days", 14.0),
+            ("hours", 336.0),
+            ("minutes", 20160.0),
+            ("seconds", 1209600.0),
+        ],
+    )
+    def test_datetime_diff(self, unit: str, expected: float) -> None:
+        lf = pl.LazyFrame({"start": [datetime(2024, 1, 1)], "end": [datetime(2024, 1, 15)]})
+        assert apply(lf, DatetimeDiff("start", "end", unit=unit)) == [pytest.approx(expected)]
+
+    def test_datetime_diff_fractional_and_negative(self) -> None:
+        lf = pl.LazyFrame({"start": [datetime(2024, 1, 1, 12)], "end": [datetime(2024, 1, 1)]})
+        assert apply(lf, DatetimeDiff("start", "end")) == [-0.5]
+
+    def test_datetime_diff_invalid_unit(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported unit"):
+            DatetimeDiff("start", "end", unit="decades")
+
     def test_set_time(self) -> None:
         lf = pl.LazyFrame({"dt": [datetime(2024, 5, 6, 1, 2, 3)]})
         assert apply(lf, SetTime("dt", 23, 59, 0)) == [datetime(2024, 5, 6, 23, 59, 0)]
+
+
+class TestString:
+    def test_dense_rank_encode_string_ids(self) -> None:
+        lf = pl.LazyFrame({"id": ["p-c", "p-a", "p-b", "p-a", "p-c"]})
+        out = DenseRankEncode("id", output="subject_id")(lf)
+        df = collect(lf.with_columns(out))
+        assert df["subject_id"].dtype == pl.Int64
+        assert df["subject_id"].to_list() == [3, 1, 2, 1, 3]
+
+    def test_dense_rank_encode_is_one_to_one(self) -> None:
+        lf = pl.LazyFrame({"id": ["x9", "a1", "m5", "a1", "zz", "m5", "b2"]})
+        df = collect(lf.with_columns(code=DenseRankEncode("id")(lf)))
+        pairs = df.select("id", "code").unique()
+        assert pairs["id"].n_unique() == pairs["code"].n_unique() == pairs.height == 5
+        assert sorted(pairs["code"].to_list()) == [1, 2, 3, 4, 5]
+
+    def test_dense_rank_encode_descending(self) -> None:
+        lf = pl.LazyFrame({"id": ["a", "b", "c", "a"]})
+        assert apply(lf, DenseRankEncode("id", descending=True)) == [3, 2, 1, 3]
+
+    def test_dense_rank_encode_null_stays_null(self) -> None:
+        lf = pl.LazyFrame({"id": ["b", None, "a"]})
+        assert apply(lf, DenseRankEncode("id")) == [2, None, 1]
+
+    def test_dense_rank_encode_unaliased(self) -> None:
+        lf = pl.LazyFrame({"id": ["b", "a"]})
+        assert collect(lf.select(DenseRankEncode("id")(lf))).columns == ["id"]
 
 
 class TestReshape:
