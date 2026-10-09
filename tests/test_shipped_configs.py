@@ -269,3 +269,26 @@ def test_config_inventory_is_nonempty() -> None:
     # mappings/ dir; only empty dirs without a marker (nwicu) are not
     # guaranteed to survive a fresh clone.
     assert len(DATASET_CONCEPT_DIRS) >= 5
+
+
+# Datasets whose codes start with a bare numeric id after the event name. Concept
+# patterns are matched with an unanchored regex search, so an id pattern without a
+# leading ``^`` also matches longer ids that end in the same digits (e.g. HiRID
+# ``2200`` end-tidal CO2 matching ``20002200`` CRP).
+START_ANCHORED_MAPPING_DIRS = [
+    CONFIG_ROOT / "datasets" / "hirid" / "1.1.1" / "mappings",
+    CONFIG_ROOT / "datasets" / "sic" / "1.0.6" / "mappings",
+    CONFIG_ROOT / "datasets" / "aumc" / "1.5.0" / "mappings",
+]
+
+
+@pytest.mark.parametrize("mapping_dir", START_ANCHORED_MAPPING_DIRS, ids=relative_id)
+def test_id_patterns_are_start_anchored(mapping_dir: Path) -> None:
+    unanchored = {
+        f"{name}: {mapping['pattern']['code']}"
+        for name, data in resolve_effective_configs(mapping_dir).items()
+        if data.get("type", "simple") == "simple"
+        for mapping in data.get("mappings", [])
+        if not mapping["pattern"]["code"].startswith("^")
+    }
+    assert not unanchored, f"patterns without a leading '^': {sorted(unanchored)}"

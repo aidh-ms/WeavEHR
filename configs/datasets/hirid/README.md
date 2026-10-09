@@ -40,14 +40,15 @@ mappings:
   - pattern:
       table: observations
       event: OBSERVATION
-      code: "(20000600)(//.*)?$"   # ricu crea, HiRID variableid 20000600
+      code: "^(20000600)(//.*)?$"   # ricu crea, HiRID variableid 20000600
     columns:
       numeric_value: col(numeric_value) * 0.011312
       text_value: col(text_value)
 ```
 
-The id pattern is anchored with `(//.*)?$` so a short id (e.g. `200`) does not
-match a longer one (`2000`). Every conversion factor was checked against the
+The id pattern is anchored at both ends (`^(...)(//.*)?$`). Concept patterns are
+matched with an unanchored regex search, so without the leading `^` a short id such as
+`2200` would also match the end of a longer one (`20002200`). Every conversion factor was checked against the
 concept's declared `unit` before being applied.
 
 ### Coverage
