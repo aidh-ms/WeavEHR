@@ -96,7 +96,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         """Execute the complete step workflow.
 
         Orchestrates the full processing pipeline:
-        1. Load and save configurations
+        1. Save the configuration snapshot (not when the step is skipped)
         2. Set up workspace and dataset directories
         3. Execute extraction (if not skipping due to a completed earlier run)
         4. Run post-processing hooks
@@ -127,8 +127,11 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         )
 
         logger.info("Running step '%s'", self._step_name)
-        logger.debug("Step '%s': setting up config", self._step_name)
-        self.setup_config()
+        if not skip:
+            # The snapshot must describe the configs that produced the step's data,
+            # so a skipped step keeps the snapshot of its completed run.
+            logger.debug("Step '%s': setting up config", self._step_name)
+            self.setup_config()
         logger.debug("Step '%s': setting up project", self._step_name)
         self.setup_project(reset=not skip)
         if not skip:

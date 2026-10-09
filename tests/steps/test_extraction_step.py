@@ -11,7 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from weavehr import ExtractionStep, WeavEHRProject
+from weavehr import ExtractionStep, WeavEHRProject, dataset_config_registry
 from tests.steps.conftest import load_extracation_config
 
 
@@ -262,6 +262,23 @@ config:
         project = run_extraction(tmp_path, extraction_config)
         snapshot = project.configs_path / "table" / "testdb" / "1.0" / "vitals.yml"
         assert snapshot.exists()
+
+    def test_skipped_step_keeps_config_snapshot(self, tmp_path: Path, extraction_config: Path) -> None:
+        project = run_extraction(tmp_path, extraction_config)
+        snapshot = project.configs_path / "table" / "testdb" / "1.0" / "vitals.yml"
+        original = snapshot.read_text()
+
+        # Change a table config after the completed run, then re-run without overwrite.
+        table_dir = tmp_path / "config" / "testdb" / "1.0" / "tables"
+        vitals = table_dir / "vitals.yml"
+        vitals.write_text(
+            vitals.read_text().replace("numeric_value: col(valuenum)", "numeric_value: col(valuenum) * 2")
+        )
+        dataset_config_registry.clear()
+        load_extracation_config(table_dir)
+        ExtractionStep.load(project, extraction_config).run()
+
+        assert snapshot.read_text() == original
 
     def test_reads_parquet_source_with_native_types(self, tmp_path: Path) -> None:
         """A parquet source (the default format) with native timestamp/int/float types."""
