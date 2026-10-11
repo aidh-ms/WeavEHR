@@ -9,10 +9,10 @@ from abc import ABCMeta
 
 from pydantic import BaseModel, Field
 
-from weavehr.config.base import BaseConfig
+from weavehr.config.base import BaseConfig, StrictModel
 
 
-class DatasetConfig(BaseModel):
+class DatasetConfig(StrictModel):
     """Configuration for dataset metadata.
 
     Specifies metadata to be associated with the output dataset produced

@@ -19,7 +19,7 @@ from weavehr.steps.base.step import ConfigurableBaseStep
 from weavehr.steps.extraction.config.event import EventConfig
 from weavehr.steps.extraction.config.step import ExtractionStepConfig
 from weavehr.steps.extraction.config.table import BaseTableConfig, TableConfig, TableType
-from weavehr.steps.extraction.registry import dataset_config_registry
+from weavehr.steps.extraction.registry import dataset_config_registry, select_tables
 from weavehr.storage.project import WeavEHRProject
 
 logger = get_logger(__name__)
@@ -68,13 +68,9 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
         The extracted data is written to workspace_dir/dataset/table/event.parquet
         """
+        settings = self._config.config.settings
         for cfg in self._config.config.data:
-            for table in self._registry.filter(
-                cfg.name,
-                cfg.version,
-                includes=cfg.includes,
-                excludes=cfg.excludes,
-            ):
+            for table in select_tables(self._registry, cfg, settings):
                 logger.info(
                     "Extracting table %s from dataset %s (version %s)",
                     table.name,
@@ -92,7 +88,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 logger.debug(
                     "Joining table %s with %s",
                     table.name,
-                    join_table.path,
+                    join_table.name or join_table.path,
                 )
                 join_lf = self._read_table(join_table, path)
 
@@ -115,6 +111,11 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 )
 
         except FileNotFoundError as e:
+            if not self._config.config.settings.allow_missing_tables:
+                raise FileNotFoundError(
+                    f"Source of table '{table.identifier}' is missing: {e}. "
+                    "Set config.settings.allow_missing_tables: true to skip missing tables."
+                ) from e
             logger.warning("Skipping table %s: %s", table.name, e)
             return
 

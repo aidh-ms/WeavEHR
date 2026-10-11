@@ -4,9 +4,20 @@ from pathlib import Path
 
 import pytest
 
+from weavehr.config.errors import ConfigError
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import MappingConfig, SimpleDatasetConceptConfig
+
+SIMPLE_MAPPING = """\
+type: simple
+mappings:
+  - pattern:
+      table: chartevents
+      code: (220045//Heart Rate)
+    columns:
+      numeric_value: col(numeric_value)
+"""
 
 
 class TestConceptConfig:
@@ -25,7 +36,7 @@ class TestConceptConfig:
             "mappings:\n"
             "  - pattern:\n"
             "      table: chartevents\n"
-            "      evnt: Heart Rate\n"
+            "      event: CHART\n"
             "      code: (220045//Heart Rate)\n"
             "    columns:\n"
             "      numeric_value: col(numeric_value)\n"
@@ -40,7 +51,7 @@ class TestConceptConfig:
         assert dataset_concept.version == "3.1"
         assert concept.get_dataset_concept("eicu-crd", "2.0") is None
 
-    def test_load_skips_invalid_dataset_concept(self, tmp_path: Path) -> None:
+    def test_load_rejects_invalid_dataset_concept(self, tmp_path: Path) -> None:
         concept_file = tmp_path / "heart_rate.yml"
         concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")
 
@@ -48,13 +59,87 @@ class TestConceptConfig:
         mapping_dir.mkdir(parents=True)
         (mapping_dir / "heart_rate.yml").write_text("type: nonsense\n")
 
+        with pytest.raises(ConfigError, match="heart_rate"):
+            ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
+
+    def test_load_rejects_unknown_mapping_key(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "heart_rate.yml"
+        concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")
+
+        mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
+        mapping_dir.mkdir(parents=True)
+        (mapping_dir / "heart_rate.yml").write_text(SIMPLE_MAPPING.replace("table:", "tabel:"))
+
+        with pytest.raises(ConfigError, match="tabel"):
+            ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
+
+    def test_load_rejects_unknown_concept_key(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "heart_rate.yml"
+        concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\nunits: bpm\n")
+
+        with pytest.raises(ConfigError, match="units"):
+            ConceptConfig.load(concept_file)
+
+    def test_load_rejects_empty_concept_file(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "heart_rate.yml"
+        concept_file.write_text("")
+
+        with pytest.raises(ConfigError, match="empty"):
+            ConceptConfig.load(concept_file)
+
+    def test_load_rejects_empty_mapping_file(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "heart_rate.yml"
+        concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")
+
+        mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
+        mapping_dir.mkdir(parents=True)
+        (mapping_dir / "heart_rate.yml").write_text("# nothing here\n")
+
+        with pytest.raises(ConfigError, match="empty"):
+            ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
+
+    def test_load_discovers_yaml_extension(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "heart_rate.yml"
+        concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")
+
+        mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
+        mapping_dir.mkdir(parents=True)
+        (mapping_dir / "heart_rate.yaml").write_text(SIMPLE_MAPPING)
+
         concept = ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
-        assert concept.dataset_concepts == []
+
+        assert isinstance(concept.get_dataset_concept("mimic-iv", "3.1"), SimpleDatasetConceptConfig)
+
+    def test_load_discovers_nested_mapping(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "heart_rate.yml"
+        concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")
+
+        mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
+        (mapping_dir / "vitals").mkdir(parents=True)
+        (mapping_dir / "vitals" / "heart_rate.yml").write_text(SIMPLE_MAPPING)
+
+        concept = ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
+
+        dataset_concept = concept.get_dataset_concept("mimic-iv", "3.1")
+        assert isinstance(dataset_concept, SimpleDatasetConceptConfig)
+        assert dataset_concept.name == "heart_rate"
+
+    def test_load_rejects_duplicate_mappings(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "heart_rate.yml"
+        concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")
+
+        mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
+        mapping_dir.mkdir(parents=True)
+        (mapping_dir / "heart_rate.yml").write_text(SIMPLE_MAPPING)
+        (mapping_dir / "heart_rate.yaml").write_text(SIMPLE_MAPPING)
+
+        with pytest.raises(ConfigError, match="Multiple mappings"):
+            ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
 
     def test_regex_built_from_pattern_parts(self) -> None:
         mapping = MappingConfig.model_validate(
             {
-                "pattern": {"dataset": "mimic-iv", "table": "chartevents", "code": "(220045//Heart Rate)"},
+                "pattern": {"table": "chartevents", "code": "(220045//Heart Rate)"},
                 "columns": {},
             }
         )

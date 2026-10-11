@@ -7,14 +7,50 @@ and YAML serialization capabilities.
 
 from abc import ABCMeta
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import Any, ClassVar, Self
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 import yaml
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, computed_field
+
+from weavehr.config.errors import ConfigError
 
 
-class BaseConfig(BaseModel, metaclass=ABCMeta):
+def read_yaml_mapping(file_path: Path) -> dict[str, Any]:
+    """Read a YAML file that must contain a top-level mapping.
+
+    Args:
+        file_path: Path to the YAML file
+
+    Returns:
+        The parsed mapping
+
+    Raises:
+        FileNotFoundError: If file_path does not exist
+        yaml.YAMLError: If YAML parsing fails
+        ConfigError: If the file is empty or its top level is not a mapping
+    """
+    with open(file_path, "r") as f:
+        data = yaml.safe_load(f)
+
+    if data is None:
+        raise ConfigError(f"Configuration file {file_path} is empty")
+    if not isinstance(data, dict):
+        raise ConfigError(f"Configuration file {file_path} must contain a mapping, got {type(data).__name__}")
+    return data
+
+
+class StrictModel(BaseModel):
+    """Base model for configuration sections that rejects unknown keys.
+
+    A typo or a key at the wrong nesting level in a YAML file fails validation
+    instead of being silently ignored.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class BaseConfig(StrictModel, metaclass=ABCMeta):
     """Abstract base class for configuration objects.
 
     Provides automatic identifier and UUID generation based on name and version,
@@ -138,15 +174,18 @@ class BaseConfig(BaseModel, metaclass=ABCMeta):
         Raises:
             FileNotFoundError: If file_path does not exist
             yaml.YAMLError: If YAML parsing fails
+            ConfigError: If the file is empty or fails validation
         """
-        with open(file_path, "r") as f:
-            data = yaml.safe_load(f)
+        data = read_yaml_mapping(file_path)
 
         for k, v in kwargs.items():
             if k not in data:
                 data[k] = v
 
-        return cls(**data)
+        try:
+            return cls(**data)
+        except ValidationError as e:
+            raise ConfigError(f"Invalid configuration in {file_path}:\n{e}") from e
 
     def save(self, path: Path) -> None:
         """Save configuration to a YAML file.
@@ -178,11 +217,18 @@ class BaseDatasetConfig(BaseConfig):
     dataset: str = Field(..., description="Name of the dataset associated with this dataset configuration.")
 
     @classmethod
-    def load(cls, file_path: Path, **kwargs) -> Self:
+    def load(cls, file_path: Path, config_root: Path | None = None, **kwargs) -> Self:
         """Load configuration from a YAML file.
+
+        Dataset configs live under ``<dataset>/<version>/<subdir>/``, optionally
+        in nested directories below ``<subdir>``. Dataset and version are taken
+        from the parents of ``config_root`` (the ``<subdir>`` directory), the
+        name from the file stem.
 
         Args:
             file_path: Path to the YAML configuration file
+            config_root: The ``<dataset>/<version>/<subdir>`` directory the file
+                belongs to. Defaults to the file's parent directory.
             **kwargs: Additional keyword arguments for configuration initialization
 
         Returns:
@@ -191,8 +237,14 @@ class BaseDatasetConfig(BaseConfig):
         Raises:
             FileNotFoundError: If file_path does not exist
             yaml.YAMLError: If YAML parsing fails
+            ConfigError: If the path does not follow the dataset layout, or the
+                file is empty or fails validation
         """
-        *_, dataset, version, _, _ = file_path.parts
-        name = file_path.stem
+        root = config_root if config_root is not None else file_path.parent
+        if not file_path.is_relative_to(root) or len(root.parts) < 3:
+            raise ConfigError(
+                f"Dataset config {file_path} must be located under a <dataset>/<version>/<subdir>/ directory"
+            )
 
-        return super().load(file_path, dataset=dataset, name=name, version=version)
+        identity = {"dataset": root.parent.parent.name, "version": root.parent.name, "name": file_path.stem}
+        return super().load(file_path, **{**kwargs, **identity})

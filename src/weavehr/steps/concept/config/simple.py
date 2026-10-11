@@ -1,11 +1,11 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from weavehr.config.base import BaseDatasetConfig
+from weavehr.config.base import BaseDatasetConfig, StrictModel
 
 
-class MappingColumnConfig(BaseModel):
+class MappingColumnConfig(StrictModel):
     """Configuration for a concept mapping.
 
     Attributes:
@@ -16,7 +16,7 @@ class MappingColumnConfig(BaseModel):
     text_value: str | None = Field(None, description="Column name for text values.")
 
 
-class MappingPatternConfig(BaseModel):
+class MappingPatternConfig(StrictModel):
     """Configuration for concept mapping patterns.
 
     Attributes:
@@ -31,7 +31,7 @@ class MappingPatternConfig(BaseModel):
     extensions: dict[str, str] = Field(default_factory=dict, description="Additional pattern to filter the extension columns.")
 
 
-class MappingConfig(BaseModel):
+class MappingConfig(StrictModel):
     """Configuration for a concept mapping.
 
     Attributes:

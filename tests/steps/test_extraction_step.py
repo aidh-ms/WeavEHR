@@ -12,7 +12,34 @@ import pyarrow.parquet as pq
 import pytest
 
 from weavehr import ExtractionStep, WeavEHRProject, dataset_config_registry
+from weavehr.config.errors import ConfigError
 from tests.steps.conftest import load_extracation_config
+
+
+def write_extraction_config(
+    tmp_path: Path,
+    data_path: Path,
+    *,
+    name: str = "testdb",
+    settings: str | None = None,
+    includes: list[str] | None = None,
+) -> Path:
+    """Write an extraction step config with a single data entry."""
+    settings_block = f"  settings:\n    {settings}\n" if settings else ""
+    includes_block = f"      includes: {includes}\n" if includes else ""
+    config_file = tmp_path / "extraction.yml"
+    config_file.write_text(
+        "name: Extraction\n"
+        "version: 1.0.0\n"
+        "config:\n"
+        f"{settings_block}"
+        "  data:\n"
+        f"    - name: {name}\n"
+        '      version: "1.0"\n'
+        f"      path: {data_path}\n"
+        f"{includes_block}"
+    )
+    return config_file
 
 
 def run_extraction(
@@ -222,41 +249,95 @@ class TestExtractionStep:
         assert pl.read_parquet(workspace_output).height == 4
         assert pl.read_parquet(dataset_output).height == 4
 
-    def test_missing_dataset_path_is_skipped(self, tmp_path: Path, table_config_dir: Path) -> None:
-        config_file = tmp_path / "extraction.yml"
-        config_file.write_text(
-            f"""\
-name: Extraction
-version: 1.0.0
+    def test_unmatched_data_entry_fails(self, tmp_path: Path, data_dir: Path, table_config_dir: Path) -> None:
+        config_file = write_extraction_config(tmp_path, data_dir, name="test")
 
-config:
-  data:
-    - name: test
-      path: {table_config_dir}
-      version: "1.0"
-"""
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(table_config_dir)
+        with pytest.raises(ConfigError, match=r"data entry 'test' .* matches no registered table config"):
+            ExtractionStep.load(project, config_file).run()
+
+        assert not (project.datasets_path / "extraction" / ".complete").exists()
+
+    def test_unmatched_data_entry_is_skipped_when_allowed(
+        self, tmp_path: Path, data_dir: Path, table_config_dir: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        config_file = write_extraction_config(tmp_path, data_dir, name="test", settings="allow_unmatched_data: true")
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(table_config_dir)
+        ExtractionStep.load(project, config_file).run()
+
+        data_path = project.datasets_path / "extraction" / "data"
+        assert list(data_path.rglob("*.parquet")) == []
+        assert "matches no registered table config" in caplog.text
+
+    def test_unmatched_include_fails(self, tmp_path: Path, data_dir: Path, table_config_dir: Path) -> None:
+        config_file = write_extraction_config(tmp_path, data_dir, includes=["testdb.1.0.vitals", "testdb.1.0.vital"])
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(table_config_dir)
+        with pytest.raises(ConfigError, match=r"includes .* match no registered table config: \['testdb.1.0.vital'\]"):
+            ExtractionStep.load(project, config_file).run()
+
+    def test_missing_dataset_path_fails(self, tmp_path: Path, table_config_dir: Path) -> None:
+        config_file = write_extraction_config(tmp_path, tmp_path / "does-not-exist")
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(table_config_dir)
+        with pytest.raises(FileNotFoundError, match="allow_missing_tables"):
+            ExtractionStep.load(project, config_file).run()
+
+        assert not (project.datasets_path / "extraction" / ".complete").exists()
+
+    def test_missing_dataset_path_is_skipped_when_allowed(self, tmp_path: Path, table_config_dir: Path) -> None:
+        config_file = write_extraction_config(
+            tmp_path, tmp_path / "does-not-exist", settings="allow_missing_tables: true"
         )
 
         project = WeavEHRProject(tmp_path / "project")
-        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
-        ExtractionStep.load(project, config_file).run()  # must not raise
+        load_extracation_config(table_config_dir)
+        ExtractionStep.load(project, config_file).run()
 
         data_path = project.datasets_path / "extraction" / "data"
         assert list(data_path.rglob("*.parquet")) == []
 
-    def test_missing_source_file_is_skipped(
-        self, tmp_path: Path, data_dir: Path, table_config_dir: Path, extraction_config: Path
-    ) -> None:
+    def test_missing_source_file_fails(self, tmp_path: Path, data_dir: Path, extraction_config: Path) -> None:
         (data_dir / "vitals.csv").unlink()
 
         project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
-        ExtractionStep.load(project, extraction_config).run()  # must not raise
+        with pytest.raises(FileNotFoundError, match=r"table 'weavehr.config.table.testdb.1.0.vitals'"):
+            ExtractionStep.load(project, extraction_config).run()
+
+    def test_missing_join_source_file_fails(self, tmp_path: Path, data_dir: Path, extraction_config: Path) -> None:
+        (data_dir / "items.csv").unlink()
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        with pytest.raises(FileNotFoundError, match="items.csv"):
+            ExtractionStep.load(project, extraction_config).run()
+
+    def test_missing_source_file_is_skipped_when_allowed(
+        self, tmp_path: Path, data_dir: Path, table_config_dir: Path
+    ) -> None:
+        (data_dir / "vitals.csv").unlink()
+        config_file = write_extraction_config(tmp_path, data_dir, settings="allow_missing_tables: true")
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(table_config_dir)
+        ExtractionStep.load(project, config_file).run()
 
         data_path = project.datasets_path / "extraction" / "data"
         # measurements still processed, vitals skipped
         assert (data_path / "testdb" / "1.0" / "measurements" / "WEIGHT.parquet").exists()
         assert not (data_path / "testdb" / "1.0" / "vitals" / "CHART.parquet").exists()
+
+    def test_unknown_step_config_key_fails(self, tmp_path: Path, data_dir: Path) -> None:
+        config_file = write_extraction_config(tmp_path, data_dir, settings="allow_missing_table: true")
+
+        with pytest.raises(ConfigError, match="allow_missing_table"):
+            ExtractionStep.load(WeavEHRProject(tmp_path / "project"), config_file)
 
     def test_config_snapshot_saved_to_project(self, tmp_path: Path, extraction_config: Path) -> None:
         project = run_extraction(tmp_path, extraction_config)
@@ -466,8 +547,6 @@ events:
             f"""\
 name: Extraction
 version: 1.0.0
-config_files:
-  - path: {config_dir}
 config:
   data:
     - name: partdb

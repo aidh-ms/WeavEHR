@@ -7,7 +7,7 @@ Concepts are configured in two parts:
 1. a **concept definition** — dataset-independent, shared by everyone (`configs/concepts/<category>/<name>.yml`), and
 2. one **concept mapping per dataset** — how to find that concept in a specific dataset (`configs/datasets/<dataset>/<version>/mappings/<name>.yml`).
 
-The two are connected by file name: when a concept named `heart_rate` is loaded, WeavEHR looks for `heart_rate.yml` in every directory listed under the step's `dataset_configs`.
+The two are connected by file name: when a concept named `heart_rate` is loaded, WeavEHR looks for `heart_rate.yml` or `heart_rate.yaml` anywhere below each dataset version's `mappings/` directory. More than one matching file in the same dataset version, an empty file, or an invalid mapping (including unknown keys) is reported as a `ConfigError`.
 
 ## Step configuration
 
@@ -20,10 +20,8 @@ config:
   mapping_configs:
     - name: mimic-iv                     # dataset name used during extraction
       version: "3.1"
-      path: /path/to/configs/datasets/mimic-iv/3.1/mappings/
     - name: eicu-crd
       version: "2.0"
-      path: /path/to/configs/datasets/eicu-crd/2.0/mappings/
 ```
 
 ## Concept definitions

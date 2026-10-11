@@ -6,7 +6,9 @@ map to MEDS event columns (subject_id, time, code, numeric_value, text_value).
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from weavehr.config.base import StrictModel
 
 
 def _get_or_default(data: dict[str, Any], key: str, default: Any) -> Any:
@@ -18,7 +20,7 @@ def _get_or_default(data: dict[str, Any], key: str, default: Any) -> Any:
     return data[key] if key in data else default
 
 
-class MEDSEventFieldConfig(BaseModel):
+class MEDSEventFieldConfig(StrictModel):
     """Field mapping configuration for a MEDS event.
 
     Specifies which source columns map to each MEDS standard column. The code
@@ -49,7 +51,7 @@ class MEDSEventFieldConfig(BaseModel):
     )
 
 
-class MEDSEventFieldDefaultConfig(BaseModel):
+class MEDSEventFieldDefaultConfig(StrictModel):
     """Default column mapping configuration for events in a table.
 
     Provides default values for column mappings that can be inherited by
@@ -148,7 +150,7 @@ class MEDSEventFieldDefaultConfig(BaseModel):
         }
 
 
-class EventConfig(BaseModel):
+class EventConfig(StrictModel):
     """Configuration for a single MEDS event to extract from a table.
 
     Defines an event type to extract, including its technical name, optional

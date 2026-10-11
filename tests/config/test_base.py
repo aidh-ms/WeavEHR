@@ -7,6 +7,7 @@ import pytest
 import yaml
 
 from weavehr.config.base import BaseConfig, BaseDatasetConfig
+from weavehr.config.errors import ConfigError
 
 
 class DemoConfig(BaseConfig):
@@ -78,3 +79,45 @@ class TestDatasetConfigPathInference:
         assert loaded.dataset == "mimic-iv"
         assert loaded.version == "3.1"
         assert loaded.name == "labevents"
+
+    def test_nested_file_uses_config_root(self, tmp_path: Path) -> None:
+        config_root = tmp_path / "mimic-iv" / "3.1" / "tables"
+        config_file = config_root / "icu" / "deep" / "chartevents.yaml"
+        config_file.parent.mkdir(parents=True)
+        config_file.write_text("{}\n")
+
+        loaded = DemoDatasetConfig.load(config_file, config_root=config_root)
+        assert loaded.dataset == "mimic-iv"
+        assert loaded.version == "3.1"
+        assert loaded.name == "chartevents"
+
+    def test_file_outside_config_root_raises(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "mimic-iv" / "3.1" / "tables" / "labevents.yml"
+        config_file.parent.mkdir(parents=True)
+        config_file.write_text("{}\n")
+
+        with pytest.raises(ConfigError, match="<dataset>/<version>/<subdir>"):
+            DemoDatasetConfig.load(config_file, config_root=tmp_path / "other")
+
+
+class TestStrictLoading:
+    def test_empty_file_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / "empty.yml"
+        path.write_text("")
+
+        with pytest.raises(ConfigError, match="is empty"):
+            DemoConfig.load(path)
+
+    def test_unknown_key_raises(self, tmp_path: Path) -> None:
+        path = tmp_path / "typo.yml"
+        path.write_text("name: a\nversion: '1'\nnmae: b\n")
+
+        with pytest.raises(ConfigError, match="nmae"):
+            DemoConfig.load(path)
+
+    def test_validation_error_names_file(self, tmp_path: Path) -> None:
+        path = tmp_path / "incomplete.yml"
+        path.write_text("name: a\n")
+
+        with pytest.raises(ConfigError, match=r"incomplete\.yml"):
+            DemoConfig.load(path)

@@ -1,11 +1,13 @@
 """Configuration models for the sharding step."""
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from weavehr.config.base import StrictModel
 
 from weavehr.steps.base.config import BaseStepConfig
 
 
-class CustomConfig(BaseModel):
+class CustomConfig(StrictModel):
     """Configuration specific to the sharding step.
 
     The sharding step reads the output of a preceding concept step and writes

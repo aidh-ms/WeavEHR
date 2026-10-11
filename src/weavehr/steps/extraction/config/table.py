@@ -9,9 +9,9 @@ from enum import StrEnum, auto
 from typing import Any, ClassVar
 
 from polars.datatypes import DataTypeClass
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import ConfigDict, Field, computed_field, model_validator
 
-from weavehr.config.base import BaseDatasetConfig
+from weavehr.config.base import BaseDatasetConfig, StrictModel
 from weavehr.steps.extraction.config.column import ColumnConfig
 from weavehr.steps.extraction.config.event import EventConfig, MEDSEventFieldDefaultConfig
 
@@ -51,7 +51,7 @@ def _infer_table_type(path: str) -> TableType:
     return TableType.PARQUET
 
 
-class BaseTableConfig(BaseModel, metaclass=ABCMeta):
+class BaseTableConfig(StrictModel, metaclass=ABCMeta):
     """Abstract base configuration for table extraction.
 
     Defines columns, data types, callback transformations, filters, and frame
@@ -137,6 +137,7 @@ class JoinTableConfig(BaseTableConfig):
     Extends BaseTableConfig with join specification parameters.
 
     Attributes:
+        name: Optional label for the joined table, used in log messages
         both_on: Columns to join on (same name in both tables)
         left_on: Columns in the left (main) table for the join
         right_on: Columns in the right (join) table for the join
@@ -144,6 +145,10 @@ class JoinTableConfig(BaseTableConfig):
         join_params: Computed dictionary of join parameters for Polars
     """
 
+    name: str | None = Field(
+        None,
+        description="Optional label for the joined table, used in log messages.",
+    )
     both_on: list[str] = Field(
         default_factory=list,
         description="List of columns to be used for joining table on both sides.",
@@ -175,7 +180,7 @@ class JoinTableConfig(BaseTableConfig):
         return params
 
 
-class ExtractionTableSettings(BaseModel):
+class ExtractionTableSettings(StrictModel):
     """Optional extraction settings for an individual table."""
 
     include_event_name_in_code: bool | None = Field(
@@ -221,7 +226,7 @@ class TableConfig(BaseDatasetConfig, BaseTableConfig):
     )
 
     def __init__(self, **data: Any) -> None:
-        event_defaults = MEDSEventFieldDefaultConfig(**data.get("event_defaults", {}))
+        event_defaults = MEDSEventFieldDefaultConfig(**(data.pop("event_defaults", None) or {}))
 
         events = data.pop("events", [])
 
