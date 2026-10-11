@@ -114,8 +114,8 @@ class ConceptConfig(BaseConfig):
 
                 dataset_concept = adapter.validate_python(sub_data)
                 data.setdefault("dataset_concepts", []).append(dataset_concept)
-            except ValidationError:
-                logger.warning("failed to load dataset concept config for %s from %s", name, path)
+            except ValidationError as e:
+                logger.warning("failed to load dataset concept config for %s from %s: %s", name, path, e)
 
         for k, v in kwargs.items():
             if k not in data:
