@@ -96,6 +96,33 @@ class TestWeavEHRProject:
         # contents are preserved (overwrite=False), not wiped
         assert (table_dir / "MEASUREMENT.parquet").exists()
 
+    def test_creates_subdirectories(self, tmp_path: Path) -> None:
+        project = WeavEHRProject(tmp_path / "project")
+
+        assert project.datasets_path.is_dir()
+        assert project.workspace_path.is_dir()
+        assert project.configs_path.is_dir()
+
+    def test_creates_subdirectories_in_existing_root(self, tmp_path: Path) -> None:
+        project_path = tmp_path / "project"
+        project_path.mkdir()
+
+        project = WeavEHRProject(project_path)
+
+        assert project.datasets_path.is_dir()
+        assert project.workspace_path.is_dir()
+        assert project.configs_path.is_dir()
+
+    def test_reopen_with_existing_subdirectories(self, tmp_path: Path) -> None:
+        project_path = tmp_path / "project"
+        WeavEHRProject(project_path)
+
+        reopened = WeavEHRProject(project_path)
+
+        assert reopened.datasets_path.is_dir()
+        assert reopened.workspace_path.is_dir()
+        assert reopened.configs_path.is_dir()
+
     def test_fresh_project_discovers_no_datasets(self, tmp_path: Path) -> None:
         project = WeavEHRProject(tmp_path / "project")
         assert project.datasets == {}

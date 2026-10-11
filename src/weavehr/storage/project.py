@@ -48,15 +48,14 @@ class WeavEHRProject(FileStorage):
             overwrite: If True, remove existing project before creating
         """
         super().__init__(path, overwrite)
-        # Create the project directory if it doesn't exist
-        if not self._path.exists():
-            logger.info(
-                "Creating project subdirectories at %s (datasets, workspace, configs)",
-                self._path,
-            )
-            self.datasets_path.mkdir(parents=True, exist_ok=True)
-            self.workspace_path.mkdir(parents=True, exist_ok=True)
-            self.configs_path.mkdir(parents=True, exist_ok=True)
+        # The base class already created the project root, so create the subdirectories unconditionally
+        logger.debug(
+            "Ensuring project subdirectories at %s (datasets, workspace, configs)",
+            self._path,
+        )
+        self.datasets_path.mkdir(parents=True, exist_ok=True)
+        self.workspace_path.mkdir(parents=True, exist_ok=True)
+        self.configs_path.mkdir(parents=True, exist_ok=True)
 
         self._datasets = {}
         self._workspace = {}
