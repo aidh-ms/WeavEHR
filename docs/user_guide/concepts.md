@@ -116,11 +116,13 @@ class VentilationWindows:
 
 ## Output layout
 
-Each concept is written per dataset:
+Each concept is written per dataset and dataset version:
 
 ```
-datasets/concept/data/<concept name>/<version>/<dataset>.parquet
+datasets/concept/data/<concept name>/<concept version>/<dataset>/<dataset version>.parquet
 ```
+
+so a single concept step can process several versions of the same dataset (e.g. `mimic-iv/2.2` and `mimic-iv/3.1`) without their outputs colliding.
 
 with the standard MEDS columns (`subject_id`, `time`, `code`, `numeric_value`, `text_value`) plus the concept's extension columns. Cross-dataset analysis is then a matter of scanning the per-dataset files of the same concept.
 

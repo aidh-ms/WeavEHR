@@ -87,7 +87,7 @@ output/project/
     │   ├── data/mimic-iv/3.1/<table>/<EVENT>.parquet
     │   └── metadata/{dataset.json, codes.parquet}
     └── concept/
-        ├── data/<concept>/<version>/<dataset>.parquet
+        ├── data/<concept>/<concept version>/<dataset>/<dataset version>.parquet
         └── metadata/{dataset.json, codes.parquet}
 ```
 

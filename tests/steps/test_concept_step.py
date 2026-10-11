@@ -6,6 +6,7 @@ import polars as pl
 import pytest
 
 from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
+from weavehr.steps.sharding.step import ShardingStep
 from tests.steps.conftest import load_concept_config, load_extracation_config
 
 
@@ -28,7 +29,7 @@ def project(tmp_path: Path, extraction_config: Path, concept_config: Path) -> We
 
 
 def concept_path(project: WeavEHRProject, name: str) -> Path:
-    return project.datasets_path / "concept" / "data" / name / "1.0.0" / "testdb.parquet"
+    return project.datasets_path / "concept" / "data" / name / "1.0.0" / "testdb" / "1.0.parquet"
 
 
 class TestSimpleConcepts:
@@ -261,3 +262,103 @@ mappings:
         ConceptStep.load(project, concept_config).run()  # must not raise
 
         assert not concept_path(project, "heart_rate").exists()
+
+
+class TestMultipleDatasetVersions:
+    """One concept step processing two versions of the same dataset."""
+
+    @pytest.fixture
+    def project(self, tmp_path: Path, data_dir: Path, table_config_dir: Path, concept_config: Path) -> WeavEHRProject:
+        # testdb 2.0 inherits all 1.0 configs but carries different heart rate values.
+        data_v2 = tmp_path / "data" / "testdb-2.0"
+        data_v2.mkdir(parents=True)
+        (data_v2 / "vitals.csv").write_text((data_dir / "vitals.csv").read_text().replace(",80,bpm", ",90,bpm"))
+        (data_v2 / "items.csv").write_text((data_dir / "items.csv").read_text())
+        (data_v2 / "measurements.csv").write_text((data_dir / "measurements.csv").read_text())
+
+        version_dir = tmp_path / "config" / "testdb" / "2.0"
+        version_dir.mkdir(parents=True)
+        (version_dir / "extends.yml").write_text("dataset: testdb\nversion: '1.0'\n")
+
+        (tmp_path / "extraction.yml").write_text(
+            f"""\
+name: Extraction
+version: 1.0.0
+
+config:
+  data:
+    - name: testdb
+      version: "1.0"
+      path: {data_dir}
+    - name: testdb
+      version: "2.0"
+      path: {data_v2}
+"""
+        )
+        (tmp_path / "concept.yml").write_text(
+            """\
+name: Concept
+version: 1.0.0
+
+config:
+  extraction_step: Extraction
+  mapping_configs:
+    - name: testdb
+      version: "1.0"
+    - name: testdb
+      version: "2.0"
+"""
+        )
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        load_extracation_config(tmp_path / "config" / "testdb" / "2.0" / "tables")
+        load_concept_config(
+            tmp_path / "config" / "concepts",
+            [tmp_path / "config" / "testdb" / "1.0" / "mappings", tmp_path / "config" / "testdb" / "2.0" / "mappings"],
+        )
+        ExtractionStep.load(project, tmp_path / "extraction.yml").run()
+        ConceptStep.load(project, tmp_path / "concept.yml").run()
+        return project
+
+    @staticmethod
+    def output(project: WeavEHRProject, name: str, version: str) -> Path:
+        return project.datasets_path / "concept" / "data" / name / "1.0.0" / "testdb" / f"{version}.parquet"
+
+    def test_each_version_gets_its_own_output(self, project: WeavEHRProject) -> None:
+        for name in ["heart_rate", "patient_weight", "patient_height", "bmi"]:
+            assert self.output(project, name, "1.0").exists()
+            assert self.output(project, name, "2.0").exists()
+
+    def test_versions_do_not_overwrite_each_other(self, project: WeavEHRProject) -> None:
+        v1 = pl.read_parquet(self.output(project, "heart_rate", "1.0")).sort("time")
+        v2 = pl.read_parquet(self.output(project, "heart_rate", "2.0")).sort("time")
+        assert v1["numeric_value"].to_list() == [80.0, 82.0]
+        assert v2["numeric_value"].to_list() == [90.0, 82.0]
+
+    def test_no_temporary_files_are_left_behind(self, project: WeavEHRProject) -> None:
+        data_path = project.datasets_path / "concept" / "data"
+        assert not [path for path in data_path.rglob("*.tmp")]
+        assert sorted(p.name for p in (data_path / "heart_rate" / "1.0.0" / "testdb").iterdir()) == [
+            "1.0.parquet",
+            "2.0.parquet",
+        ]
+
+    @pytest.mark.parametrize(
+        ("datasets", "expected"),
+        [([], [80.0, 82.0, 82.0, 90.0]), (["testdb"], [80.0, 82.0, 82.0, 90.0]), (["testdb/2.0"], [82.0, 90.0])],
+    )
+    def test_sharding_discovers_versioned_outputs(
+        self, tmp_path: Path, project: WeavEHRProject, datasets: list[str], expected: list[float]
+    ) -> None:
+        config_file = tmp_path / "sharding.yml"
+        config_file.write_text(
+            "name: Sharding\nversion: 1.0.0\noverwrite: true\n\nconfig:\n  concept_step: Concept\n"
+            f"  concepts:\n    - heart_rate\n  datasets: {datasets}\n"
+        )
+
+        ShardingStep.load(project, config_file).run()
+
+        shard = pl.read_parquet(project.datasets_path / "sharding" / "data" / "shard_00000.parquet")
+        assert shard["code"].unique().to_list() == ["heart_rate//bpm"]
+        assert sorted(shard["numeric_value"].to_list()) == expected

@@ -163,6 +163,17 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         assert self._workspace_dir is not None
         return Path(self._workspace_dir.path, *concept.identifier_tuple[1:])
 
+    def concept_output_file(self, concept: ConceptConfig, dataset: str, version: str) -> Path:
+        """Return the parquet file a concept's output for one dataset version is written to.
+        Args:
+            concept: The concept configuration to resolve the output file for
+            dataset: Name of the source dataset
+            version: Version of the source dataset
+        Returns:
+            Path of the form ``<workspace>/<step>/<concept name>/<concept version>/<dataset>/<dataset version>.parquet``
+        """
+        return self.concept_output_dir(concept) / dataset / f"{version}.parquet"
+
     @property
     def extraction_dataset(self):
         extraction_dataset = self._project.datasets.get(self._config.config.extraction_step.lower())
@@ -410,8 +421,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             dataset_concept.dataset,
         )
         assert self._workspace_dir is not None
-        output_data_path = self.concept_output_dir(concept)
-        output_dataset_path = output_data_path / dataset_concept.dataset
+        output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
+        # Per-mapping parts are staged next to the final file, one directory per dataset version.
+        output_dataset_path = output_file.with_suffix(".tmp")
         output_dataset_path.mkdir(parents=True, exist_ok=True)
 
         for mapping in dataset_concept.mappings:
@@ -539,14 +551,14 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
                 lf = self.apply_limits(concept, lf)
 
-                output_file = output_dataset_path / f"{str(uuid4())}.parquet"
+                tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
                 logger.debug(
                     "Writing temporary concept file for %s to %s",
                     concept.identifier,
-                    output_file,
+                    tmp_output_file,
                 )
                 lf.sink_parquet(
-                    output_file,
+                    tmp_output_file,
                 )
 
                 del lf
@@ -557,9 +569,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             logger.info(
                 "Writing merged concept file for %s to %s",
                 concept.identifier,
-                output_data_path / f"{dataset_concept.dataset}.parquet",
+                output_file,
             )
-            pl.scan_parquet(files).sink_parquet(output_data_path / f"{dataset_concept.dataset}.parquet")
+            pl.scan_parquet(files).sink_parquet(output_file)
 
         logger.debug(
             "Cleaning up temporary concept files for %s in %s",
@@ -571,13 +583,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         output_dataset_path.rmdir()
 
-    def get_path_for_concept_table(self, table: BaseConceptTable, dataset: str) -> Path:
+    def get_path_for_concept_table(self, table: BaseConceptTable, dataset: str, version: str) -> Path:
         concept = self._registry.get(table.concept)
         if concept is None:
             raise FileNotFoundError(f"concept not found in registry ({table.concept})")
-        assert self._workspace_dir is not None
-        output_data_path = Path(self._workspace_dir.path, *concept.identifier_tuple[1:])
-        return output_data_path / f"{dataset}.parquet"
+        return self.concept_output_file(concept, dataset, version)
 
     def extract_derived_concept(
         self,
@@ -613,7 +623,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         try:
             lf = _read_table(
-                self.get_path_for_concept_table(dataset_concept.table, dataset_concept.dataset),
+                self.get_path_for_concept_table(
+                    dataset_concept.table,
+                    dataset_concept.dataset,
+                    dataset_concept.version,
+                ),
                 dataset_concept.table,
             )
             post_callbacks = [*dataset_concept.table.post_callbacks]
@@ -627,7 +641,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 )
                 lf = lf.join(
                     _read_table(
-                        self.get_path_for_concept_table(join_table, dataset_concept.dataset),
+                        self.get_path_for_concept_table(
+                            join_table,
+                            dataset_concept.dataset,
+                            dataset_concept.version,
+                        ),
                         join_table,
                     ),
                     how=join_table.how,  # ty: ignore[invalid-argument-type]
@@ -682,17 +700,16 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         lf = self.apply_limits(concept, lf)
 
-        assert self._workspace_dir is not None
-        output_data_path = self.concept_output_dir(concept)
-        output_data_path.mkdir(parents=True, exist_ok=True)
+        output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(
             "Writing derived concept %s to %s",
             concept.identifier,
-            output_data_path / f"{dataset_concept.dataset}.parquet",
+            output_file,
         )
 
-        lf.sink_parquet(output_data_path / f"{dataset_concept.dataset}.parquet")
+        lf.sink_parquet(output_file)
 
         del lf
         gc.collect()
@@ -706,8 +723,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         The transformer class referenced by the mapping's ``concept_transformer``
         dotted path is instantiated with the concept, the per-dataset mapping
         config, and the mapping's ``kwargs``, then called with this step. It is
-        expected to write its per-dataset parquet output below
-        ``self.concept_output_dir(concept)`` so ``collect()`` picks it up.
+        expected to write its per-dataset parquet output to
+        ``self.concept_output_file(concept, dataset, version)`` so ``collect()`` picks it up.
         Args:
             concept: The concept configuration the transformer runs for
             dataset_concept: The dataset-specific complex mapping configuration
