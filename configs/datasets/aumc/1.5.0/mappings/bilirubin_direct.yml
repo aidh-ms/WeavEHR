@@ -5,7 +5,7 @@ mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: "3005772//Bilirubine geconjugeerd(//.*)?$"
+      code: "^3005772//Bilirubine geconjugeerd(//.*)?$"
     columns:
       numeric_value: col(numeric_value) * 0.058467
       text_value: col(text_value)
