@@ -46,7 +46,7 @@ Two steps are currently available, with a third in development:
 
 Every step's `run()` follows the same lifecycle:
 
-1. **Load configurations** — each entry in the step's `config_files` list is read recursively from disk into the step's configuration registry, honouring `includes`/`excludes` and `overwrite`. The merged registry is saved to `<project>/configs/`.
+1. **Snapshot configurations** — the step's configuration registry (filled with the bundled configs on `import weavehr`, plus anything you load yourself, e.g. `dataset_config_registry.load(path)`) is saved to `<project>/configs/`.
 2. **Set up directories** — a workspace directory (`workspace/<step name>`) and a MEDS dataset (`datasets/<step name>`) are created.
 3. **Extract** — the step's core logic writes Parquet files into its workspace.
 4. **Collect** — the workspace's Parquet files are copied into `datasets/<step name>/data/`, and MEDS metadata is generated: `metadata/dataset.json` (dataset metadata plus ETL/MEDS version info) and `metadata/codes.parquet` (the vocabulary of all distinct codes in the output).
@@ -64,12 +64,6 @@ name: Extraction          # step name; lowercased, it names the output directori
 version: 1.0.0
 overwrite: false          # true: re-run even if a completed run exists
 
-config_files:             # configurations to load into the step's registry
-  - path: /path/to/configs/
-    overwrite: false      # replace configs already registered under the same identifier
-    includes: []          # optional: only load these config identifiers
-    excludes: []          # optional: skip these config identifiers
-
 dataset:                  # optional metadata written to the output dataset.json
   metadata:
     dataset_name: my_dataset
@@ -78,6 +72,16 @@ dataset:                  # optional metadata written to the output dataset.json
 config:                   # step-specific settings, see the respective guide
   ...
 ```
+
+### Configuration validation
+
+Configuration mistakes fail loudly at load time instead of being skipped:
+
+- every config model rejects unknown keys, so a typo such as `verison:` or a key at the wrong nesting level is an error;
+- a configuration file that is empty, is not a YAML mapping, or fails validation raises a `ConfigError` naming the file;
+- two files that resolve to the same configuration identifier (e.g. `labevents.yml` and `labevents.yaml`, or same-named files in different subdirectories) raise a `ConfigError`.
+
+Configuration files may be `.yml` or `.yaml`. Dataset configs can be organised in nested subdirectories below `tables/` or `mappings/`; their dataset and version always come from the `<dataset>/<version>/` directory and their name from the file name.
 
 ## Configuration identifiers
 

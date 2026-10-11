@@ -190,9 +190,10 @@ mappings:
         (tmp_path / "config" / "concepts" / "orphan.yml").write_text("name: orphan\nversion: 1.0.0\nunit: x\n")
 
         project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         load_concept_config(
-            tmp_path / "config" / "concepts" / "orphan.yml",
-            [],
+            tmp_path / "config" / "concepts",
+            [tmp_path / "config" / "testdb" / "1.0" / "mappings"],
         )
         ExtractionStep.load(project, extraction_config).run()
         ConceptStep.load(project, concept_config).run()  # must not raise

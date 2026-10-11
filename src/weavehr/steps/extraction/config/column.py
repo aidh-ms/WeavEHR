@@ -7,12 +7,14 @@ type specifications and optional type conversion parameters.
 from typing import Any
 
 from polars.datatypes import DataTypeClass
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import ConfigDict, Field, computed_field
+
+from weavehr.config.base import StrictModel
 
 from weavehr.steps.extraction.config.dtype import DTYPES
 
 
-class ColumnConfig(BaseModel):
+class ColumnConfig(StrictModel):
     """Configuration for a table column.
 
     Attributes:

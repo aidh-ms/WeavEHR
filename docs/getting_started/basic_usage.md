@@ -6,23 +6,22 @@ A complete, runnable version of this walkthrough is in [`example/pipeline.ipynb`
 
 ## 1. Configure the extraction step
 
-Create `config/extraction.yml` in your working directory. It tells WeavEHR which table configurations to load and where your raw data lives:
+Create `config/extraction.yml` in your working directory. It tells WeavEHR which dataset to extract and where your raw data lives:
 
 ```yaml
 name: Extraction
 version: 1.0.0
 
-config_files:
-  - path: /path/to/WeavEHR/configs/datasets/mimic-iv/3.1/tables/
-
 config:
   data:
     - name: mimic-iv
+      version: "3.1"
       path: /path/to/physionet.org/files/mimiciv/3.1
 ```
 
-- `config_files` points at directories of table configurations (here: the bundled MIMIC-IV ones). You can list several directories to process multiple datasets in one run, and restrict which configs are loaded with `includes:` / `excludes:` lists of config identifiers.
-- `config.data` maps each dataset name to the local root of its raw files. The name must match the `dataset` referenced by the table configs (the bundled ones use `mimic-iv`, `eicu-crd`, `nwicu`).
+- The bundled table configurations in `configs/` are loaded automatically when you `import weavehr`.
+- `config.data` maps each dataset name and version to the local root of its raw files. They must match the dataset and version of the table configs (the bundled ones use e.g. `mimic-iv`/`3.1`, `eicu-crd`/`2.0`, `nwicu`/`0.1.0`); an entry that matches no table config fails the step. You can list several entries to process multiple datasets in one run, and restrict the tables with `includes:` / `excludes:` lists of table identifiers.
+- A table whose source file is missing fails the step too; set `config.settings.allow_missing_tables: true` to skip such tables instead, e.g. for a partial download.
 
 ## 2. Configure the concept step
 
@@ -32,19 +31,16 @@ Create `config/concept.yml`:
 name: Concept
 version: 1.0.0
 
-config_files:
-  - path: /path/to/WeavEHR/configs/concepts
-
 config:
   extraction_step: Extraction
-  dataset_configs:
+  mapping_configs:
     - name: mimic-iv
-      path: /path/to/WeavEHR/configs/datasets/mimic-iv/3.1/mappings/
+      version: "3.1"
 ```
 
-- `config_files` points at the dataset-agnostic concept dictionary.
+- The bundled concept dictionary and per-dataset mappings are loaded automatically when you `import weavehr`.
 - `extraction_step` names the extraction step whose output should be used as input.
-- `dataset_configs` points at the per-dataset concept mappings.
+- `mapping_configs` selects the datasets whose concept mappings are applied.
 
 ## 3. Run the pipeline
 

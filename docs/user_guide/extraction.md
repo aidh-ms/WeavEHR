@@ -20,7 +20,25 @@ config:
       path: /path/to/physionet.org/files/mimiciv/3.1
 ```
 
-`config.data` maps dataset names to local data roots. Table configs whose dataset has no entry are skipped with a warning, as are tables whose source file does not exist — so a partial download still processes whatever is available.
+`config.data` maps dataset names to local data roots; each entry may also restrict the tables with `includes`/`excludes` lists of table identifiers (e.g. `mimic-iv.3.1.labevents`). Only table configs of the listed dataset versions are extracted.
+
+By default the step fails rather than producing incomplete output:
+
+- a `data` entry (or one of its `includes`) that matches no registered table config raises a `ConfigError` that lists the registered dataset versions — typically a typo in `name` or `version`;
+- a table whose source file (or a joined lookup file) does not exist raises a `FileNotFoundError`.
+
+Both checks can be relaxed explicitly, for example to process a partial download:
+
+```yaml
+config:
+  settings:
+    allow_missing_tables: true    # skip tables with missing source files, with a warning
+    allow_unmatched_data: true    # only warn about data entries/includes without table configs
+  data:
+    - ...
+```
+
+Unknown keys are rejected in step and table configs alike, so a misspelt setting fails at load time instead of being ignored.
 
 ## Table configuration
 
@@ -81,7 +99,7 @@ Only the columns listed under `columns` are read from the source file. Available
 
 ### Joins
 
-Each entry under `join` is itself a table definition (with its own `path`, `columns`, callbacks, and filters) plus join keys: `both_on` for same-named keys, or `left_on`/`right_on`, and `how` (default `left`). Joins typically attach human-readable labels (like MIMIC's `d_items`) or admission times needed to reconstruct timestamps (like eICU's `patient` table).
+Each entry under `join` is itself a table definition (with its own `path`, `columns`, callbacks, and filters) plus join keys: `both_on` for same-named keys, or `left_on`/`right_on`, and `how` (default `left`). An optional `name` labels the joined table in log messages. Joins typically attach human-readable labels (like MIMIC's `d_items`) or admission times needed to reconstruct timestamps (like eICU's `patient` table).
 
 ### Events
 
@@ -145,7 +163,7 @@ If the same event file already exists (e.g. when several table configs write to 
 > For a new *version* of an already-supported dataset, or a *variant* like a demo subset, don't copy the configs — declare the differences against a reference version with `extends.yml`. See [dataset versions and variants](versioning.md).
 
 1. Create `configs/datasets/<your-dataset>/<version>/tables/` and add one YAML per source table, as above.
-2. Reference the directory from your extraction step's `config_files` and add the dataset's name and data path under `config.data`.
+2. Load the directory into the table registry — configs under the bundled `configs/` are loaded automatically on `import weavehr`; for others call `dataset_config_registry.load(Path(".../<your-dataset>/<version>/tables"))` — and add the dataset's name, version, and data path under `config.data`.
 3. Run the extraction step and inspect `metadata/codes.parquet` to verify the extracted codes.
 4. Optionally, add [concept mappings](concepts.md) so the shared concept dictionary covers your dataset.
 

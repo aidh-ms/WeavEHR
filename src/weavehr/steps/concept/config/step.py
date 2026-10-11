@@ -4,12 +4,14 @@ This module defines the configuration structure for the concept step,
 including dataset-specific concept configuration paths and extraction step references.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from weavehr.config.base import StrictModel
 
 from weavehr.steps.base.config import BaseStepConfig
 
 
-class DatasetConfig(BaseModel):
+class DatasetConfig(StrictModel):
     """Configuration for a source dataset.
 
     Specifies the name, version, and file path for the concept definition of a dataset.
@@ -27,7 +29,7 @@ class DatasetConfig(BaseModel):
     )
 
 
-class CustomConfig(BaseModel):
+class CustomConfig(StrictModel):
     """Custom configuration specific to the concept step.
 
     Attributes:

@@ -1,11 +1,11 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import Field, computed_field
 
-from weavehr.config.base import BaseDatasetConfig
+from weavehr.config.base import BaseDatasetConfig, StrictModel
 
 
-class BaseConceptTable(BaseModel):
+class BaseConceptTable(StrictModel):
     concept: str = Field(..., description="The identifier of the concept this table represents.")
     pre_callbacks: list[str] = Field(
         default_factory=list, description="The list of callback configurations for the table."
@@ -57,7 +57,7 @@ class ConceptTable(BaseConceptTable):
     pass
 
 
-class MEDSConceptTable(BaseModel):
+class MEDSConceptTable(StrictModel):
     # None means the column is passed through unchanged from the input concept table.
     subject_id: str | None = Field(None, description="Expression for the subject identifier column.")
     time: str | None = Field(None, description="Expression for the timestamp column.")

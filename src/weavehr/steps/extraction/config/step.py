@@ -6,12 +6,14 @@ including dataset path specifications and custom extraction settings.
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from weavehr.config.base import StrictModel
 
 from weavehr.steps.base.config import BaseStepConfig
 
 
-class DatasetConfig(BaseModel):
+class DatasetConfig(StrictModel):
     """Configuration for a source dataset.
 
     Specifies the name and file path for a source ICU dataset.
@@ -32,7 +34,7 @@ class DatasetConfig(BaseModel):
     excludes: list[str] | None = Field(default=None, description="List of sections to exclude from the config file.")
 
 
-class ExtractionSettings(BaseModel):
+class ExtractionSettings(StrictModel):
     """Global settings controlling extraction output."""
 
     include_event_name_in_code: bool = Field(
@@ -42,9 +44,23 @@ class ExtractionSettings(BaseModel):
             "default. Individual table configs may override this setting."
         ),
     )
+    allow_missing_tables: bool = Field(
+        default=False,
+        description=(
+            "Skip tables whose source files (or join source files) are missing, "
+            "with a warning. By default a missing source file fails the step."
+        ),
+    )
+    allow_unmatched_data: bool = Field(
+        default=False,
+        description=(
+            "Only warn when a data entry, or one of its includes, matches no "
+            "registered table config. By default this fails the step."
+        ),
+    )
 
 
-class CustomConfig(BaseModel):
+class CustomConfig(StrictModel):
     """Custom configuration specific to the extraction step.
 
     Attributes:

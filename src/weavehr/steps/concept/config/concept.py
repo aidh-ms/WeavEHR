@@ -1,12 +1,11 @@
 from pathlib import Path
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 
-import yaml
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, model_validator
+from pydantic import Field, TypeAdapter, ValidationError, computed_field, model_validator
 
-from weavehr.config.base import BaseConfig
-from weavehr.config.inheritance import has_extends, resolve_effective_configs
-from weavehr.logging import logger
+from weavehr.config.base import BaseConfig, StrictModel, read_yaml_mapping
+from weavehr.config.errors import ConfigError
+from weavehr.config.inheritance import CONFIG_SUFFIXES, has_extends, resolve_effective_configs
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
@@ -16,7 +15,7 @@ DatasetConceptConfigUnion = Annotated[
 ]
 
 
-class ConceptLimits(BaseModel):
+class ConceptLimits(StrictModel):
     """Configuration for concept limits.
 
     Attributes:
@@ -26,6 +25,43 @@ class ConceptLimits(BaseModel):
 
     min: float | None = Field(None, description="Minimum value for the concept.")
     max: float | None = Field(None, description="Maximum value for the concept.")
+
+
+def _find_dataset_concept(path: Path, name: str) -> dict[str, Any] | None:
+    """Find the mapping for a concept in a dataset's mappings directory.
+
+    The mapping is the ``<name>.yml`` or ``<name>.yaml`` file anywhere below
+    ``path``, resolved through the dataset's version inheritance chain.
+
+    Args:
+        path: The ``<dataset>/<version>/mappings`` directory
+        name: Name of the concept
+
+    Returns:
+        The mapping data, or None if the dataset has no mapping for the concept
+
+    Raises:
+        ConfigError: If more than one file maps the concept
+    """
+    if has_extends(path):
+        # The mapping may be inherited from (or merged with) a base version's config.
+        effective = resolve_effective_configs(path)
+        matches = [key for key in effective if Path(key).name == name]
+        if len(matches) > 1:
+            raise ConfigError(f"Multiple mappings for concept '{name}' in {path}: {sorted(matches)}")
+        return effective[matches[0]] if matches else None
+
+    if not path.is_dir():
+        return None
+
+    files = sorted(
+        file_path
+        for file_path in path.rglob("*.*")
+        if file_path.is_file() and file_path.suffix.lower() in CONFIG_SUFFIXES and file_path.stem == name
+    )
+    if len(files) > 1:
+        raise ConfigError(f"Multiple mappings for concept '{name}' in {path}: {[str(f) for f in files]}")
+    return read_yaml_mapping(files[0]) if files else None
 
 
 class ConceptConfig(BaseConfig):
@@ -80,48 +116,42 @@ class ConceptConfig(BaseConfig):
         Raises:
             FileNotFoundError: If file_path does not exist
             yaml.YAMLError: If YAML parsing fails
+            ConfigError: If a file is empty, a dataset directory holds more than
+                one mapping for the concept, or a config fails validation
         """
-        with open(file_path, "r") as f:
-            data = yaml.safe_load(f)
+        data = read_yaml_mapping(file_path)
 
-        name = data.get("name")
-        paths = dataset_paths or []
+        name = str(data.get("name", kwargs.get("name", file_path.stem)))
         adapter = TypeAdapter(DatasetConceptConfigUnion)
-        for path in paths:
-            if has_extends(path):
-                # Resolve the dataset's inheritance chain; the mapping may be
-                # inherited from (or merged with) a base version's config.
-                sub_data = resolve_effective_configs(path).get(str(name))
-                if sub_data is None:
-                    continue
-            else:
-                sub_file_path = path / f"{name}.yml"
-                if not sub_file_path.exists():
-                    continue
-                with open(sub_file_path, "r") as f:
-                    sub_data = yaml.safe_load(f)
+        for path in dataset_paths or []:
+            sub_data = _find_dataset_concept(path, name)
+            if sub_data is None:
+                continue
+
+            # Identity always comes from the dataset directory itself,
+            # never from where an inherited file physically lives.
+            sub_data.update(
+                {
+                    "dataset": path.parent.parent.name,
+                    "version": path.parent.name,
+                    "name": name,
+                }
+            )
 
             try:
-                # Identity always comes from the dataset directory itself,
-                # never from where an inherited file physically lives.
-                sub_data.update(
-                    {
-                        "dataset": path.parent.parent.name,
-                        "version": path.parent.name,
-                        "name": name,
-                    }
-                )
-
                 dataset_concept = adapter.validate_python(sub_data)
-                data.setdefault("dataset_concepts", []).append(dataset_concept)
-            except ValidationError:
-                logger.warning("failed to load dataset concept config for %s from %s", name, path)
+            except ValidationError as e:
+                raise ConfigError(f"Invalid dataset concept config '{name}' in {path}:\n{e}") from e
+            data.setdefault("dataset_concepts", []).append(dataset_concept)
 
         for k, v in kwargs.items():
             if k not in data:
                 data[k] = v
 
-        return cls(**data)
+        try:
+            return cls(**data)
+        except ValidationError as e:
+            raise ConfigError(f"Invalid configuration in {file_path}:\n{e}") from e
 
     def get_dataset_concept(self, dataset_name: str, version: str) -> DatasetConceptConfigUnion | None:
         """Get the dataset-specific concept configuration for a given dataset name.

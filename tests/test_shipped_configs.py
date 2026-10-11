@@ -15,7 +15,12 @@ import polars as pl
 import pytest
 
 from weavehr.callbacks.interpreter import ExprInterpreter
+from weavehr.config.base import BaseConfig
 from weavehr.config.inheritance import resolve_effective_configs
+from weavehr.config.registry import load_configs
+from weavehr.steps.concept.config.step import ConceptStepConfig
+from weavehr.steps.extraction.config.step import ExtractionStepConfig
+from weavehr.steps.sharding.config.step import ShardingStepConfig
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
@@ -166,6 +171,31 @@ def test_concept_parses_with_all_dataset_mappings(concept_file: Path) -> None:
                     source,
                 )
             assert_expressions_parse(dataset_concept.filters, source)
+
+
+def test_shipped_configs_load_strictly_through_registry_loader() -> None:
+    """The loader used on ``import weavehr`` accepts every shipped config.
+
+    Config models forbid unknown keys and the loader raises on invalid files,
+    so this fails on any misspelt or misplaced key in the shipped YAML.
+    """
+    tables = [table for subdir in TABLE_CONFIG_DIRS for table in load_configs(subdir, TableConfig)]
+    assert len(tables) == len(effective_table_cases())
+
+    concepts = load_configs(CONFIG_ROOT / "concepts", ConceptConfig, dataset_paths=DATASET_CONCEPT_DIRS)
+    assert len(concepts) == len(CONCEPT_FILES)
+
+
+@pytest.mark.parametrize(
+    ("file_name", "config_type"),
+    [
+        ("extraction.yml", ExtractionStepConfig),
+        ("concept.yml", ConceptStepConfig),
+        ("sharding.yml", ShardingStepConfig),
+    ],
+)
+def test_example_step_configs_parse(file_name: str, config_type: type[BaseConfig]) -> None:
+    config_type.load(REPO_ROOT / "example" / "config" / file_name)
 
 
 def test_demo_dataset_inherits_full_table_set() -> None:

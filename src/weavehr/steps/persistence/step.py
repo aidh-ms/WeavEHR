@@ -19,7 +19,7 @@ from weavehr.steps.extraction.config.table import (
     TableConfig,
     TableType,
 )
-from weavehr.steps.extraction.registry import dataset_config_registry
+from weavehr.steps.extraction.registry import dataset_config_registry, select_tables
 from weavehr.storage.project import WeavEHRProject
 
 logger = get_logger(__name__)
@@ -59,12 +59,7 @@ class PersistenceStep(
                 tuple[str, dict[str, DataTypeClass]],
             ] = {}
 
-            tables = self._registry.filter(
-                dataset.name,
-                dataset.version,
-                includes=dataset.includes,
-                excludes=dataset.excludes,
-            )
+            tables = select_tables(self._registry, dataset, self._config.config.settings)
 
             for table in tables:
                 self._register_source(
@@ -183,6 +178,11 @@ class PersistenceStep(
         source_file = (dataset_path / table.path).resolve()
 
         if not source_file.exists():
+            if not self._config.config.settings.allow_missing_tables:
+                raise FileNotFoundError(
+                    f"Source table '{table_name}' not found at {source_file}. "
+                    "Set config.settings.allow_missing_tables: true to skip missing tables."
+                )
             logger.warning(
                 "Skipping source table '%s': file not found at %s",
                 table_name,

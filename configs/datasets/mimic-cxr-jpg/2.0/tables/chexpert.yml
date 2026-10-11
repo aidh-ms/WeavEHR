@@ -62,8 +62,6 @@ event_defaults:
   time: col(time)
   extension:
     study_id: col("study_id")
-  filters:
-    - drop_na(numeric_value)
 
 events:
   - name: CXR_ATELECTASIS

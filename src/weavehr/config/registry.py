@@ -11,8 +11,9 @@ from typing import cast
 
 from pydantic import ValidationError
 
-from weavehr.config.base import BaseConfig
-from weavehr.config.inheritance import has_extends, resolve_effective_configs
+from weavehr.config.base import BaseConfig, BaseDatasetConfig
+from weavehr.config.errors import ConfigError
+from weavehr.config.inheritance import CONFIG_SUFFIXES, has_extends, resolve_effective_configs
 from weavehr.logging import get_logger
 from weavehr.utils.type import get_generic_type
 
@@ -222,42 +223,53 @@ def load_configs[T: BaseConfig](
 ) -> list[T]:
     """Load all configuration files of a specific type from a directory.
 
-    Recursively searches for YAML files in the directory and attempts to
-    load them as the specified configuration type. Silently skips files
-    that fail to load.
+    Recursively searches for YAML files in the directory and loads them as the
+    specified configuration type. Dataset configurations (subclasses of
+    ``BaseDatasetConfig``) are resolved through the version inheritance chain;
+    ``path`` must then be a ``<dataset>/<version>/<subdir>`` directory, below
+    which files may be nested in further directories.
 
     Args:
-        path: Directory path to search for configuration files
+        path: Directory path to search for configuration files, or a single
+            configuration file (not for dataset configurations)
         config_type: The configuration class to instantiate
         includes: If specified, only load configurations with these identifiers
         excludes: If specified, skip configurations with these identifiers
         **kwargs: Additional keyword arguments to pass to the configuration loader
 
     Returns:
-        List of successfully loaded configuration objects
+        List of loaded configuration objects
+
+    Raises:
+        ConfigError: If a file is empty or fails validation, or if two files
+            resolve to the same configuration identifier
     """
     _includes = [config_type.ensure_prefix(id) for id in includes or []]
     _excludes = [config_type.ensure_prefix(id) for id in excludes or []]
 
-    # Resolve through the version inheritance chain first: a marker-only
-    # version may have no physical subdirectory of its own at all.
-    if has_extends(path):
-        return _load_inherited_configs(path, config_type, _includes, _excludes)
-
-    configs = []
-    if not path.exists():
+    if not path.exists() and not has_extends(path):
         logger.warning("Path does not exists: %s", path)
+        return []
 
-    for file_path in path.rglob("*.*"):
-        if not file_path.is_file() or file_path.suffix.lower() not in {".yml", ".yaml"}:
-            continue
-
-        try:
+    loaded: list[tuple[Path, T]] = []
+    if issubclass(config_type, BaseDatasetConfig):
+        if not path.is_dir() and path.exists():
+            raise ConfigError(f"Dataset configs must be loaded from a <dataset>/<version>/<subdir> directory: {path}")
+        loaded = _load_dataset_configs(path, cast(type[T], config_type), **kwargs)
+    else:
+        for file_path in [path] if path.is_file() else sorted(path.rglob("*.*")):
+            if not file_path.is_file() or file_path.suffix.lower() not in CONFIG_SUFFIXES:
+                continue
             config = config_type.load(file_path, **kwargs)
             logger.debug("Loaded configuration %s from %s", config.identifier, file_path)
-        except ValidationError:
-            logger.warning("failed to load config from %s", file_path)
-            continue
+            loaded.append((file_path, config))
+
+    seen: dict[str, Path] = {}
+    configs = []
+    for source, config in loaded:
+        if config.identifier in seen:
+            raise ConfigError(f"Duplicate configuration '{config.identifier}': {seen[config.identifier]} and {source}")
+        seen[config.identifier] = source
 
         if (_excludes and config.identifier in _excludes) or (_includes and config.identifier not in _includes):
             logger.debug("Skip loading configuration: %s", config.identifier)
@@ -267,47 +279,42 @@ def load_configs[T: BaseConfig](
     return configs
 
 
-def _load_inherited_configs[T: BaseConfig](
-    path: Path,
-    config_type: type[T],
-    includes: list[str],
-    excludes: list[str],
-) -> list[T]:
-    """Load configurations for a version subdirectory with an extends chain.
+def _load_dataset_configs[T: BaseConfig](path: Path, config_type: type[T], **kwargs) -> list[tuple[Path, T]]:
+    """Load dataset configurations from a version subdirectory.
 
     Resolves the effective configuration data across the version's
-    inheritance chain and constructs configuration objects whose identity
-    (dataset, version, name) is taken from the extending version's directory,
-    regardless of where an inherited file physically lives.
+    inheritance chain (a directory without an ``extends.yml`` marker is its
+    own chain) and constructs configuration objects whose identity
+    (dataset, version, name) is taken from ``path``, regardless of how deep a
+    file is nested or where an inherited file physically lives.
 
     Args:
         path: Config subdirectory of a version directory (e.g.
             ``.../<dataset>/<version>/tables``)
         config_type: The configuration class to instantiate
-        includes: If non-empty, only keep configurations with these identifiers
-        excludes: If non-empty, skip configurations with these identifiers
+        **kwargs: Default values for fields missing from the files
 
     Returns:
-        List of successfully loaded configuration objects
+        List of (source, configuration) pairs
+
+    Raises:
+        ConfigError: If a configuration fails validation
     """
     version_dir = path.parent
 
     configs = []
     for name, data in resolve_effective_configs(path).items():
+        for k, v in kwargs.items():
+            data.setdefault(k, v)
         data.setdefault("dataset", version_dir.parent.name)
         data.setdefault("version", version_dir.name)
         data.setdefault("name", Path(name).name)
 
         try:
             config = config_type(**data)
-            logger.debug("Loaded inherited configuration %s from %s", config.identifier, path)
-        except ValidationError:
-            logger.warning("failed to load inherited config '%s' from %s", name, path)
-            continue
+        except ValidationError as e:
+            raise ConfigError(f"Invalid configuration '{name}' in {path}:\n{e}") from e
 
-        if (excludes and config.identifier in excludes) or (includes and config.identifier not in includes):
-            logger.debug("Skip loading configuration: %s", config.identifier)
-            continue
-
-        configs.append(config)
+        logger.debug("Loaded configuration %s from %s", config.identifier, path)
+        configs.append((path / name, config))
     return configs

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from weavehr.config.errors import ConfigError
 from weavehr.config.inheritance import (
     deep_merge,
     has_extends,
@@ -152,9 +153,57 @@ class TestLoadConfigsWithInheritance:
         configs = load_configs(version_dir / "tables", TableConfig, excludes=["db-demo.1.0.a"])
         assert [c.name for c in configs] == ["b"]
 
-    def test_invalid_inherited_config_is_skipped(self, tmp_path: Path) -> None:
+    def test_invalid_inherited_config_raises(self, tmp_path: Path) -> None:
         make_version(tmp_path, "db", "1.0", {"bad": "columns: notalist\n", "good": "path: g.csv\n"})
         version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
 
+        with pytest.raises(ConfigError, match="'bad'"):
+            load_configs(version_dir / "tables", TableConfig)
+
+    def test_unknown_key_in_inherited_config_raises(self, tmp_path: Path) -> None:
+        make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n"})
+        version_dir = make_version(tmp_path, "db-demo", "1.0", {"a": "pth: b.csv\n"}, extends=("db", "1.0"))
+
+        with pytest.raises(ConfigError, match="pth"):
+            load_configs(version_dir / "tables", TableConfig)
+
+    def test_empty_config_file_raises(self, tmp_path: Path) -> None:
+        make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n"})
+        version_dir = make_version(tmp_path, "db-demo", "1.0", {"a": ""}, extends=("db", "1.0"))
+
+        with pytest.raises(ConfigError, match="is empty"):
+            load_configs(version_dir / "tables", TableConfig)
+
+    def test_yml_and_yaml_with_same_name_raise(self, tmp_path: Path) -> None:
+        version_dir = make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n"})
+        (version_dir / "tables" / "a.yaml").write_text("path: b.csv\n")
+
+        with pytest.raises(ConfigError, match="Duplicate configuration 'a'"):
+            load_configs(version_dir / "tables", TableConfig)
+
+
+class TestLoadDatasetConfigPaths:
+    def test_nested_config_takes_identity_from_version_dir(self, tmp_path: Path) -> None:
+        version_dir = make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n"})
+        (version_dir / "tables" / "icu").mkdir()
+        (version_dir / "tables" / "icu" / "b.yaml").write_text("path: icu/b.csv\n")
+
         configs = load_configs(version_dir / "tables", TableConfig)
-        assert [c.name for c in configs] == ["good"]
+        assert sorted(c.identifier for c in configs) == [
+            "weavehr.config.table.db.1.0.a",
+            "weavehr.config.table.db.1.0.b",
+        ]
+
+    def test_nested_configs_with_same_name_raise(self, tmp_path: Path) -> None:
+        version_dir = make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n"})
+        (version_dir / "tables" / "icu").mkdir()
+        (version_dir / "tables" / "icu" / "a.yml").write_text("path: icu/a.csv\n")
+
+        with pytest.raises(ConfigError, match="Duplicate configuration 'weavehr.config.table.db.1.0.a'"):
+            load_configs(version_dir / "tables", TableConfig)
+
+    def test_file_path_raises(self, tmp_path: Path) -> None:
+        version_dir = make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n"})
+
+        with pytest.raises(ConfigError, match="directory"):
+            load_configs(version_dir / "tables" / "a.yml", TableConfig)

@@ -31,6 +31,8 @@ from typing import Any
 
 import yaml
 
+from weavehr.config.base import read_yaml_mapping
+from weavehr.config.errors import ConfigError
 from weavehr.logging import get_logger
 
 logger = get_logger(__name__)
@@ -88,7 +90,7 @@ def resolve_version_chain(version_dir: Path) -> list[Path]:
         List of version directories, base first
 
     Raises:
-        ValueError: If a marker is malformed or the chain is circular
+        ConfigError: If a marker is malformed or the chain is circular
         FileNotFoundError: If a referenced base version does not exist
     """
     chain = [version_dir]
@@ -98,7 +100,7 @@ def resolve_version_chain(version_dir: Path) -> list[Path]:
     while (marker := current / EXTENDS_FILE).is_file():
         data = yaml.safe_load(marker.read_text()) or {}
         if "dataset" not in data or "version" not in data:
-            raise ValueError(f"{marker} must define both 'dataset' and 'version'")
+            raise ConfigError(f"{marker} must define both 'dataset' and 'version'")
 
         base = current.parents[1] / str(data["dataset"]) / str(data["version"])
         if not base.is_dir():
@@ -106,7 +108,7 @@ def resolve_version_chain(version_dir: Path) -> list[Path]:
                 f"{marker} extends '{data['dataset']}/{data['version']}', but {base} does not exist"
             )
         if base.resolve() in seen:
-            raise ValueError(f"Circular extends chain detected at {marker}")
+            raise ConfigError(f"Circular extends chain detected at {marker}")
 
         logger.debug("Version %s extends %s", current, base)
         seen.add(base.resolve())
@@ -132,6 +134,11 @@ def resolve_effective_configs(subdir: Path) -> dict[str, dict[str, Any]]:
     Returns:
         Mapping of configuration name (file stem, including any relative
         subdirectory prefix) to merged configuration data
+
+    Raises:
+        ConfigError: If a configuration file is empty or not a mapping, or if
+            one directory holds two files for the same name (e.g. ``x.yml``
+            and ``x.yaml``)
     """
     effective: dict[str, dict[str, Any]] = {}
 
@@ -140,12 +147,17 @@ def resolve_effective_configs(subdir: Path) -> dict[str, dict[str, Any]]:
         if not directory.is_dir():
             continue
 
+        seen: dict[str, Path] = {}
         for file_path in sorted(directory.rglob("*.*")):
             if not file_path.is_file() or file_path.suffix.lower() not in CONFIG_SUFFIXES:
                 continue
 
             name = file_path.relative_to(directory).with_suffix("").as_posix()
-            data = yaml.safe_load(file_path.read_text()) or {}
+            if name in seen:
+                raise ConfigError(f"Duplicate configuration '{name}': {seen[name]} and {file_path}")
+            seen[name] = file_path
+
+            data = read_yaml_mapping(file_path)
 
             if data.get("deleted") is True:
                 logger.debug("Config %s deleted by %s", name, file_path)
