@@ -233,6 +233,41 @@ event:
         assert df["time"].null_count() == 0
         assert df["numeric_value"].to_list() == [80.0, None, 60.0]
 
+    def test_derived_output_columns_sharing_an_expression_are_all_written(
+        self, tmp_path: Path, extraction_config: Path, concept_config: Path
+    ) -> None:
+        (tmp_path / "config" / "concepts" / "weight_copy.yml").write_text(
+            "name: weight_copy\nversion: 1.0.0\nunit: kg\n"
+        )
+        (tmp_path / "config" / "testdb" / "1.0" / "mappings" / "weight_copy.yml").write_text(
+            """\
+type: derived
+table:
+  concept: patient_weight.1.0.0
+  columns: [subject_id, time, numeric_value]
+event:
+  numeric_value: col(numeric_value)
+  text_value: col(numeric_value)
+  extension:
+    weight_a: col(numeric_value)
+    weight_b: col(numeric_value)
+"""
+        )
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        load_concept_config(
+            tmp_path / "config" / "concepts",
+            [tmp_path / "config" / "testdb" / "1.0" / "mappings"],
+        )
+        ExtractionStep.load(project, extraction_config).run()
+        ConceptStep.load(project, concept_config).run()
+
+        df = pl.read_parquet(concept_path(project, "weight_copy")).sort("subject_id")
+        assert df["numeric_value"].to_list() == [80.0, 60.0]
+        for col in ["text_value", "weight_a", "weight_b"]:
+            assert df[col].to_list() == ["80.0", "60.0"]
+
     def test_missing_extraction_event_is_skipped(
         self, tmp_path: Path, extraction_config: Path, concept_config: Path
     ) -> None:

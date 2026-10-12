@@ -91,6 +91,8 @@ event:                              # mapping to the output MEDS columns
 filters: []
 ```
 
+`event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is always the concept code (`name//unit`) and cannot be set here — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
+
 This is how composite scores or ratios (e.g. concepts that combine two measurements) are expressed declaratively.
 
 ### Complex concepts

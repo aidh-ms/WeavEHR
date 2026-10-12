@@ -648,18 +648,17 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         columns = dataset_concept.event.model_dump()
         extension = concept.extension_columns.copy()
         extension.update(columns.pop("extension") or {})
+        # Keyed by output column name so several columns may share the same expression.
         mapping = {
-            col_expr: col_name
-            for col_name, col_expr in columns.items()
-            if col_expr is not None and not isinstance(col_expr, list)
-        } | {col_expr: col_name for col_name, col_expr in extension.items() if col_expr is not None}
+            col_name: col_expr for col_name, col_expr in (columns | extension).items() if col_expr is not None
+        }
 
         if dataset_concept.event.text_value is None:
             lf = lf.with_columns(pl.lit(None, dtype=pl.String).alias("text_value"))
         if dataset_concept.event.numeric_value is None:
             lf = lf.with_columns(pl.lit(None, dtype=pl.Float32).alias("numeric_value"))
 
-        for col_expr, col_name in mapping.items():
+        for col_name, col_expr in mapping.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
         # code column

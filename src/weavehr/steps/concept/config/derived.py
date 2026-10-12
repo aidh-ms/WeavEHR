@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from weavehr.config.base import BaseDatasetConfig
 
@@ -58,10 +58,13 @@ class ConceptTable(BaseConceptTable):
 
 
 class MEDSConceptTable(BaseModel):
+    # The output code is always the concept code (``name//unit``), so it is not configurable here;
+    # unknown keys (e.g. ``code``) are rejected instead of being silently ignored.
+    model_config = ConfigDict(extra="forbid")
+
     # None means the column is passed through unchanged from the input concept table.
     subject_id: str | None = Field(None, description="Expression for the subject identifier column.")
     time: str | None = Field(None, description="Expression for the timestamp column.")
-    code: list[str] | None = Field(None, description="The default code column name.")
     numeric_value: str | None = Field(None, description="The default numeric value column name.")
     text_value: str | None = Field(None, description="The default text value column name.")
     extension: dict[str, str] | None = Field(None, description="The default extension column name mapping.")
