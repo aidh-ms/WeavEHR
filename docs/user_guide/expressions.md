@@ -53,6 +53,7 @@ Configs use expressions in three contexts with different expectations:
 | `to_datetime(year, month, day, time, offset=None, offset_unit="minutes", output=...)` | Build a timestamp from components, optionally shifted by an offset column — the key tool for datasets like eICU that only store relative offsets |
 | `add_offset(datetime, offset, offset_unit="minutes", output=...)` | Shift a timestamp by an offset column (`weeks` … `nanoseconds`) |
 | `set_time(datetime, hours, minutes, seconds, output=...)` | Replace the time-of-day of a timestamp |
+| `datetime_diff(start, end, unit="days", output=...)` | Fractional `end - start` in `years` (365.25 days), `weeks`, `days`, `hours`, `minutes` or `seconds` |
 
 ### Arithmetic
 

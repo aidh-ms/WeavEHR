@@ -22,7 +22,8 @@ from weavehr.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
 from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
-from weavehr.callbacks._callbacks.time import AddOffset, SetTime, ToDatetime
+from weavehr.callbacks._callbacks.string import HashEncode
+from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
 from weavehr.callbacks.proto import CallbackProtocol
 
@@ -201,9 +202,84 @@ class TestTime:
         with pytest.raises(ValueError, match="Unsupported offset_unit"):
             AddOffset("dt", "off", offset_unit="decades")(lf)
 
+    @pytest.mark.parametrize(
+        ("unit", "expected"),
+        [
+            ("years", 14 / 365.25),
+            ("weeks", 2.0),
+            ("days", 14.0),
+            ("hours", 336.0),
+            ("minutes", 20160.0),
+            ("seconds", 1209600.0),
+        ],
+    )
+    def test_datetime_diff(self, unit: str, expected: float) -> None:
+        lf = pl.LazyFrame({"start": [datetime(2024, 1, 1)], "end": [datetime(2024, 1, 15)]})
+        assert apply(lf, DatetimeDiff("start", "end", unit=unit)) == [pytest.approx(expected)]
+
+    def test_datetime_diff_fractional_and_negative(self) -> None:
+        lf = pl.LazyFrame({"start": [datetime(2024, 1, 1, 12)], "end": [datetime(2024, 1, 1)]})
+        assert apply(lf, DatetimeDiff("start", "end")) == [-0.5]
+
+    def test_datetime_diff_invalid_unit(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported unit"):
+            DatetimeDiff("start", "end", unit="decades")
+
     def test_set_time(self) -> None:
         lf = pl.LazyFrame({"dt": [datetime(2024, 5, 6, 1, 2, 3)]})
         assert apply(lf, SetTime("dt", 23, 59, 0)) == [datetime(2024, 5, 6, 23, 59, 0)]
+
+
+class TestString:
+    def test_hash_encode_string_ids(self) -> None:
+        lf = pl.LazyFrame({"id": ["p-c", "p-a", "p-b", "p-a", "p-c"]})
+        out = HashEncode("id", output="subject_id")(lf)
+        df = collect(lf.with_columns(out))
+        assert df["subject_id"].dtype == pl.Int64
+        codes = df["subject_id"].to_list()
+        assert codes[0] == codes[4] and codes[1] == codes[3]
+        assert len(set(codes)) == 3
+
+    def test_hash_encode_is_one_to_one(self) -> None:
+        lf = pl.LazyFrame({"id": ["x9", "a1", "m5", "a1", "zz", "m5", "b2"]})
+        df = collect(lf.with_columns(code=HashEncode("id")(lf)))
+        pairs = df.select("id", "code").unique()
+        assert pairs["id"].n_unique() == pairs["code"].n_unique() == pairs.height == 5
+
+    def test_hash_encode_independent_of_order_and_frame(self) -> None:
+        a = pl.LazyFrame({"id": ["p-c", "p-a", "p-b"]})
+        b = pl.LazyFrame({"id": ["p-b", "p-z", "p-a", "p-c", "p-a"]})
+        codes_a = dict(collect(a.with_columns(code=HashEncode("id")(a))).iter_rows())
+        codes_b = dict(collect(b.with_columns(code=HashEncode("id")(b))).iter_rows())
+        assert all(codes_b[k] == v for k, v in codes_a.items())
+
+    def test_hash_encode_streaming_matches_in_memory(self) -> None:
+        lf = pl.LazyFrame({"id": [f"id-{i % 37}" for i in range(1_000)]})
+        expr = HashEncode("id", output="code")(lf)
+        assert lf.select(expr).collect(engine="streaming").equals(collect(lf.select(expr)))
+
+    def test_hash_encode_non_negative(self) -> None:
+        lf = pl.LazyFrame({"id": [f"id-{i}" for i in range(1_000)]})
+        assert min(v for v in apply(lf, HashEncode("id")) if v is not None) >= 0
+
+    def test_hash_encode_casts_to_string(self) -> None:
+        ints = pl.LazyFrame({"id": [123, 456]})
+        strs = pl.LazyFrame({"id": ["123", "456"]})
+        assert apply(ints, HashEncode("id")) == apply(strs, HashEncode("id"))
+
+    def test_hash_encode_seed_changes_codes(self) -> None:
+        lf = pl.LazyFrame({"id": ["a", "b"]})
+        assert apply(lf, HashEncode("id", seed=0)) != apply(lf, HashEncode("id", seed=1))
+
+    def test_hash_encode_null_stays_null(self) -> None:
+        lf = pl.LazyFrame({"id": ["b", None, None, "a"]})
+        codes = apply(lf, HashEncode("id"))
+        assert codes[1] is None and codes[2] is None
+        assert codes[0] is not None and codes[3] is not None
+
+    def test_hash_encode_unaliased(self) -> None:
+        lf = pl.LazyFrame({"id": ["b", "a"]})
+        assert collect(lf.select(HashEncode("id")(lf))).columns == ["id"]
 
 
 class TestReshape:
