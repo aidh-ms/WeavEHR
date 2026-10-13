@@ -24,7 +24,7 @@ from weavehr.callbacks._callbacks.logical import And, Not, Or
 from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
-from weavehr.callbacks._callbacks.string import ConcatStr, DenseRankEncode, SliceStr, ZeroPadInt
+from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode, SliceStr, ZeroPadInt
 from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, ParseDateTime, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
 from weavehr.callbacks.proto import CallbackProtocol
@@ -71,5 +71,5 @@ __all__ = [
     "ZeroPadInt",
     "SliceStr",
     "ConcatStr",
-    "DenseRankEncode",
+    "HashEncode",
 ]
