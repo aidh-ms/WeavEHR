@@ -2,13 +2,13 @@ from typing import Optional
 
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_expr, with_output
 from weavehr.callbacks.registry import register_callback_cls
 from weavehr.utils.dtype import resolve_dtype
 
 
 @register_callback_cls
-class Cast(CallbackProtocol):
+class Cast(OutputCallbackProtocol):
     def __init__(
         self,
         value: AstValue,
@@ -24,7 +24,4 @@ class Cast(CallbackProtocol):
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.value).cast(resolve_dtype(self.dtype), strict=self.strict)
 
-        if self.output is None:
-            return expr
-
-        return expr.alias(self.output)
+        return with_output(expr, self.output)

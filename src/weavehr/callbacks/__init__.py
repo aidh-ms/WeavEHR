@@ -27,13 +27,15 @@ from weavehr.callbacks._callbacks.shortcuts import Col, Const
 from weavehr.callbacks._callbacks.string import ConcatStr, SliceStr, ZeroPadInt
 from weavehr.callbacks._callbacks.time import AddOffset, ParseDateTime, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
-from weavehr.callbacks.proto import CallbackProtocol
+from weavehr.callbacks.proto import CallbackProtocol, OutputCallbackProtocol, with_output
 from weavehr.callbacks.registry import register_callback_cls, registry
 
 __all__ = [
     "registry",
     "register_callback_cls",
     "CallbackProtocol",
+    "OutputCallbackProtocol",
+    "with_output",
     "DropNa",
     "FirstDistinct",
     "DropIf",

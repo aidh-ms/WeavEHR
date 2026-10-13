@@ -3,12 +3,12 @@ from typing import Optional
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_expr, with_output
 from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
-class ZeroPadInt(CallbackProtocol):
+class ZeroPadInt(OutputCallbackProtocol):
     """Zero-pad the integer portion of a numeric string to a fixed width.
 
     Casts the input to string and left-pads the portion before any
@@ -50,11 +50,11 @@ class ZeroPadInt(CallbackProtocol):
         frac_part = split.struct.field("field_1")
 
         expr = pl.when(frac_part.is_not_null()).then(int_part + pl.lit(".") + frac_part).otherwise(int_part)
-        return expr if self.output is None else expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class ConcatStr(CallbackProtocol):
+class ConcatStr(OutputCallbackProtocol):
     """Concatenate one or more columns/literals into a single string.
 
     Attributes:
@@ -87,11 +87,11 @@ class ConcatStr(CallbackProtocol):
             separator=self.separator,
             ignore_nulls=self.ignore_nulls,
         )
-        return expr if self.output is None else expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class SliceStr(CallbackProtocol):
+class SliceStr(OutputCallbackProtocol):
     """Slice a substring out of a string column or literal.
 
     Attributes:
@@ -118,4 +118,4 @@ class SliceStr(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.value).cast(pl.Utf8).str.slice(self.offset, self.length)
-        return expr if self.output is None else expr.alias(self.output)
+        return with_output(expr, self.output)

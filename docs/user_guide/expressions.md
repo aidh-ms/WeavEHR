@@ -85,18 +85,18 @@ import polars as pl
 from polars import LazyFrame
 
 from weavehr.callbacks import register_callback_cls
-from weavehr.callbacks.proto import AstValue, CallbackResult, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_expr, with_output
 
 
 @register_callback_cls
-class FahrenheitToCelsius:                      # YAML name: fahrenheit_to_celsius
+class FahrenheitToCelsius(OutputCallbackProtocol):  # YAML name: fahrenheit_to_celsius
     def __init__(self, value: AstValue, output: str | None = None) -> None:
         self.value = value
         self.output = output
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = (to_expr(lf, self.value) - 32) / 1.8
-        return expr if self.output is None else expr.alias(self.output)
+        return with_output(expr, self.output)
 ```
 
 ```yaml
@@ -104,4 +104,4 @@ callbacks:
   - fahrenheit_to_celsius(temperature, output=temperature_c)
 ```
 
-Import the module that defines your callback before running the step so the registration executes. Use `to_expr` to accept columns, literals, and nested callbacks interchangeably — the same convention the built-ins follow.
+Import the module that defines your callback before running the step so the registration executes. Use `to_expr` to accept columns, literals, and nested callbacks interchangeably, and `with_output` to apply the optional `output` name — the same conventions the built-ins follow. Inheriting `OutputCallbackProtocol` marks a callback as accepting `output=None`.

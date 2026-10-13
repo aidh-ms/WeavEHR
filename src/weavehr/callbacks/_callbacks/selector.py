@@ -3,12 +3,12 @@ from typing import Optional, Sequence
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_col_name
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_col_name, with_output
 from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
-class FirstNotNull(CallbackProtocol):
+class FirstNotNull(OutputCallbackProtocol):
     """Create a column by selecting the first non-null value across columns.
 
     This callback evaluates a list of source columns row-wise and assigns the
@@ -49,19 +49,15 @@ class FirstNotNull(CallbackProtocol):
         if not cols:
             # With no inputs, output is always null.
             expr = pl.lit(None)
-            if self.output is None:
-                return expr
-            return expr.alias(self.output)
+            return with_output(expr, self.output)
 
         expr = pl.coalesce([pl.col(c) for c in cols])
 
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Max(CallbackProtocol):
+class Max(OutputCallbackProtocol):
     """Create a column containing the maximum value across multiple columns.
 
     This callback evaluates the specified source columns row-wise and returns
@@ -103,12 +99,8 @@ class Max(CallbackProtocol):
         if not cols:
             # With no inputs, output is always null.
             expr = pl.lit(None)
-            if self.output is None:
-                return expr
-            return expr.alias(self.output)
+            return with_output(expr, self.output)
 
         expr = pl.max_horizontal([pl.col(c) for c in cols])
 
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
