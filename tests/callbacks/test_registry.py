@@ -32,6 +32,9 @@ def test_register_custom_callback() -> None:
 
     try:
         assert "my_test_only_callback" in registry
+        # The decorator returns the class itself, not a wrapper.
+        assert isinstance(MyTestOnlyCallback, type)
+        assert registry.get("my_test_only_callback") is MyTestOnlyCallback
         # The registry stores callback *classes*; instantiate like the interpreter does.
         cls = cast("type[CallbackProtocol]", registry.get("my_test_only_callback"))
         assert cls is not None
@@ -47,3 +50,12 @@ def test_register_does_not_overwrite_by_default() -> None:
     original = registry.get("col")
     registry.register("col", object())  # ty: ignore[invalid-argument-type]
     assert registry.get("col") is original
+
+
+def test_builtin_callbacks_are_classes() -> None:
+    from weavehr.callbacks import Col, FirstNotNull
+
+    assert isinstance(Col, type)
+    assert registry.get("col") is Col
+    assert registry.get("first_not_null") is FirstNotNull
+    assert isinstance(FirstNotNull("a"), FirstNotNull)

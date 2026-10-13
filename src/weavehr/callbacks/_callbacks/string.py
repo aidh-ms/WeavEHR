@@ -49,11 +49,7 @@ class ZeroPadInt(CallbackProtocol):
         int_part = split.struct.field("field_0").str.zfill(self.width)
         frac_part = split.struct.field("field_1")
 
-        expr = (
-            pl.when(frac_part.is_not_null())
-            .then(int_part + pl.lit(".") + frac_part)
-            .otherwise(int_part)
-        )
+        expr = pl.when(frac_part.is_not_null()).then(int_part + pl.lit(".") + frac_part).otherwise(int_part)
         return expr if self.output is None else expr.alias(self.output)
 
 
@@ -67,10 +63,10 @@ class ConcatStr(CallbackProtocol):
             separator, e.g. for date/time concatenation).
         output: Output column name. If None, the expression is
             returned unaliased.
-        ignore_nulls: If True, rows with a null part produce null for
-            the whole result (pl.concat_str default). If False,
-            missing parts are treated as empty strings and joining
-            proceeds with the remaining parts.
+        ignore_nulls: If False (default, as in pl.concat_str), a null
+            part makes the whole result null. If True, null parts are
+            skipped and the remaining parts are joined (no separator is
+            emitted for the skipped part).
     """
 
     def __init__(

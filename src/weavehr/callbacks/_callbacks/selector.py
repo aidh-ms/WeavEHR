@@ -17,13 +17,14 @@ class FirstNotNull(CallbackProtocol):
     for schema harmonization.
     """
 
-    def __init__(self, *fields: AstValue, output: Optional[str]) -> None:
+    def __init__(self, *fields: AstValue, output: Optional[str] = None) -> None:
         """Initialize the callback.
 
         Args:
             fields: Ordered list of source column names. Earlier columns
                 take precedence over later ones.
-            output: Name of the output column to be created.
+            output: Name of the output column. If `None`, the resulting
+                expression is returned without an alias.
         """
         if len(fields) == 1 and isinstance(fields[0], list):
             self.fields: Sequence[AstValue] = fields[0]
@@ -69,7 +70,7 @@ class Max(CallbackProtocol):
     resulting value is null.
     """
 
-    def __init__(self, *fields: AstValue, output: Optional[str]) -> None:
+    def __init__(self, *fields: AstValue, output: Optional[str] = None) -> None:
         """Initialize the callback.
 
         Args:
