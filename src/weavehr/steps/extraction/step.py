@@ -98,12 +98,8 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
                 lf = lf.join(
                     join_lf,
-                    how=join_table.how,  # ty: ignore[invalid-argument-type]
                     coalesce=True,  # Reduces memory by coalescing join keys
-                    # The streaming engine does not preserve row order by default, which would make
-                    # order-dependent filters (e.g. first_distinct) non-deterministic across runs.
-                    maintain_order="left",
-                    **join_table.join_params,  # ty: ignore[invalid-argument-type]
+                    **join_table.join_params,
                 )
 
                 lf = self._apply_callbacks(

@@ -2,6 +2,7 @@
 
 import polars as pl
 import pytest
+from pydantic import ValidationError
 
 from weavehr.steps.extraction.config.step import CustomConfig
 from weavehr.steps.extraction.config.table import JoinTableConfig, TableConfig, TableType
@@ -80,8 +81,8 @@ class TestTableTypeInference:
         assert make_table_config(path="data.parquet", type="csvgz").type == TableType.CSVGZ
 
     def test_join_table_type_inferred_from_path(self) -> None:
-        assert JoinTableConfig(path="d_items.csv.gz").type == TableType.CSVGZ
-        assert JoinTableConfig(path="d_items.parquet").type == TableType.PARQUET
+        assert JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"]).type == TableType.CSVGZ
+        assert JoinTableConfig(path="d_items.parquet", both_on=["itemid"]).type == TableType.PARQUET
 
 
 class TestEventDefaults:
@@ -169,8 +170,13 @@ class TestEventDefaults:
 class TestJoinTableConfig:
     def test_join_params_both_on(self) -> None:
         join = JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"])
-        assert join.join_params == {"on": ["itemid"]}
-        assert join.how == "left"
+        assert join.join_params == {
+            "how": "left",
+            "maintain_order": "left",
+            "on": ["itemid"],
+            "left_on": None,
+            "right_on": None,
+        }
 
     def test_join_params_left_right(self) -> None:
         join = JoinTableConfig(
@@ -178,9 +184,33 @@ class TestJoinTableConfig:
             left_on=["itemid"],
             right_on=["item_id"],
             how="inner",
+            maintain_order="none",
         )
-        assert join.join_params == {"left_on": ["itemid"], "right_on": ["item_id"]}
-        assert join.how == "inner"
+        assert join.join_params == {
+            "how": "inner",
+            "maintain_order": "none",
+            "on": None,
+            "left_on": ["itemid"],
+            "right_on": ["item_id"],
+        }
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"left_on": ["itemid"]},
+            {"right_on": ["itemid"]},
+            {"both_on": ["itemid"], "left_on": ["itemid"], "right_on": ["item_id"]},
+        ],
+    )
+    def test_invalid_join_keys_are_rejected(self, kwargs: dict[str, list[str]]) -> None:
+        with pytest.raises(ValidationError):
+            JoinTableConfig.model_validate({"path": "d_items.csv.gz", **kwargs})
+
+    @pytest.mark.parametrize(("field", "value"), [("how", "cross"), ("how", "outer"), ("maintain_order", "first")])
+    def test_invalid_join_options_are_rejected(self, field: str, value: str) -> None:
+        with pytest.raises(ValidationError):
+            JoinTableConfig.model_validate({"path": "d_items.csv.gz", "both_on": ["itemid"], field: value})
 
 
 class TestEventNameCodeSettings:
