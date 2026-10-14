@@ -1,16 +1,26 @@
+# mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
+# mimic-iv/concepts/measurement/bg.sql
+# mimic-iv/concepts/measurement/ventilator_setting.sql
+# Item selection and unit conversion only; preserve all source observations and values.
+# Fractional FiO2: LAB uses > 0.2 and <= 1; CHART uses >= 0.2 and <= 1.
+# Multiply only those branches by 100; pass every other value (including null) through.
+# The CHART selector is shared by bg and ventilator_setting and appears only once.
 type: simple
 mappings:
   - pattern:
       table: chartevents
       event: CHART
-      code: (223835(//.*)?)
+      code: ^(?:CHART//)?(?:223835)(?:$|//)
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: >-
+        replace((col(numeric_value) >= 0.2) & (col(numeric_value) <= 1), col(numeric_value) * 100, col(numeric_value))
       text_value: col(text_value)
+
   - pattern:
       table: labevents
       event: LAB
-      code: (50816(//.*)?)
+      code: ^(?:LAB//)?(?:50816)(?:$|//)
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: >-
+        replace((col(numeric_value) > 0.2) & (col(numeric_value) <= 1), col(numeric_value) * 100, col(numeric_value))
       text_value: col(text_value)
