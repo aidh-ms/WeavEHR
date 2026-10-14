@@ -24,6 +24,7 @@ from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
 from weavehr.callbacks._callbacks.time import AddOffset, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
+from weavehr.callbacks.interpreter import parse_expr
 from weavehr.callbacks.proto import CallbackProtocol
 
 
@@ -160,6 +161,26 @@ class TestFilters:
         lf = pl.LazyFrame({"id": [1, 1, 2], "t": [1, 1, 1], "v": [10, 20, 30]})
         out = collect(lf.filter(FirstDistinct(["id", "t"])(lf)))
         assert out["v"].to_list() == [10, 30]
+
+    def test_first_distinct_order_by(self) -> None:
+        lf = pl.LazyFrame({"id": [1, 1, 1, 2, 2], "t": [3, 1, 2, 5, 4], "v": [10, 20, 30, 40, 50]})
+        out = collect(lf.filter(FirstDistinct("id", order_by="t")(lf)))
+        assert out["v"].to_list() == [20, 50]
+
+    def test_first_distinct_order_by_descending(self) -> None:
+        lf = pl.LazyFrame({"id": [1, 1, 1, 2, 2], "t": [3, 1, 2, 5, 4], "v": [10, 20, 30, 40, 50]})
+        out = collect(lf.filter(FirstDistinct("id", order_by=["t"], descending=True)(lf)))
+        assert out["v"].to_list() == [10, 40]
+
+    def test_first_distinct_order_by_nulls_last_and_ties_keep_row_order(self) -> None:
+        lf = pl.LazyFrame({"id": [1, 1, 1, 2, 2], "t": [None, 2, 2, 7, 7], "v": [10, 20, 30, 40, 50]})
+        out = collect(lf.filter(FirstDistinct("id", order_by="t")(lf)))
+        assert out["v"].to_list() == [20, 40]
+
+    def test_first_distinct_order_by_via_dsl(self) -> None:
+        lf = pl.LazyFrame({"id": [1, 1, 2], "t": [2, 1, 1], "u": [0, 0, 0], "v": [10, 20, 30]})
+        out = collect(lf.filter(parse_expr(lf, "first_distinct(id, order_by=[u, t])")))
+        assert out["v"].to_list() == [20, 30]
 
 
 class TestTime:

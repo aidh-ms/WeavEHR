@@ -83,6 +83,8 @@ Only the columns listed under `columns` are read from the source file. Available
 
 Each entry under `join` is itself a table definition (with its own `path`, `columns`, callbacks, and filters) plus join keys: `both_on` for same-named keys, or `left_on`/`right_on`, and `how` (default `left`). Joins typically attach human-readable labels (like MIMIC's `d_items`) or admission times needed to reconstruct timestamps (like eICU's `patient` table).
 
+Joins preserve the row order of the main table, so order-dependent filters such as `first_distinct` give the same result on every run. When the rows `first_distinct` chooses between differ in content, prefer stating the rule explicitly with `order_by` instead of relying on file order.
+
 ### Events
 
 Each event produces one output file. The `columns` block maps source columns (or [expressions](expressions.md)) onto the MEDS schema:
