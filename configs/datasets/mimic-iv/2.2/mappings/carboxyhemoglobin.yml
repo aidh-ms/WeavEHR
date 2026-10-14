@@ -1,0 +1,14 @@
+# mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
+# mimic-iv/concepts/measurement/bg.sql
+# Item selection and unit conversion only; preserve all source observations and values.
+# Retain the shared concept's existing unspecified unit (None); the source hint is %.
+# Preserve the original source code/unit through dataset extension_columns; see the coverage guide.
+type: simple
+mappings:
+  - pattern:
+      table: labevents
+      event: LAB
+      code: ^(?:LAB//)?(?:50805)(?:$|//)
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
