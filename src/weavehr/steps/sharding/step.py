@@ -4,11 +4,16 @@ The sharding step takes the long-format concept output produced by the concept
 step and rewrites it into subject-oriented Parquet shard files. It deliberately
 keeps the output long-format; wide exports such as YAIB belong in separate
 export/adapter tooling.
+
+Subjects are identified by ``(dataset, subject_id)``, so identical subject IDs
+from different datasets stay distinct. Each shard holds the core MEDS columns
+plus a ``dataset`` provenance column, sorted by dataset, subject, time and code.
 """
 
 from pathlib import Path
 
 import polars as pl
+from polars.io.partition import FileProviderArgs
 
 from weavehr.logging import get_logger
 from weavehr.steps.base.step import ConfigurableBaseStep
@@ -18,6 +23,11 @@ from weavehr.steps.sharding.registry import sharding_config_registry
 from weavehr.storage.project import WeavEHRProject
 
 logger = get_logger(__name__)
+
+SUBJECT_KEY = ["dataset", "subject_id"]
+"""Columns identifying a subject; subject IDs are only unique within a dataset."""
+
+SHARD_COLUMN = "_shard_idx"
 
 
 class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
@@ -53,27 +63,35 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
 
         logger.info("Sharding %d concept file(s)", len(concept_files))
 
-        subject_ids = self._subject_ids(concept_files)
-        if not subject_ids:
+        # Subjects are keyed by (dataset, subject_id): identical subject IDs from different
+        # datasets are distinct subjects and must never be merged into one.
+        subject_keys = self._subject_keys(concept_files)
+        if subject_keys.is_empty():
             logger.warning("Skipping sharding step: no subjects found in selected concept files")
             return
 
-        written_files = 0
-        for shard_idx, shard_subjects in enumerate(self._chunks(subject_ids, self._config.config.subjects_per_shard)):
-            output_file = self._workspace_dir.path / f"shard_{shard_idx:05d}.parquet"
-            logger.info(
-                "Writing shard %s with %d subject(s) to %s",
-                shard_idx,
-                len(shard_subjects),
-                output_file,
-            )
+        shard_count = (subject_keys.height + self._config.config.subjects_per_shard - 1) // (
+            self._config.config.subjects_per_shard
+        )
+        logger.info("Writing %d subject(s) to %d shard(s)", subject_keys.height, shard_count)
 
-            lf = self._scan_core_columns(concept_files).filter(pl.col("subject_id").is_in(shard_subjects))
-            lf = lf.sort(["subject_id", "time", "code"])
-            lf.sink_parquet(output_file)
-            written_files += 1
+        # Assign every event its shard via a join and write all shards in a single pass
+        # instead of rescanning the selected concept files once per shard.
+        lf = self._scan_core_columns(concept_files).join(subject_keys.lazy(), on=SUBJECT_KEY, how="inner")
+        lf = lf.sort([SHARD_COLUMN, *SUBJECT_KEY, "time", "code"])
+        lf.sink_parquet(
+            pl.PartitionBy(
+                self._workspace_dir.path,
+                key=SHARD_COLUMN,
+                include_key=False,
+                file_path_provider=self._shard_file_name,
+                max_rows_per_file=None,
+                approximate_bytes_per_file=None,
+            ),
+            mkdir=True,
+        )
 
-        logger.info("Finished sharding step: wrote %d shard file(s)", written_files)
+        logger.info("Finished sharding step: wrote %d shard file(s)", shard_count)
 
     def _selected_concept_files(self, concept_data_path: Path) -> list[Path]:
         """Find concept Parquet files matching the configured dataset/concept filters.
@@ -122,20 +140,34 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         concept_name = concept_path.name.lower()
         return concept_path_str in concept_filters or concept_name in concept_filters
 
-    def _subject_ids(self, concept_files: list[Path]) -> list[int]:
-        """Collect selected subject IDs from the selected concept files."""
-        lfs = [pl.scan_parquet(file_path).select(pl.col("subject_id").cast(pl.Int64)) for file_path in concept_files]
-        lf = pl.concat(lfs, how="vertical").unique().sort("subject_id")
+    def _subject_keys(self, concept_files: list[Path]) -> pl.DataFrame:
+        """Collect the selected (dataset, subject_id) keys and assign each one a shard index.
+
+        Keys are ordered by dataset, then subject ID, and split into consecutive chunks of
+        ``subjects_per_shard`` subjects.
+        """
+        lfs = [
+            pl.scan_parquet(file_path).select(
+                self._dataset_column(file_path),
+                pl.col("subject_id").cast(pl.Int64),
+            )
+            for file_path in concept_files
+        ]
+        lf = pl.concat(lfs, how="vertical").unique().sort(SUBJECT_KEY)
 
         configured_subjects = self._config.config.subjects
         if configured_subjects:
             lf = lf.filter(pl.col("subject_id").is_in(configured_subjects))
 
-        return lf.collect(engine="streaming")["subject_id"].to_list()
+        return (
+            lf.collect(engine="streaming")
+            .with_row_index(SHARD_COLUMN)
+            .with_columns(pl.col(SHARD_COLUMN) // self._config.config.subjects_per_shard)
+        )
 
-    @staticmethod
-    def _scan_core_columns(concept_files: list[Path]) -> pl.LazyFrame:
-        """Scan all selected concept files using the stable long-format columns."""
+    @classmethod
+    def _scan_core_columns(cls, concept_files: list[Path]) -> pl.LazyFrame:
+        """Scan all selected concept files using the stable long-format columns plus dataset provenance."""
         lfs = [
             pl.scan_parquet(file_path).select(
                 [
@@ -144,6 +176,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
                     pl.col("code").cast(pl.String),
                     pl.col("numeric_value").cast(pl.Float32),
                     pl.col("text_value").cast(pl.String),
+                    cls._dataset_column(file_path),
                 ]
             )
             for file_path in concept_files
@@ -151,6 +184,11 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         return pl.concat(lfs, how="vertical")
 
     @staticmethod
-    def _chunks(values: list[int], chunk_size: int):
-        for start in range(0, len(values), chunk_size):
-            yield values[start : start + chunk_size]
+    def _dataset_column(concept_file: Path) -> pl.Expr:
+        """Dataset name of a concept file (``.../<dataset>/<dataset version>.parquet``) as a literal column."""
+        return pl.lit(concept_file.parent.name, dtype=pl.String).alias("dataset")
+
+    @staticmethod
+    def _shard_file_name(args: FileProviderArgs) -> str:
+        shard_idx = args.partition_keys[SHARD_COLUMN].item()
+        return f"shard_{shard_idx:05d}.parquet"
