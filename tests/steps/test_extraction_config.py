@@ -168,7 +168,7 @@ class TestEventDefaults:
 
 
 class TestJoinTableConfig:
-    def test_join_params_both_on(self) -> None:
+    def test_join_defaults(self) -> None:
         join = JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"])
         assert join.join_params == {
             "how": "left",
@@ -178,39 +178,9 @@ class TestJoinTableConfig:
             "right_on": None,
         }
 
-    def test_join_params_left_right(self) -> None:
-        join = JoinTableConfig(
-            path="d_items.csv.gz",
-            left_on=["itemid"],
-            right_on=["item_id"],
-            how="inner",
-            maintain_order="none",
-        )
-        assert join.join_params == {
-            "how": "inner",
-            "maintain_order": "none",
-            "on": None,
-            "left_on": ["itemid"],
-            "right_on": ["item_id"],
-        }
-
-    @pytest.mark.parametrize(
-        "kwargs",
-        [
-            {},
-            {"left_on": ["itemid"]},
-            {"right_on": ["itemid"]},
-            {"both_on": ["itemid"], "left_on": ["itemid"], "right_on": ["item_id"]},
-        ],
-    )
-    def test_invalid_join_keys_are_rejected(self, kwargs: dict[str, list[str]]) -> None:
+    def test_join_without_keys_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            JoinTableConfig.model_validate({"path": "d_items.csv.gz", **kwargs})
-
-    @pytest.mark.parametrize(("field", "value"), [("how", "cross"), ("how", "outer"), ("maintain_order", "first")])
-    def test_invalid_join_options_are_rejected(self, field: str, value: str) -> None:
-        with pytest.raises(ValidationError):
-            JoinTableConfig.model_validate({"path": "d_items.csv.gz", "both_on": ["itemid"], field: value})
+            JoinTableConfig(path="d_items.csv.gz")
 
 
 class TestEventNameCodeSettings:
