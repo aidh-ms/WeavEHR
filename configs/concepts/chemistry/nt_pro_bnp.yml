@@ -1,0 +1,6 @@
+name: nt_pro_bnp
+version: 1.0.0
+unit: pg/mL
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")
