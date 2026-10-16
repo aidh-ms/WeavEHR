@@ -22,9 +22,12 @@ from weavehr.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
 from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
+from weavehr.callbacks._callbacks.string import ConcatStr
 from weavehr.callbacks._callbacks.time import AddOffset, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
+from weavehr.callbacks.interpreter import parse_expr
 from weavehr.callbacks.proto import CallbackProtocol
+from weavehr.utils.dtype import resolve_dtype
 
 
 @pytest.fixture
@@ -125,6 +128,33 @@ class TestSelectors:
         assert apply(lf, Max("a", "b", output=None)) == [2.0, 4.0, 9.0]
         assert apply(lf, Max(["a", "b"], output=None)) == [2.0, 4.0, 9.0]
 
+    @pytest.mark.parametrize("callback_cls", [FirstNotNull, Max])
+    def test_output_is_optional(self, lf: pl.LazyFrame, callback_cls: type[FirstNotNull | Max]) -> None:
+        callback = callback_cls("maybe", "a")
+        assert callback.output is None
+        assert apply(lf, callback) == apply(lf, callback_cls("maybe", "a", output=None))
+
+    @pytest.mark.parametrize(("callback_cls", "expected"), [(FirstNotNull, [2.0, 5.0, 9.0]), (Max, [2.0, 5.0, 9.0])])
+    def test_output_aliases(self, lf: pl.LazyFrame, callback_cls: type[FirstNotNull | Max], expected: list) -> None:
+        out = collect(lf.with_columns(callback_cls("maybe", "a", output="sel")(lf)))
+        assert out["sel"].to_list() == expected
+
+    @pytest.mark.parametrize("expr", ["first_not_null(maybe, a)", "max(maybe, a)"])
+    def test_dsl_without_output(self, lf: pl.LazyFrame, expr: str) -> None:
+        assert collect(lf.with_columns(parse_expr(lf, expr).alias("out")))["out"].to_list() == [2.0, 5.0, 9.0]
+
+
+class TestConcatStr:
+    @pytest.fixture
+    def parts(self) -> pl.LazyFrame:
+        return pl.LazyFrame({"x": ["a", None, "c"], "y": ["1", "2", None]})
+
+    def test_null_part_nulls_result_by_default(self, parts: pl.LazyFrame) -> None:
+        assert apply(parts, ConcatStr("x", "y", separator="-")) == ["a-1", None, None]
+
+    def test_ignore_nulls_skips_null_parts(self, parts: pl.LazyFrame) -> None:
+        assert apply(parts, ConcatStr("x", "y", separator="-", ignore_nulls=True)) == ["a-1", "2", "c"]
+
 
 class TestCast:
     def test_cast_string_to_int(self, lf: pl.LazyFrame) -> None:
@@ -134,6 +164,11 @@ class TestCast:
     def test_cast_strict_raises(self, lf: pl.LazyFrame) -> None:
         with pytest.raises(pl.exceptions.InvalidOperationError):
             lf.with_columns(Cast("text", "int64", strict=True)(lf).alias("out")).collect()
+
+    @pytest.mark.parametrize("name", ["int64", "INT64", "int"])
+    def test_cast_uses_shared_dtype_names(self, lf: pl.LazyFrame, name: str) -> None:
+        out = collect(lf.with_columns(Cast("text", name)(lf).alias("out")))["out"]
+        assert out.dtype == resolve_dtype(name)
 
     def test_cast_unknown_dtype(self, lf: pl.LazyFrame) -> None:
         with pytest.raises(ValueError, match="Unsupported dtype"):

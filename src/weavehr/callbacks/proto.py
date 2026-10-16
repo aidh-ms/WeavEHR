@@ -15,6 +15,16 @@ class CallbackProtocol(Protocol):
     def __call__(self, lf: LazyFrame) -> CallbackResult: ...
 
 
+@runtime_checkable
+class OutputCallbackProtocol(CallbackProtocol, Protocol):
+    """A callback producing a column expression that can be named via the optional `output` keyword.
+
+    If `output` is None the expression is returned unaliased.
+    """
+
+    def __init__(self, *args: Any, output: str | None = None, **kwargs: Any) -> None: ...
+
+
 def to_expr(lf: LazyFrame, value: AstValue) -> pl.Expr:
     if isinstance(value, pl.Expr):
         return value
@@ -34,6 +44,11 @@ def to_expr(lf: LazyFrame, value: AstValue) -> pl.Expr:
         return out
 
     raise TypeError(f"Cannot convert {type(value).__name__} to polars.pl.Expr")
+
+
+def with_output(expr: pl.Expr, output: str | None) -> pl.Expr:
+    """Alias `expr` as `output`, or return it unchanged if `output` is None."""
+    return expr if output is None else expr.alias(output)
 
 
 def to_col_name(v: AstValue) -> str:

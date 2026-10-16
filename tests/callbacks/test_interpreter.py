@@ -119,6 +119,15 @@ class TestCalls:
         out = collect(lf.with_columns(parse_expr(lf, "add(col(a), col(b), output=total)")))
         assert out["total"].to_list() == [11.0, 22.0, 33.0]
 
+    def test_keyword_arguments_are_passed(self, lf: pl.LazyFrame) -> None:
+        out = collect(lf.with_columns(parse_expr(lf, "cast(a, dtype='int64', strict=True, output=a_int)")))
+        assert out["a_int"].dtype == pl.Int64
+        assert out["a_int"].to_list() == [1, 2, 3]
+
+    def test_double_star_kwargs_rejected(self) -> None:
+        with pytest.raises(TypeError, match=r"\*\*kwargs syntax is not supported"):
+            ExprInterpreter().eval("add(a, b, **opts)")
+
     def test_unknown_callback_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown callback"):
             ExprInterpreter().eval("definitely_not_registered(a)")
@@ -151,10 +160,11 @@ class TestParseExpr:
     def test_returns_polars_expr(self, lf: pl.LazyFrame) -> None:
         assert isinstance(parse_expr(lf, "col(a)"), pl.Expr)
 
-    def test_top_level_must_be_callback(self, lf: pl.LazyFrame) -> None:
+    @pytest.mark.parametrize("expr", ["42", "a", "'text'", "[a, b]"])
+    def test_top_level_must_be_callback(self, lf: pl.LazyFrame, expr: str) -> None:
         # Bare literals/names are not valid top-level expressions.
-        with pytest.raises(AssertionError):
-            parse_expr(lf, "42")
+        with pytest.raises(TypeError, match="must be a callback call"):
+            parse_expr(lf, expr)
 
     def test_interpreter_output_is_callback(self) -> None:
         callback = ExprInterpreter().eval("col(a)")
