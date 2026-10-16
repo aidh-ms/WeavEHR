@@ -172,7 +172,7 @@ class TestJoinTableConfig:
         join = JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"])
         assert join.join_params == {
             "how": "left",
-            "maintain_order": "left",
+            "maintain_order": "left_right",
             "on": ["itemid"],
             "left_on": None,
             "right_on": None,
