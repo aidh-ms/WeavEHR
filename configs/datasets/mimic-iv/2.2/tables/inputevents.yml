@@ -133,4 +133,5 @@ events:
       extension:
         available_time: col(storetime)
     filters:
-      - first_distinct(subject_id, time)
+      # Several infusions can start at the same time; keep the earliest-charted weight.
+      - first_distinct(subject_id, time, order_by=[available_time])

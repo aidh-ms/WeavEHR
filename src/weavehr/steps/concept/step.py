@@ -380,6 +380,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     left_on="code",
                     right_on="source_code",
                     how="inner",
+                    # Keep the extraction file order so that order-dependent concept filters
+                    # (e.g. first_distinct) are deterministic across runs.
+                    maintain_order="left",
                 )
                 .sink_parquet(
                     pl.PartitionBy(
@@ -648,12 +651,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                         ),
                         join_table,
                     ),
-                    how=join_table.how,  # ty: ignore[invalid-argument-type]
                     suffix=join_table.suffix,
                     # Full joins don't coalesce keys by default, which would leave
                     # subject_id/time null for rows present only on the right side.
                     coalesce=True,
-                    **join_table.join_params,  # ty: ignore[invalid-argument-type]
+                    **join_table.join_params,
                 )
                 post_callbacks.extend(join_table.post_callbacks)
         except FileNotFoundError as e:

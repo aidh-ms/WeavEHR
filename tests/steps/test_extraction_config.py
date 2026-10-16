@@ -83,8 +83,8 @@ class TestTableTypeInference:
         assert make_table_config(path="data.parquet", type="csvgz").type == TableType.CSVGZ
 
     def test_join_table_type_inferred_from_path(self) -> None:
-        assert JoinTableConfig(path="d_items.csv.gz").type == TableType.CSVGZ
-        assert JoinTableConfig(path="d_items.parquet").type == TableType.PARQUET
+        assert JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"]).type == TableType.CSVGZ
+        assert JoinTableConfig(path="d_items.parquet", both_on=["itemid"]).type == TableType.PARQUET
 
 
 class TestEventDefaults:
@@ -170,20 +170,19 @@ class TestEventDefaults:
 
 
 class TestJoinTableConfig:
-    def test_join_params_both_on(self) -> None:
+    def test_join_defaults(self) -> None:
         join = JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"])
-        assert join.join_params == {"on": ["itemid"]}
-        assert join.how == "left"
+        assert join.join_params == {
+            "how": "left",
+            "maintain_order": "left_right",
+            "on": ["itemid"],
+            "left_on": None,
+            "right_on": None,
+        }
 
-    def test_join_params_left_right(self) -> None:
-        join = JoinTableConfig(
-            path="d_items.csv.gz",
-            left_on=["itemid"],
-            right_on=["item_id"],
-            how="inner",
-        )
-        assert join.join_params == {"left_on": ["itemid"], "right_on": ["item_id"]}
-        assert join.how == "inner"
+    def test_join_without_keys_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            JoinTableConfig(path="d_items.csv.gz")
 
 
 class TestEventNameCodeSettings:

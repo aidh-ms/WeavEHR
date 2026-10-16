@@ -12,6 +12,7 @@ from polars.datatypes import DataTypeClass
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from weavehr.config.base import BaseDatasetConfig
+from weavehr.config.join import JoinConfig
 from weavehr.steps.extraction.config.column import ColumnConfig
 from weavehr.steps.extraction.config.event import EventConfig, MEDSEventFieldDefaultConfig
 
@@ -131,48 +132,12 @@ class BaseTableConfig(BaseModel, metaclass=ABCMeta):
         return dtype_map
 
 
-class JoinTableConfig(BaseTableConfig):
+class JoinTableConfig(BaseTableConfig, JoinConfig):
     """Configuration for a table to join with the main table.
 
-    Extends BaseTableConfig with join specification parameters.
-
-    Attributes:
-        both_on: Columns to join on (same name in both tables)
-        left_on: Columns in the left (main) table for the join
-        right_on: Columns in the right (join) table for the join
-        how: Join type ("left", "inner", "outer", "right")
-        join_params: Computed dictionary of join parameters for Polars
+    Extends BaseTableConfig with the shared join specification (keys, ``how``, ``maintain_order``)
+    from JoinConfig. ``how`` defaults to ``left``.
     """
-
-    both_on: list[str] = Field(
-        default_factory=list,
-        description="List of columns to be used for joining table on both sides.",
-    )
-    left_on: list[str] = Field(
-        default_factory=list,
-        description="List of columns to be used for joining table on the left side.",
-    )
-    right_on: list[str] = Field(
-        default_factory=list,
-        description="List of columns to be used for joining table on the right side.",
-    )
-    how: str = Field(
-        "left",
-        description="Type of join to be performed (e.g. inner, left, right, outer).",
-    )
-
-    @computed_field
-    @property
-    def join_params(self) -> dict[str, list[str]]:
-        params = {}
-        if self.both_on:
-            params["on"] = self.both_on
-        if self.left_on:
-            params["left_on"] = self.left_on
-        if self.right_on:
-            params["right_on"] = self.right_on
-
-        return params
 
 
 class ExtractionTableSettings(BaseModel):

@@ -81,7 +81,9 @@ Only the columns listed under `columns` are read from the source file. Available
 
 ### Joins
 
-Each entry under `join` is itself a table definition (with its own `path`, `columns`, callbacks, and filters) plus join keys: `both_on` for same-named keys, or `left_on`/`right_on`, and `how` (default `left`). Joins typically attach human-readable labels (like MIMIC's `d_items`) or admission times needed to reconstruct timestamps (like eICU's `patient` table).
+Each entry under `join` is itself a table definition (with its own `path`, `columns`, callbacks, and filters) plus join keys: `both_on` for same-named keys, or `left_on` together with `right_on` (exactly one of the two forms), and `how` (`inner`, `left` (default), `right`, `full`, `semi`, or `anti`; cross joins are not supported). Joins typically attach human-readable labels (like MIMIC's `d_items`) or admission times needed to reconstruct timestamps (like eICU's `patient` table).
+
+By default joins preserve the row order of the main table (`maintain_order: left`), so order-dependent filters such as `first_distinct` give the same result on every run. `maintain_order` accepts the Polars values (`none`, `left`, `right`, `left_right`, `right_left`); `none` is slightly faster but makes order-dependent filters non-deterministic. When the rows `first_distinct` chooses between differ in content, prefer stating the rule explicitly with `order_by` instead of relying on file order.
 
 ### Events
 
