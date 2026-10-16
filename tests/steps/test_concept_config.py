@@ -170,7 +170,7 @@ event:
         join = derived.join[0]
         assert join.join_params == {
             "how": "full",
-            "maintain_order": "left",
+            "maintain_order": "left_right",
             "on": ["subject_id", "time"],
             "left_on": None,
             "right_on": None,
