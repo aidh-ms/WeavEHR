@@ -76,7 +76,7 @@ class JoinConfig(BaseModel):
         description="Type of join to be performed (inner, left, right, full, semi, anti).",
     )
     maintain_order: JoinMaintainOrder = Field(
-        "left",
+        "left_right",
         description=(
             "Which table's row order the join output preserves. The default keeps the main table's order; "
             "'none' is faster but makes order-dependent filters such as first_distinct non-deterministic."
