@@ -102,4 +102,4 @@ events:
     filters:
       - drop_na(time)
       # One birth per patient; keep the row of the lowest case_id.
-      - first_distinct(subject_id, time, order_by=[case_id])
+      - first_distinct(subject_id, order_by=[time])
