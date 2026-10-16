@@ -519,6 +519,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 for col_name, col_expr in extension_columns.items():
                     lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
+                # Preserve the source timestamp unless this mapping derives a new one.
+                if mapping.columns.time is not None:
+                    lf = lf.with_columns(parse_expr(lf, mapping.columns.time).alias("time"))
+
                 # value columns
                 if mapping.columns.text_value is None:
                     lf = lf.with_columns(pl.lit(None).alias("text_value"))

@@ -340,11 +340,87 @@ class TestContinuousTimeSemantics:
 
 
 class TestTotal:
-    def test_total_is_a_windowed_sum_of_components(self) -> None:
+    def test_total_sums_available_components(self) -> None:
         total = make(SofaTransformer, terms=["sofa_renal", "sofa_cns"], window="24h")
         out = scores(total, {"sofa_renal": frame((1, T0, 2.0)), "sofa_cns": frame((1, at(1), 1.0))})
-        # T0: renal 2 (cns not yet measured -> 0); T0+1h: renal 2 carried + cns 1
+        # T0: renal 2 (CNS not yet measured -> 0); T0+1h: renal 2 + CNS 1.
         assert out == [2.0, 3.0]
+
+    def test_worst_scores_of_different_organs_need_not_be_simultaneous(self) -> None:
+        # Renal dysfunction resolves as liver dysfunction appears. The worst
+        # organ scores are 4 and 3, although the instantaneous totals are 4
+        # and 3. Neither the latest total nor the highest old total is correct.
+        out = scores(
+            make(SofaTransformer),
+            {
+                "sofa_renal": frame((1, T0, 4.0), (1, at(2), 0.0)),
+                "sofa_liver": frame((1, T0, 0.0), (1, at(2), 3.0)),
+            },
+        )
+        assert out == [4.0, 7.0]
+
+    def test_improving_component_retains_its_worst_recent_score(self) -> None:
+        out = scores(
+            make(SofaTransformer),
+            {"sofa_renal": frame((1, T0, 4.0), (1, at(1), 2.0), (1, at(2), 0.0))},
+        )
+        assert out == [4.0, 4.0, 4.0]
+
+    def test_score_is_included_at_24_hours_and_expires_one_microsecond_later(self) -> None:
+        after_boundary = at(24) + timedelta(microseconds=1)
+        out = make(SofaTransformer).transform(
+            {
+                "sofa_renal": frame((1, T0, 4.0)),
+                "sofa_cns": frame((1, at(24), 1.0), (1, after_boundary, 1.0)),
+            }
+        ).collect()
+        assert out.rows() == [(1, T0, 4.0), (1, at(24), 5.0), (1, after_boundary, 1.0)]
+
+    def test_custom_window_retains_its_own_boundary(self) -> None:
+        after_boundary = at(6) + timedelta(microseconds=1)
+        out = scores(
+            make(SofaTransformer, window="6h"),
+            {
+                "sofa_renal": frame((1, T0, 3.0), (1, at(1), 1.0)),
+                "sofa_cns": frame((1, at(6), 1.0), (1, after_boundary, 1.0)),
+            },
+        )
+        # The older renal 3 expires after six hours, leaving renal 1 + CNS 1.
+        assert out == [3.0, 3.0, 4.0, 2.0]
+
+    @pytest.mark.parametrize("values", [(1.0, 4.0, 2.0, None), (None, 2.0, 4.0, 1.0)])
+    def test_duplicate_component_scores_use_the_worst_regardless_of_order(self, values: tuple) -> None:
+        out = make(SofaTransformer).transform(
+            {
+                "sofa_renal": frame(*[(1, T0, value) for value in values], (1, at(1), 0.0)),
+                "sofa_cns": frame((1, T0, 1.0)),
+            }
+        ).collect()
+        assert out.rows() == [(1, T0, 5.0), (1, at(1), 5.0)]
+
+    def test_missing_and_null_components_do_not_mix_subjects(self) -> None:
+        total = make(
+            SofaTransformer,
+            terms=["sofa_renal", "sofa_cns", "sofa_liver", "sofa_coagulation"],
+        )
+        out = total.transform(
+            {
+                "sofa_renal": frame((1, T0, 4.0), (2, at(1), 1.0)),
+                "sofa_cns": frame((1, at(1), None), (2, T0, 2.0), (3, T0, None)),
+                "sofa_liver": frame(),
+                # Coagulation is absent entirely; liver has no observations.
+            }
+        ).collect()
+        assert out.rows() == [
+            (1, T0, 4.0),
+            (1, at(1), 4.0),
+            (2, T0, 2.0),
+            (2, at(1), 3.0),
+            (3, T0, 0.0),
+        ]
+
+    def test_empty_component_streams_emit_no_total(self) -> None:
+        assert scores(make(SofaTransformer), {"sofa_renal": frame(), "sofa_cns": frame()}) == []
 
     def test_a_component_outside_the_window_contributes_zero(self) -> None:
         total = make(SofaTransformer, terms=["sofa_renal", "sofa_cns"], window="24h")
@@ -553,6 +629,7 @@ def test_end_to_end_total_sofa_chain(tmp_path: Path) -> None:
     sofa = _concept_output(project, "sofa")
 
     # GCS 1+1+1=3 -> CNS 4; PLT 30 -> coag 3; total 7 at 00:00.
-    # At 01:00 PLT 200 -> coag 0, CNS 4 carried forward -> total 4.
+    # At 01:00 PLT 200 -> current coag 0, but the severe thrombocytopenia
+    # remains inside the 24h SOFA window: worst coag 3 + worst CNS 4 = 7.
     assert sofa["code"].to_list() == ["sofa//points", "sofa//points"]
-    assert sofa["numeric_value"].to_list() == [7.0, 4.0]
+    assert sofa["numeric_value"].to_list() == [7.0, 7.0]

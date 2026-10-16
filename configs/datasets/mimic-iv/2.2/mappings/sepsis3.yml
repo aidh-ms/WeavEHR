@@ -1,0 +1,10 @@
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer
+concepts:
+  - suspected_infection.1.0.0
+  - sofa.1.0.0
+# ricu defaults: first infection window, cumulative-minimum baseline,
+# >=2 SOFA rise within the inclusive -48h/+24h window.
+kwargs:
+  infection_window: first
+  sofa_increase: 2

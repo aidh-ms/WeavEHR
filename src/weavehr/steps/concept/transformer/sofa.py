@@ -18,9 +18,10 @@ while a window that is not fully observed contributes nothing.
 
 A component emits no event where none of its inputs is currently known, so an
 absent component is distinguishable from a component scoring 0. The total
-(:class:`SofaTransformer`) then sums the most recent value of each sub-score
-within its own window, treating an unknown component as 0 — the usual
-convention, and the reason components must not emit spurious zeros.
+(:class:`SofaTransformer`) then sums the worst emitted value of each sub-score
+within its own trailing window, treating an unknown component as 0. The
+component alignment window and the total's score window are separate: the
+latter is measured from a component event, not from its underlying raw inputs.
 """
 
 import polars as pl
@@ -29,6 +30,7 @@ from weavehr.steps.concept.transformer.windowed import (
     Aggregation,
     GradedConceptTransformer,
     Locf,
+    RollingMax,
     SegmentedRollingSum,
     WindowedLocf,
     WindowedSumTransformer,
@@ -240,10 +242,22 @@ class SofaRespiratoryTransformer(SofaComponent):
 
 
 class SofaTransformer(WindowedSumTransformer):
-    """Total SOFA: the most recent value of each sub-score within ``window``.
+    """Total SOFA: sum of each component's worst score within ``window``.
 
-    Purely declarative — list the six sub-score concepts as the mapping's
-    dependencies (or under ``kwargs.terms``) and set ``window`` to control how
-    long a sub-score stays current. Re-evaluated whenever any sub-score is
-    updated; a sub-score with no value in the window contributes 0.
+    The trailing interval is ``[t - window, t]``; ``window`` defaults to 24h,
+    including the left boundary as in ricu's ``sofa_score``.
+    Each component is maximised separately before summing, so organ maxima
+    need not occur simultaneously. Components are the mapping's dependencies
+    or the names in ``kwargs.terms``. A component with no score in the window
+    contributes 0.
+
+    Evaluated at component event timestamps, using those emitted scores as
+    observations. No events are generated solely because a score expires, and
+    the window does not track the age of raw inputs used to derive a score.
     """
+
+    def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        if not self.inputs:
+            terms = self._kwargs.get("terms") or list(dependencies)
+            self.inputs = {name: RollingMax(self.window, closed="both") for name in terms}
+        return super().transform(dependencies)

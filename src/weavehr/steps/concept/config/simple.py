@@ -9,9 +9,11 @@ class MappingColumnConfig(BaseModel):
     """Configuration for a concept mapping.
 
     Attributes:
+        time: Optional expression overriding the source event timestamp.
         numeric_value: Column name for numeric values
         text_value: Column name for text values
     """
+    time: str | None = Field(None, description="Expression for the event timestamp; defaults to source time.")
     numeric_value: str | None = Field(None, description="Column name for numeric values.")
     text_value: str | None = Field(None, description="Column name for text values.")
 

@@ -30,7 +30,7 @@ are expressible; helper columns are namespaced ``__`` and dropped again.
 
 from copy import copy
 from logging import ERROR, WARNING
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import polars as pl
 
@@ -246,14 +246,22 @@ class SegmentedRollingSum(_Rolling):
 
 
 class RollingMax(_Rolling):
-    """Maximum (worst-high) over the trailing window ``(t - window, t]``."""
+    """Maximum (worst-high) over a trailing window.
+
+    ``closed`` defaults to ``right`` for ``(t - window, t]``. SOFA uses
+    ``both`` to include an observation exactly 24h old, as in ricu.
+    """
+
+    def __init__(self, window: str, *, closed: Literal["left", "right", "both", "none"] = "right") -> None:
+        super().__init__(window)
+        self._closed = closed
 
     def collapse(self, col: str) -> pl.Expr:
         return pl.col(col).max()
 
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         return lf.with_columns(
-            pl.col(col).rolling_max_by(_TIME, self._window, closed="right").over(_SUBJECT).alias(col)
+            pl.col(col).rolling_max_by(_TIME, self._window, closed=self._closed).over(_SUBJECT).alias(col)
         )
 
 
@@ -537,7 +545,7 @@ class WindowedSumTransformer(WindowedConceptTransformer):
     controls how long a term's last value stays current (default 24h). A term
     with no value inside the window contributes 0, so the sum is defined as
     soon as any one term is. Used for aggregate concepts such as a GCS total
-    (eye + motor + verbal) or the total SOFA over its sub-scores.
+    (eye + motor + verbal); SOFA overrides the aggregation to use maxima.
     """
 
     default_window = "24h"
