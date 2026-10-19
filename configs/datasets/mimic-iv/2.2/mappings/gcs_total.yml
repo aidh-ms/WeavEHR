@@ -6,6 +6,7 @@ table:
     - time
     - numeric_value
     - dataset
+    - table
 join:
   - concept: gcs_motor.1.0.0
     columns:
