@@ -94,6 +94,13 @@ class TestCreatinineCriterion:
         chronic = {"creatinine": series(*[(hours, 4.5) for hours in range(0, 96, 12)])}
         assert stages(make(AkiCreatinineTransformer, require_acute_rise=False), chronic)[48.0] == 3.0
 
+    @pytest.mark.parametrize("require_acute_rise", [True, False])
+    def test_ungating_leaves_the_rise_criteria_alone(self, require_acute_rise: bool) -> None:
+        # only the absolute stage-3 threshold is ungated; a stable normal value is not stage 1
+        stable = {"creatinine": series(*[(hours, 1.0) for hours in range(0, 96, 12)])}
+        out = stages(make(AkiCreatinineTransformer, require_acute_rise=require_acute_rise), stable)
+        assert set(out.values()) == {0.0}
+
     def test_renal_replacement_therapy_stages_3(self) -> None:
         out = stages(
             make(AkiCreatinineTransformer, window="24h"),
