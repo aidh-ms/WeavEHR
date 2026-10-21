@@ -101,5 +101,5 @@ events:
       time: col(birth_timestamp)
     filters:
       - drop_na(time)
-      # One birth per patient; keep the row of the lowest case_id.
+      # One birth per patient; keep the row with the earliest birth timestamp.
       - first_distinct(subject_id, order_by=[time])
