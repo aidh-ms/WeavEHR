@@ -3,7 +3,7 @@ from typing import Optional, Sequence
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_col_name, with_output
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, resolve_column, with_output
 from weavehr.callbacks.registry import register_callback_cls
 
 
@@ -43,7 +43,7 @@ class FirstNotNull(OutputCallbackProtocol):
             A new LazyFrame with an additional column containing the first
             non-null value per row across the specified fields.
         """
-        cols = [to_col_name(f) for f in self.fields]
+        cols = [resolve_column(lf, f) for f in self.fields]
 
         # Optional: empty list handling
         if not cols:
@@ -51,7 +51,7 @@ class FirstNotNull(OutputCallbackProtocol):
             expr = pl.lit(None)
             return with_output(expr, self.output)
 
-        expr = pl.coalesce([pl.col(c) for c in cols])
+        expr = pl.coalesce(cols)
 
         return with_output(expr, self.output)
 
@@ -93,7 +93,7 @@ class Max(OutputCallbackProtocol):
             If no fields are specified, an expression containing null values is
             returned.
         """
-        cols = [to_col_name(f) for f in self.fields]
+        cols = [resolve_column(lf, f) for f in self.fields]
 
         # Optional: empty list handling
         if not cols:
@@ -101,6 +101,6 @@ class Max(OutputCallbackProtocol):
             expr = pl.lit(None)
             return with_output(expr, self.output)
 
-        expr = pl.max_horizontal([pl.col(c) for c in cols])
+        expr = pl.max_horizontal(cols)
 
         return with_output(expr, self.output)
