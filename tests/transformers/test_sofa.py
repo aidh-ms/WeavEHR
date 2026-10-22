@@ -287,6 +287,70 @@ class TestRenalCombination:
         # coincident creatinine + urine collapse to one evaluation
         assert renal_scores(renal, frame((1, at(24), crea)), covered_urine((24, urine))) == [expected]
 
+    @pytest.mark.parametrize("alignment_window", ["24h", "1h"], ids=["existing-24h", "proposed-1h"])
+    @pytest.mark.parametrize("assessment_minute", [0, 58], ids=["same-clock-hour", "across-clock-hour"])
+    def test_lower_creatinine_preserves_a_recent_daily_urine_grade(
+        self, alignment_window: str, assessment_minute: int
+    ) -> None:
+        """Shorter input alignment must preserve the daily urine-volume criterion."""
+        assessment = at(24) + timedelta(minutes=assessment_minute)
+        start = assessment - timedelta(hours=24)
+        creatinine_time = assessment + timedelta(minutes=5)
+        # The opening zero establishes coverage; 24 hourly volumes of 12.5 mL
+        # sum to 300 mL/day (grade 3). Creatinine 2.5 scores only 2.
+        urine = frame(
+            (1, start, 0.0),
+            *[(1, start + timedelta(hours=hour), 12.5) for hour in range(1, 25)],
+        )
+        result = (
+            make(SofaRenalTransformer, window=alignment_window)
+            .transform({"urine_output": urine, "creatinine": frame((1, creatinine_time, 2.5))})
+            .filter(pl.col("time") >= assessment)
+            .collect()
+            .sort("time")
+        )
+        assert result.select("time", "numeric_value").rows() == [
+            (assessment, 3.0),
+            (creatinine_time, 3.0),
+        ]
+
+    def test_latest_creatinine_replaces_an_earlier_higher_value(self) -> None:
+        creatinine = frame((1, at(24), 5.5), (1, at(24) + timedelta(minutes=5), 2.5))
+        assert scores(
+            make(SofaRenalTransformer, window="1h"),
+            {"creatinine": creatinine, "urine_output": frame()},
+        ) == [4.0, 2.0]
+
+    def test_new_urine_recalculates_the_daily_collection(self) -> None:
+        urine = frame((1, T0, 0.0), (1, at(24), 300.0), (1, at(24) + timedelta(minutes=5), 300.0))
+        creatinine = frame((1, at(24), 2.5), (1, at(24) + timedelta(minutes=10), 2.5))
+        assert scores(
+            make(SofaRenalTransformer, window="1h"),
+            {"creatinine": creatinine, "urine_output": urine},
+        ) == [3.0, 2.0, 2.0]
+
+    @pytest.mark.parametrize("minutes", [60, 61])
+    def test_daily_urine_collection_is_independent_of_creatinine_lookback(self, minutes: int) -> None:
+        assert scores(
+            make(SofaRenalTransformer, window="1h"),
+            {
+                "urine_output": covered_urine((24, 300.0)),
+                "creatinine": frame((1, at(24) + timedelta(minutes=minutes), 2.5)),
+            },
+        ) == [3.0, 3.0]
+
+    def test_creatinine_recalculates_the_daily_urine_collection(self) -> None:
+        # The 300 mL ages out between 24h and 24h05. At the creatinine event,
+        # the recalculated urine collection is 0 mL, giving renal grade 4.
+        urine = covered_urine((0.05, 300.0), *[(hour, 0.0) for hour in range(1, 25)])
+        assert scores(
+            make(SofaRenalTransformer, window="1h"),
+            {
+                "urine_output": urine,
+                "creatinine": frame((1, at(24) + timedelta(minutes=5), 2.5)),
+            },
+        ) == [3.0, 4.0]
+
 
 class TestContinuousTimeSemantics:
     def test_one_event_per_measurement(self, renal: SofaRenalTransformer) -> None:

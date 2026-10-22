@@ -12,9 +12,10 @@ Thresholds follow ricu, the windowing does not: instead of hourly binning,
 every input is carried forward only for as long as it can reasonably be
 called current (``window``, 24h by default), so a component reflects what is
 known *now* rather than a fixed calendar bin, and stale data expires instead
-of persisting indefinitely. Urine output is summed over the same trailing
-window under :class:`SegmentedRollingSum`, so a recorded 0 is real anuria
-while a window that is not fully observed contributes nothing.
+of persisting indefinitely. Urine output is recalculated at every input
+measurement over a separate trailing 24h collection window under
+:class:`SegmentedRollingSum`, so a recorded 0 is real anuria while a window
+that is not fully observed contributes nothing.
 
 A component emits no event where none of its inputs is currently known, so an
 absent component is distinguishable from a component scoring 0. The total
@@ -56,16 +57,19 @@ class SofaComponent(GradedConceptTransformer):
 class SofaRenalTransformer(SofaComponent):
     """Renal sub-score from serum creatinine (mg/dL) and windowed urine output (mL).
 
-    Urine output is segmented on ``urine_output_gap`` (default: the component
-    window), so the volume sub-score is graded only across a window that was
-    actually observed end to end and whose stream is still running.
+    At every urine or creatinine event, recalculate the preceding 24h urine
+    collection and combine it with the latest creatinine within ``window``.
+    Urine output is segmented on ``urine_output_gap`` (default: 24h), so the
+    volume sub-score is graded only across a window observed end to end and
+    whose stream is still running.
     """
 
     def build_inputs(self) -> dict[str, Aggregation]:
+        urine_window = "24h"
         return {
             "creatinine": WindowedLocf(self.window),
             "urine_output": SegmentedRollingSum(
-                self.window, gap=self._kwargs.get("urine_output_gap", self.window)
+                urine_window, gap=self._kwargs.get("urine_output_gap", urine_window)
             ),
         }
 
