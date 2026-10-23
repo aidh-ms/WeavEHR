@@ -3,7 +3,7 @@ from typing import Sequence
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_col_name, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, resolve_column, to_col_name, to_expr
 from weavehr.callbacks.registry import register_callback_cls
 
 
@@ -13,7 +13,7 @@ class DropNa(CallbackProtocol):
         self.column = to_col_name(column)
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
-        return pl.col(self.column).is_not_null()
+        return resolve_column(lf, self.column).is_not_null()
 
 
 @register_callback_cls
@@ -54,14 +54,18 @@ class FirstDistinct(CallbackProtocol):
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         """Select the first row for each distinct combination of column values."""
         column_names = [to_col_name(column) for column in self.columns]
-        if not self.order_by:
+        order_names = [to_col_name(column) for column in self.order_by]
+        for column in (*column_names, *order_names):
+            resolve_column(lf, column)
+
+        if not order_names:
             return pl.struct(column_names).is_first_distinct()
 
         # Narrow the candidates column by column to the rows holding the group's best value
         # (min/max ignore nulls; an all-null column keeps every candidate), then keep the
         # first remaining candidate per group in row order.
         candidate = pl.lit(True)
-        for name in (to_col_name(column) for column in self.order_by):
+        for name in order_names:
             values = pl.col(name).filter(candidate)
             best = (values.max() if self.descending else values.min()).over(column_names)
             candidate = candidate & ((pl.col(name) == best) | best.is_null()).fill_null(False)

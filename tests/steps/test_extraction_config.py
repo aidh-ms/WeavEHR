@@ -4,8 +4,10 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
+from weavehr.steps.extraction.config.column import ColumnConfig
 from weavehr.steps.extraction.config.step import CustomConfig
 from weavehr.steps.extraction.config.table import JoinTableConfig, TableConfig, TableType
+from weavehr.utils.dtype import resolve_dtype
 
 
 def make_table_config(**overrides) -> TableConfig:
@@ -226,3 +228,21 @@ class TestGlobalEventNameCodeSettings:
         )
 
         assert config.settings.include_event_name_in_code is False
+
+
+class TestColumnDtype:
+    @pytest.mark.parametrize(("name", "expected"), [("int64", pl.Int64), ("float", pl.Float32), ("utf8", pl.String)])
+    def test_uses_shared_dtype_names(self, name: str, expected: pl.DataType) -> None:
+        assert ColumnConfig(name="c", type=name).dtype == expected == resolve_dtype(name)
+
+    def test_datetime_is_read_as_string(self) -> None:
+        assert ColumnConfig(name="c", type="datetime").dtype == pl.String
+
+    def test_type_is_normalised_to_lowercase(self) -> None:
+        column = ColumnConfig(name="c", type="DateTime")
+        assert column.type == "datetime"
+        assert column.dtype == pl.String
+
+    def test_unknown_type_rejected_at_validation(self) -> None:
+        with pytest.raises(ValidationError, match="Unsupported dtype"):
+            ColumnConfig(name="c", type="complex128")

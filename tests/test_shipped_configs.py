@@ -2,7 +2,10 @@
 
 These tests make sure that every bundled YAML file parses into its Pydantic
 model and that every embedded expression string is valid in the expression
-DSL (correct syntax, only registered callbacks). Dataset configs are resolved
+DSL (correct syntax, only registered callbacks). The extraction and concept
+pipelines are additionally run on empty frames typed by the declared columns, so
+every column reference is resolved against the columns actually available at that
+point (including columns added by callbacks, joins and transformations). Dataset configs are resolved
 through the version inheritance mechanism (extends.yml) first, so both
 physical files and inherited/merged configs are validated. They guard the
 configuration library — the part of WeavEHR most contributors will touch.
@@ -13,13 +16,17 @@ from typing import Any
 
 import polars as pl
 import pytest
+import yaml
 
 from weavehr.callbacks.interpreter import ExprInterpreter
+from weavehr.callbacks.proto import UnknownColumnError
 from weavehr.config.inheritance import resolve_effective_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
-from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
+from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
+from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.extraction.config.table import BaseTableConfig, TableConfig
+from weavehr.steps.extraction.step import ExtractionStep
 
 REPO_ROOT = Path(__file__).parents[1]
 CONFIG_ROOT = REPO_ROOT / "configs"
@@ -55,6 +62,60 @@ def load_effective_table(subdir: Path, name: str) -> TableConfig:
     data.setdefault("version", subdir.parent.name)
     data.setdefault("name", Path(name).name)
     return TableConfig(**data)
+
+
+# Schema of the MEDS columns every extracted event and concept output has.
+MEDS_SCHEMA: dict[str, pl.DataType] = {
+    "subject_id": pl.Int64(),
+    "time": pl.Datetime("us"),
+    "code": pl.String(),
+    "numeric_value": pl.Float32(),
+    "text_value": pl.String(),
+}
+
+
+def empty_table_frame(table: BaseTableConfig) -> pl.LazyFrame:
+    """An empty frame with the declared columns of a table, as the extraction step scans it."""
+    return pl.LazyFrame(schema=table.dtypes)
+
+
+def build_event_frames(table: TableConfig) -> dict[str, pl.LazyFrame]:
+    """Run the extraction pipeline of a table on empty frames; returns the output frame per event."""
+    lf = ExtractionStep.build_table_frame(table, empty_table_frame)
+    return {event.name: ExtractionStep.build_event_frame(lf, event, include_event_name=True) for event in table.events}
+
+
+def extracted_event_schemas(dataset: str, version: str) -> dict[tuple[str, str], pl.Schema]:
+    """Output schema of every extracted (table, event) of a dataset version."""
+    cache_key = (dataset, version)
+    if cache_key not in _EVENT_SCHEMA_CACHE:
+        subdir = CONFIG_ROOT / "datasets" / dataset / version / "tables"
+        schemas = {}
+        for name in resolve_effective_configs(subdir):
+            table = load_effective_table(subdir, name)
+            for event_name, lf in build_event_frames(table).items():
+                schemas[(table.name, event_name)] = lf.collect_schema()
+        _EVENT_SCHEMA_CACHE[cache_key] = schemas
+    return _EVENT_SCHEMA_CACHE[cache_key]
+
+
+_EVENT_SCHEMA_CACHE: dict[tuple[str, str], dict[tuple[str, str], pl.Schema]] = {}
+
+
+def concept_output_schema(concept_reference: str) -> pl.Schema:
+    """Output schema of a concept referenced as ``<name>.<version>`` by a derived mapping."""
+    name = concept_reference.split(".", 1)[0]
+    (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")
+    extension_columns = yaml.safe_load(concept_file.read_text()).get("extension_columns") or {}
+    return pl.Schema(MEDS_SCHEMA | {column: pl.String() for column in extension_columns})
+
+
+def assert_resolves(build: Any, source: str) -> None:
+    """Build and resolve a frame, failing with context on unknown columns or invalid expressions."""
+    try:
+        build().collect()
+    except Exception as e:  # noqa: BLE001 - reported with context
+        pytest.fail(f"{source}: {type(e).__name__}: {e}")
 
 
 def assert_expressions_parse(expressions: list[str], source: str) -> None:
@@ -136,6 +197,66 @@ def test_table_config_expressions_are_valid(subdir: Path, name: str) -> None:
     for join_table in table.join:
         assert_expressions_parse(collect_table_expressions(join_table), source)
     assert_expressions_parse(collect_event_expressions(table), source)
+
+
+@pytest.mark.parametrize(("subdir", "name"), effective_table_cases())
+def test_table_config_column_references_resolve(subdir: Path, name: str) -> None:
+    """Every column reference of a table config must exist where it is used.
+
+    The pipeline is run on empty frames, so e.g. a typo in a bare name or ``col(...)``
+    fails here instead of silently producing a wrong extraction.
+    """
+    table = load_effective_table(subdir, name)
+    source = f"{relative_id(subdir)}/{name}"
+
+    assert_resolves(lambda: pl.concat(list(build_event_frames(table).values()), how="diagonal"), source)
+
+
+@pytest.mark.parametrize("concept_file", CONCEPT_FILES, ids=relative_id)
+def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
+    """Every column reference of a concept and its mappings must exist in the frame it is applied to.
+
+    Simple mappings are applied to the extracted events they match, derived mappings to
+    the output of the concepts they depend on. Complex mappings run Python transformers
+    and are not covered.
+    """
+    concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS)
+
+    for dataset_concept in concept.dataset_concepts:
+        source = f"{relative_id(concept_file)} [{dataset_concept.dataset} {dataset_concept.version}]"
+
+        if isinstance(dataset_concept, SimpleDatasetConceptConfig):
+            events = extracted_event_schemas(dataset_concept.dataset, dataset_concept.version)
+            for mapping in dataset_concept.mappings:
+                matching = {
+                    key: schema
+                    for key, schema in events.items()
+                    if key[0] == mapping.pattern.table and mapping.pattern.event in (None, key[1])
+                }
+                assert matching, (
+                    f"{source}: no extracted event matches table={mapping.pattern.table!r} "
+                    f"event={mapping.pattern.event!r}"
+                )
+                for (table, event_name), schema in matching.items():
+                    assert_resolves(
+                        lambda: ConceptStep.build_mapping_frame(
+                            pl.LazyFrame(schema=schema),
+                            concept,
+                            mapping,
+                            dataset=dataset_concept.dataset,
+                            version=dataset_concept.version,
+                            table=table,
+                            event_name=event_name,
+                        ),
+                        f"{source} {table}/{event_name}",
+                    )
+
+        if isinstance(dataset_concept, DerivedDatasetConceptConfig):
+
+            def scan(table: BaseConceptTable) -> pl.LazyFrame:
+                return pl.LazyFrame(schema=concept_output_schema(table.concept))
+
+            assert_resolves(lambda: ConceptStep.build_derived_frame(concept, dataset_concept, scan), source)
 
 
 @pytest.mark.parametrize("concept_file", CONCEPT_FILES, ids=relative_id)
@@ -292,3 +413,16 @@ def test_id_patterns_are_start_anchored(mapping_dir: Path) -> None:
         if not mapping["pattern"]["code"].startswith("^")
     }
     assert not unanchored, f"patterns without a leading '^': {sorted(unanchored)}"
+
+
+def test_column_reference_typo_is_detected() -> None:
+    """Regression: eicu respiratorycharting referenced ``enter_timestamp`` although the column is
+    ``entered_timestamp``; the old literal fallback silently wrote the text "enter_timestamp"."""
+    subdir = CONFIG_ROOT / "datasets" / "eicu-crd" / "2.0" / "tables"
+    table = load_effective_table(subdir, "respiratorycharting")
+    build_event_frames(table)  # the shipped config resolves
+
+    (event,) = table.events
+    event.columns.extension["available_time"] = "col(enter_timestamp)"
+    with pytest.raises(UnknownColumnError, match="Unknown column 'enter_timestamp'.*did you mean 'entered_timestamp'"):
+        build_event_frames(table)
