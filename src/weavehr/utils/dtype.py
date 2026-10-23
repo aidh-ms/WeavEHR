@@ -20,7 +20,6 @@ DTYPES: dict[str, DataTypeClass] = {
     "float": pl.Float32,
     "float32": pl.Float32,
     "float64": pl.Float64,
-    "decimal": pl.Decimal,
     "bool": pl.Boolean,
     "boolean": pl.Boolean,
     "str": pl.String,

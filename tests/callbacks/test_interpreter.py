@@ -5,7 +5,7 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from weavehr.callbacks.interpreter import ExprInterpreter, parse_expr
-from weavehr.callbacks.proto import CallbackProtocol
+from weavehr.callbacks.proto import CallbackProtocol, ColumnRef, UnknownColumnError
 
 
 @pytest.fixture
@@ -40,13 +40,36 @@ class TestLiteralsAndNames:
         assert ExprInterpreter().eval("[1, 2, 3]") == [1, 2, 3]
         assert ExprInterpreter().eval("(1, 2)") == (1, 2)
 
+    def test_bare_name_and_quoted_string_are_distinct(self) -> None:
+        name = ExprInterpreter().eval("label")
+        literal = ExprInterpreter().eval("'label'")
+        assert isinstance(name, ColumnRef)
+        assert not isinstance(literal, ColumnRef)
+        assert name == literal == "label"
+
     def test_bare_name_is_column_reference(self, lf: pl.LazyFrame) -> None:
         # A bare name inside a callback resolves to the column of that name.
         assert evaluate(lf, "col(a)").to_list() == [1.0, 2.0, 3.0]
+        assert evaluate(lf, "a + 1").to_list() == [2.0, 3.0, 4.0]
 
-    def test_unknown_name_falls_back_to_literal(self, lf: pl.LazyFrame) -> None:
-        # Names that are not columns of the frame are treated as string literals.
-        assert evaluate(lf, "col(missing)").to_list() == ["missing"] * 3
+    @pytest.mark.parametrize("expr", ["col(missing)", "col('missing')", "missing + 1", "concat_str(label, missing)"])
+    def test_unknown_column_raises(self, lf: pl.LazyFrame, expr: str) -> None:
+        # Names that are not columns of the frame are an error, never a silent string literal.
+        with pytest.raises(UnknownColumnError, match="Unknown column 'missing'"):
+            parse_expr(lf, expr)
+
+    def test_quoted_string_is_literal_even_if_column_exists(self, lf: pl.LazyFrame) -> None:
+        # 'a' is also a column of lf, but quoted strings are always literals.
+        assert evaluate(lf, "concat_str(label, 'a', separator='-')").to_list() == ["x-a", "y-a", "z-a"]
+        assert evaluate(lf, "label == 'label'").to_list() == [False, False, False]
+
+    def test_col_accepts_quoted_column_name(self) -> None:
+        lf = pl.LazyFrame({"Variable Name": [1]})
+        assert evaluate(lf, 'col("Variable Name")').to_list() == [1]
+
+    def test_const_takes_bare_name_as_text(self, lf: pl.LazyFrame) -> None:
+        # const() always produces a literal, so const(a) is the text "a", not column a.
+        assert evaluate(lf, "const(a)").to_list() == ["a"] * 3
 
 
 class TestOperators:

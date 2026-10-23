@@ -6,7 +6,7 @@ from polars import LazyFrame
 from weavehr.callbacks._callbacks.algebra import Add, Divide, Multiply, Subtract
 from weavehr.callbacks._callbacks.comparison import Equal, GreaterEqual, GreaterThan, LessEqual, LessThan, NotEqual
 from weavehr.callbacks._callbacks.logical import And, Not, Or
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult
+from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, ColumnRef
 from weavehr.callbacks.registry import registry
 
 
@@ -25,8 +25,8 @@ class ExprInterpreter(ast.NodeVisitor):
         return tuple(self.visit(e) for e in node.elts)
 
     def visit_Name(self, node) -> AstValue:
-        # DSL: bare names are column references
-        return node.id
+        # DSL: bare names are column references, quoted strings (visit_Constant) are literals
+        return ColumnRef(node.id)
 
     def visit_Keyword(self, node) -> Tuple[str, AstValue]:
         if node.arg is None:
