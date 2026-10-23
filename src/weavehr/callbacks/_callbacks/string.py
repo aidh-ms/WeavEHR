@@ -119,3 +119,58 @@ class SliceStr(OutputCallbackProtocol):
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.value).cast(pl.Utf8).str.slice(self.offset, self.length)
         return with_output(expr, self.output)
+
+
+@register_callback_cls
+class HashEncode(OutputCallbackProtocol):
+    """Map ids to deterministic non-negative Int64 codes via 64-bit hashing.
+
+    Pure per-row expression: lazy, streamable, no unique/join/collect.
+    The same input value yields the same code regardless of table, row
+    order or chunking.
+
+    Stability: Polars only guarantees identical `.hash()` output within
+    one Polars version. After a Polars upgrade, re-extract ALL datasets
+    whose codes are joined together. For codes that must survive
+    upgrades, use a version-stable hash plugin such as polars-hash.
+
+    Input normalization: values are cast to String before hashing, so
+    123 (int) and "123" (str) match, but 123.0 (float, e.g. from CSV
+    inference) becomes "123.0" and "00123" stays "00123"; each gets a
+    different code than 123. Enforce id dtypes at read time.
+
+    Codes are in [0, 2^63): the top hash bit is dropped. Collision
+    probability for n distinct ids is about n² / 2^64 (roughly 5e-8 for
+    1M ids). Collisions are NOT detected here, and one would silently
+    merge two ids. Validate by comparing `n_unique` of the raw ids and
+    the codes over the union of all joined tables.
+
+    Attributes:
+        id: Column/expression holding the id to encode.
+        seed: Hash seed. Must be identical across all joined tables.
+        output: Output column name. If None, the expression is
+            returned unaliased.
+    """
+
+    def __init__(
+        self,
+        id: AstValue,
+        seed: int = 0,
+        output: Optional[str] = None,
+    ) -> None:
+        self.id = id
+        self.seed = seed
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        src = to_expr(lf, self.id).cast(pl.String)
+        # Guard required: Polars hashes null to a fixed value, so without
+        # it every null id would collapse into one shared code.
+        expr = (
+            pl.when(src.is_not_null())
+            # `// 2` drops the top bit of the UInt64 hash so the Int64 code is never negative.
+            .then((src.hash(seed=self.seed) // 2).cast(pl.Int64))
+            .otherwise(None)
+        )
+
+        return with_output(expr, self.output)
