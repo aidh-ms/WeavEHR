@@ -15,6 +15,7 @@ from weavehr.logging import get_logger
 from weavehr.steps.base.config import BaseStepConfig
 from weavehr.storage.project import WeavEHRProject
 from weavehr.storage.workspace import WorkspaceDir
+from weavehr.utils.loader import ensure_configs_loaded
 
 logger = get_logger(__name__)
 
@@ -52,7 +53,14 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             project: The WeavEHR project to operate within
             config: Configuration for this step
             registry: Configuration registry for loading external configs
+
+        Note:
+            Creating the first step loads the configurations bundled with WeavEHR
+            into the global registries, unless they were loaded already or
+            ``WEAVEHR_AUTO_LOAD_CONFIGS`` disables it (see
+            :func:`weavehr.utils.loader.ensure_configs_loaded`).
         """
+        ensure_configs_loaded()
         self._project = project
         self._config = config
         self._registry = registry

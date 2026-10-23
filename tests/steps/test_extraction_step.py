@@ -485,3 +485,81 @@ config:
         # both part files are read and concatenated
         assert df.height == 2
         assert df["numeric_value"].to_list() == [80.0, 120.0]
+
+    def test_first_distinct_after_join_keeps_file_order(self, tmp_path: Path) -> None:
+        """The streaming lookup join must not reorder rows ahead of order-dependent filters."""
+        data_dir = tmp_path / "data" / "joindb"
+        data_dir.mkdir(parents=True)
+        n = 200_000
+        events = pl.select(i=pl.int_range(n)).select(
+            subject_id=(pl.col("i") % 500).cast(pl.Int64),
+            itemid=(pl.col("i").hash(2) % 50).cast(pl.Int64),
+            value=pl.col("i").cast(pl.Float32),
+            charttime=pl.lit(datetime(2024, 1, 1)),
+        )
+        events.write_parquet(data_dir / "events.parquet")
+        pl.DataFrame({"itemid": list(range(50)), "label": [f"item{i}" for i in range(50)]}).write_parquet(
+            data_dir / "items.parquet"
+        )
+
+        config_dir = tmp_path / "config" / "joindb" / "1.0" / "tables"
+        config_dir.mkdir(parents=True)
+        (config_dir / "events.yml").write_text(
+            """\
+path: events.parquet
+columns:
+  - name: subject_id
+    type: int64
+  - name: itemid
+    type: int64
+  - name: value
+    type: float32
+  - name: charttime
+    type: datetime
+join:
+  - name: items
+    path: items.parquet
+    columns:
+      - name: itemid
+        type: int64
+      - name: label
+        type: str
+    both_on:
+      - itemid
+event_defaults:
+  subject_id: col(subject_id)
+  time: col(charttime)
+events:
+  - name: EVENT
+    columns:
+      code:
+        - col(label)
+      numeric_value: col(value)
+    filters:
+      - first_distinct(subject_id)
+"""
+        )
+
+        config_file = tmp_path / "extraction.yml"
+        config_file.write_text(
+            f"""\
+name: Extraction
+version: 1.0.0
+config_files:
+  - path: {config_dir}
+config:
+  data:
+    - name: joindb
+      version: "1.0"
+      path: {data_dir}
+"""
+        )
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(config_dir)
+        ExtractionStep.load(project, config_file).run()
+
+        output = project.datasets_path / "extraction" / "data" / "joindb" / "1.0" / "events" / "EVENT.parquet"
+        df = pl.read_parquet(output).sort("subject_id")
+        expected = events.filter(pl.col("subject_id").is_first_distinct()).sort("subject_id")
+        assert df["numeric_value"].to_list() == expected["value"].to_list()

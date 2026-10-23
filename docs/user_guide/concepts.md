@@ -84,14 +84,18 @@ table:
 join:                               # further concepts to join in
   - concept: <other concept identifier>
     columns: [subject_id, time, numeric_value]
-    both_on: [subject_id, time]     # default join keys
-    how: outer
+    both_on: [subject_id, time]     # default join keys (or left_on/right_on)
+    how: full                       # default; inner, left, right, full, semi, anti
+    maintain_order: left_right      # default; keeps the main table's row order
+    suffix: _right                  # default suffix for overlapping column names
 event:                              # mapping to the output MEDS columns
   numeric_value: <expression>
 filters: []
 ```
 
 `event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is always the concept code (`name//unit`) and cannot be set here — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
+
+Joins use the same keys, `how` and `maintain_order` options as [extraction joins](extraction.md#joins); cross joins are not supported.
 
 This is how composite scores or ratios (e.g. concepts that combine two measurements) are expressed declaratively.
 

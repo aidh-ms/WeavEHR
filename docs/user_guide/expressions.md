@@ -89,6 +89,7 @@ Configs use expressions in three contexts with different expectations:
 | `drop_na(column)` | Keep rows where the column is not null |
 | `drop_if(condition)` | Drop rows where the condition is true |
 | `first_distinct(col_a, col_b, ...)` | Keep only the first row per distinct combination of the given columns |
+| `first_distinct(col_a, ..., order_by=[col_x, ...], descending=False)` | Keep the first row per distinct combination after ordering each group by `order_by` (nulls last, ties keep row order); use `descending=True` to keep the last |
 
 ### Frame transformations
 
