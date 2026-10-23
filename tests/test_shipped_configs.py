@@ -158,6 +158,7 @@ def test_concept_parses_with_all_dataset_mappings(concept_file: Path) -> None:
                     for value in (mapping.columns.time, mapping.columns.numeric_value, mapping.columns.text_value)
                     if value is not None
                 ]
+                expressions += list(mapping.columns.extension.values())
                 assert_expressions_parse(expressions + mapping.filters, source)
                 assert_regex_compiles(mapping.pattern.code, source)
 

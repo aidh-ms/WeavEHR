@@ -12,10 +12,14 @@ class MappingColumnConfig(BaseModel):
         time: Optional expression overriding the source event timestamp.
         numeric_value: Column name for numeric values
         text_value: Column name for text values
+        extension: Dataset-specific output metadata expressions.
     """
     time: str | None = Field(None, description="Expression for the event timestamp; defaults to source time.")
     numeric_value: str | None = Field(None, description="Column name for numeric values.")
     text_value: str | None = Field(None, description="Column name for text values.")
+    extension: dict[str, str] = Field(
+        default_factory=dict, description="Dataset-specific extension column expressions."
+    )
 
 
 class MappingPatternConfig(BaseModel):

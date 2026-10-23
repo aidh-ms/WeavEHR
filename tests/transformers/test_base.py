@@ -39,8 +39,8 @@ class Recording(BaseConceptTransformer):
     """Records what was resolved and passes the first dependency through."""
 
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
-        self.resolved = sorted(dependencies)
-        first = dependencies[self.resolved[0]]
+        self.dependencies = dependencies
+        first = next(iter(dependencies.values()))
         return first.select("subject_id", "time", "numeric_value")
 
 
@@ -109,7 +109,7 @@ def test_dependencies_are_resolved_and_keyed_by_name(tmp_path: Path, concept: Co
     transformer()
 
     # keyed by unversioned name, so a transform can refer to inputs without pinning a version
-    assert transformer.resolved == ["creatinine", "urine_output"]
+    assert list(transformer.dependencies) == ["creatinine", "urine_output"]
 
 
 def test_output_carries_the_meds_columns(tmp_path: Path, concept: ConceptConfig) -> None:
@@ -125,6 +125,29 @@ def test_output_carries_the_meds_columns(tmp_path: Path, concept: ConceptConfig)
     assert written.schema["numeric_value"] == pl.Float32
     assert written["text_value"].to_list() == [None]  # filled in even though transform produced none
     assert written["dataset"].to_list() == [DATASET]  # extension column
+
+
+def test_preserved_infusion_metadata_reaches_a_downstream_transform(tmp_path: Path, concept: ConceptConfig) -> None:
+    norepinephrine = source("norepinephrine_rate", unit="mcg/kg/min")
+    step = Step(tmp_path, norepinephrine)
+    write_output(step, norepinephrine, 0.25, 0.125, 0.0)
+    path = step.concept_output_file(norepinephrine, DATASET, DATASET_VERSION)
+    dependency = pl.read_parquet(path).with_columns(
+        pl.Series("orderid", ["101", "102", "102"]),
+        pl.Series("linkorderid", ["101", "101", "101"]),
+        pl.Series("event", ["INFUSION_START", "INFUSION_START", "INFUSION_END"]),
+        pl.lit("100").alias("stay_id"),
+    )
+    dependency.write_parquet(path)
+
+    transformer = Recording(concept, config(norepinephrine.identifier), cast(ConceptStep, step))
+    transformer()
+    received = transformer.dependencies["norepinephrine_rate"].collect()
+    assert received.select("numeric_value", "orderid", "linkorderid", "event", "stay_id").rows() == [
+        (0.25, "101", "101", "INFUSION_START", "100"),
+        (0.125, "102", "101", "INFUSION_START", "100"),
+        (0.0, "102", "101", "INFUSION_END", "100"),
+    ]
 
 
 def test_a_transform_may_produce_text_instead_of_a_number(tmp_path: Path, concept: ConceptConfig) -> None:
@@ -167,7 +190,7 @@ class TestTolerantDependencies:
         )
         transformer()
 
-        assert transformer.resolved == ["creatinine"]
+        assert list(transformer.dependencies) == ["creatinine"]
         assert output_of(step, concept)["numeric_value"].to_list() == [2.0]
 
     def test_nothing_is_written_when_no_dependency_resolves(self, tmp_path: Path, concept: ConceptConfig) -> None:
@@ -205,4 +228,4 @@ def test_dependencies_are_resolved_in_a_stable_order(tmp_path: Path, concept: Co
     forwards()
     backwards()
 
-    assert forwards.resolved == backwards.resolved
+    assert list(forwards.dependencies) == list(backwards.dependencies) == ["creatinine", "urine_output"]

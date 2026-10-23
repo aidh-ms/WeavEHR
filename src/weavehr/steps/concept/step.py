@@ -516,6 +516,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
                 extension_columns = concept.extension_columns.copy()
                 extension_columns.update(dataset_extension_columns or {})
+                extension_columns.update(mapping.columns.extension)
                 for col_name, col_expr in extension_columns.items():
                     lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
@@ -575,7 +576,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 concept.identifier,
                 output_file,
             )
-            pl.scan_parquet(files).sink_parquet(output_file)
+            pl.concat([pl.scan_parquet(file) for file in files], how="diagonal").sink_parquet(output_file)
 
         logger.debug(
             "Cleaning up temporary concept files for %s in %s",

@@ -216,7 +216,9 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
         Args:
             dependencies: Resolved dependency concepts keyed by name, each a
                 MEDS-shaped lazy frame (``subject_id``, ``time``, ``code``,
-                ``numeric_value``, ``text_value``). Under
+                ``numeric_value``, ``text_value``) plus any preserved extension
+                columns, available before the subclass projects or aggregates
+                its inputs. Under
                 :attr:`strict_dependencies` = False a declared dependency may
                 be absent, which the implementation should treat as never
                 measured rather than as an error.
