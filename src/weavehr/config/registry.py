@@ -77,7 +77,7 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
             overwrite: If True, replace existing configuration with same identifier
         """
         if overwrite or value.identifier not in self._registry:
-            logger.info("Loaded configuration: %s", value.identifier)
+            logger.debug("Registered configuration: %s", value.identifier)
             self._registry[value.identifier] = value
 
     def unregister(self, identifiers: tuple[str, ...] | str) -> bool:
@@ -162,11 +162,6 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
             overwrite,
         )
         for config in load_configs(file_path, self._config_type, includes=includes, excludes=excludes):
-            logger.debug(
-                "Registering config '%s' (overwrite=%s)",
-                config.identifier,
-                overwrite,
-            )
             self.register(config, overwrite=overwrite)
 
     def save(self, path: Path) -> None:
