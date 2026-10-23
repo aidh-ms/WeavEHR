@@ -10,6 +10,7 @@ import shutil
 from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
+from typing import Callable
 from uuid import uuid4
 
 import polars as pl
@@ -24,6 +25,7 @@ from weavehr.steps.concept.config.concept import (
     SimpleDatasetConceptConfig,
 )
 from weavehr.steps.concept.config.derived import BaseConceptTable
+from weavehr.steps.concept.config.simple import MappingConfig
 from weavehr.steps.concept.config.step import ConceptStepConfig
 from weavehr.steps.concept.registry import concept_config_registry
 from weavehr.storage.project import WeavEHRProject
@@ -162,6 +164,17 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         """
         assert self._workspace_dir is not None
         return Path(self._workspace_dir.path, *concept.identifier_tuple[1:])
+
+    def concept_output_file(self, concept: ConceptConfig, dataset: str, version: str) -> Path:
+        """Return the parquet file a concept's output for one dataset version is written to.
+        Args:
+            concept: The concept configuration to resolve the output file for
+            dataset: Name of the source dataset
+            version: Version of the source dataset
+        Returns:
+            Path of the form ``<workspace>/<step>/<concept name>/<concept version>/<dataset>/<dataset version>.parquet``
+        """
+        return self.concept_output_dir(concept) / dataset / f"{version}.parquet"
 
     @property
     def extraction_dataset(self):
@@ -410,8 +423,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             dataset_concept.dataset,
         )
         assert self._workspace_dir is not None
-        output_data_path = self.concept_output_dir(concept)
-        output_dataset_path = output_data_path / dataset_concept.dataset
+        output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
+        # Per-mapping parts are staged next to the final file, one directory per dataset version.
+        output_dataset_path = output_file.with_suffix(".tmp")
         output_dataset_path.mkdir(parents=True, exist_ok=True)
 
         for mapping in dataset_concept.mappings:
@@ -420,7 +434,15 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             table = mapping.pattern.table
             event = mapping.pattern.event
 
-            table_path = self.extraction_dataset.data_path / dataset / version / table
+            extraction_dataset = self.extraction_dataset
+            if not extraction_dataset:
+                logger.warning(
+                    "skipping concept %s: extraction dataset not found",
+                    concept.identifier,
+                )
+                return
+
+            table_path = extraction_dataset.data_path / dataset / version / table
 
             if event is None:
                 data_paths = sorted(table_path.glob("*.parquet"))
@@ -488,57 +510,27 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 for col_name, pattern in mapping.pattern.extensions.items():
                     lf = lf.filter(pl.col(col_name).str.contains(pattern))
 
-                # extension columns
-                lf = lf.with_columns(pl.lit(dataset).alias("dataset"))
-                lf = lf.with_columns(pl.lit(version).alias("version"))
-                lf = lf.with_columns(pl.lit(table).alias("table"))
-                lf = lf.with_columns(pl.lit(event_name).alias("event"))
-
-                extension_columns = concept.extension_columns.copy()
-                extension_columns.update(dataset_extension_columns or {})
-                for col_name, col_expr in extension_columns.items():
-                    lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
-
-                # value columns
-                if mapping.columns.text_value is None:
-                    lf = lf.with_columns(pl.lit(None).alias("text_value"))
-                else:
-                    lf = lf.with_columns(parse_expr(lf, mapping.columns.text_value).alias("text_value"))
-
-                if mapping.columns.numeric_value is None:
-                    lf = lf.with_columns(pl.lit(None).alias("numeric_value"))
-                else:
-                    expr = parse_expr(lf, mapping.columns.numeric_value)
-
-                    lf = lf.with_columns(expr.cast(pl.Float64, strict=False).alias("numeric_value"))
-
-                # code column
-                lf = lf.with_columns(pl.lit(concept.code).alias("code"))
-
-                for expr in mapping.filters:
-                    lf = lf.filter(parse_expr(lf, expr))
-
-                lf = lf.select(
-                    [
-                        pl.col("subject_id").cast(pl.Int64),
-                        pl.col("time").cast(pl.Datetime(time_unit="us")),
-                        pl.col("code").cast(pl.String),
-                        pl.col("numeric_value").cast(pl.Float32),
-                        pl.col("text_value").cast(pl.String),
-                    ]
-                    + [pl.col(col).cast(pl.String) for col in extension_columns]
+                lf = self.build_mapping_frame(
+                    lf,
+                    concept,
+                    mapping,
+                    dataset=dataset,
+                    version=version,
+                    table=table,
+                    event_name=event_name,
+                    dataset_extension_columns=dataset_extension_columns,
                 )
 
                 lf = self.apply_limits(concept, lf)
 
-                output_file = output_dataset_path / f"{str(uuid4())}.parquet"
+                tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
                 logger.debug(
                     "Writing temporary concept file for %s to %s",
                     concept.identifier,
-                    output_file,
+                    tmp_output_file,
                 )
                 lf.sink_parquet(
-                    output_file,
+                    tmp_output_file,
                 )
 
                 del lf
@@ -549,9 +541,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             logger.info(
                 "Writing merged concept file for %s to %s",
                 concept.identifier,
-                output_data_path / f"{dataset_concept.dataset}.parquet",
+                output_file,
             )
-            pl.scan_parquet(files).sink_parquet(output_data_path / f"{dataset_concept.dataset}.parquet")
+            pl.scan_parquet(files).sink_parquet(output_file)
 
         logger.debug(
             "Cleaning up temporary concept files for %s in %s",
@@ -563,37 +555,98 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         output_dataset_path.rmdir()
 
-    def get_path_for_concept_table(self, table: BaseConceptTable, dataset: str) -> Path:
-        concept = self._registry.get(table.concept)
-        if concept is None:
-            raise FileNotFoundError(f"concept not found in registry ({table.concept})")
-        assert self._workspace_dir is not None
-        output_data_path = Path(self._workspace_dir.path, *concept.identifier_tuple[1:])
-        return output_data_path / f"{dataset}.parquet"
-
-    def extract_derived_concept(
-        self,
+    @classmethod
+    def build_mapping_frame(
+        cls,
+        lf: pl.LazyFrame,
         concept: ConceptConfig,
-        dataset_concept: DerivedDatasetConceptConfig,
-    ) -> None:
-        logger.debug(
-            "Extracting derived concept %s for dataset %s",
-            concept.identifier,
-            dataset_concept.dataset,
+        mapping: MappingConfig,
+        *,
+        dataset: str,
+        version: str,
+        table: str,
+        event_name: str,
+        dataset_extension_columns: dict[str, str] | None = None,
+    ) -> pl.LazyFrame:
+        """Map the matching rows of one extracted event to the concept's output columns.
+
+        Args:
+            lf: Extracted event rows matching the mapping pattern
+            concept: The concept being extracted
+            mapping: The simple mapping that matched `lf`
+            dataset: Dataset name, exposed as the ``dataset`` column
+            version: Dataset version, exposed as the ``version`` column
+            table: Source table name, exposed as the ``table`` column
+            event_name: Source event name, exposed as the ``event`` column
+            dataset_extension_columns: Extra extension columns configured for the dataset
+
+        Returns:
+            LazyFrame with the MEDS columns plus the concept's extension columns
+        """
+        # extension columns
+        lf = lf.with_columns(pl.lit(dataset).alias("dataset"))
+        lf = lf.with_columns(pl.lit(version).alias("version"))
+        lf = lf.with_columns(pl.lit(table).alias("table"))
+        lf = lf.with_columns(pl.lit(event_name).alias("event"))
+
+        extension_columns = concept.extension_columns.copy()
+        extension_columns.update(dataset_extension_columns or {})
+        for col_name, col_expr in extension_columns.items():
+            lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
+
+        # value columns
+        if mapping.columns.text_value is None:
+            lf = lf.with_columns(pl.lit(None).alias("text_value"))
+        else:
+            lf = lf.with_columns(parse_expr(lf, mapping.columns.text_value).alias("text_value"))
+
+        if mapping.columns.numeric_value is None:
+            lf = lf.with_columns(pl.lit(None).alias("numeric_value"))
+        else:
+            expr = parse_expr(lf, mapping.columns.numeric_value)
+
+            lf = lf.with_columns(expr.cast(pl.Float64, strict=False).alias("numeric_value"))
+
+        # code column
+        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
+
+        for expr in mapping.filters:
+            lf = lf.filter(parse_expr(lf, expr))
+
+        lf = lf.select(
+            [
+                pl.col("subject_id").cast(pl.Int64),
+                pl.col("time").cast(pl.Datetime(time_unit="us")),
+                pl.col("code").cast(pl.String),
+                pl.col("numeric_value").cast(pl.Float32),
+                pl.col("text_value").cast(pl.String),
+            ]
+            + [pl.col(col).cast(pl.String) for col in extension_columns]
         )
 
-        def _read_table(file_path: Path, table: BaseConceptTable) -> pl.LazyFrame:
-            if not file_path.exists():
-                raise FileNotFoundError(f"file not found ({file_path})")
-            logger.debug(
-                "Reading concept table %s from %s",
-                table.concept,
-                file_path,
-            )
-            lf = pl.scan_parquet(
-                file_path,
-                low_memory=True,
-            ).select(table.columns)
+        return lf
+
+    @classmethod
+    def build_derived_frame(
+        cls,
+        concept: ConceptConfig,
+        dataset_concept: DerivedDatasetConceptConfig,
+        scan: Callable[[BaseConceptTable], pl.LazyFrame],
+    ) -> pl.LazyFrame:
+        """Join the dependency concepts of a derived concept and map them to its output columns.
+
+        Args:
+            concept: The derived concept
+            dataset_concept: The dataset-specific derived mapping
+            scan: Returns the output frame of a dependency concept. Separated from
+                the processing so the pipeline can be checked on empty frames.
+
+        Returns:
+            LazyFrame with the MEDS columns plus the concept's extension columns
+        """
+
+        def _read_table(table: BaseConceptTable) -> pl.LazyFrame:
+            lf = scan(table).select(table.columns)
 
             for expr in table.pre_callbacks:
                 lf = lf.with_columns(parse_expr(lf, expr))
@@ -603,33 +656,26 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
             return lf
 
-        try:
-            lf = _read_table(
-                self.get_path_for_concept_table(dataset_concept.table, dataset_concept.dataset),
-                dataset_concept.table,
-            )
-            post_callbacks = [*dataset_concept.table.post_callbacks]
+        lf = _read_table(dataset_concept.table)
+        post_callbacks = [*dataset_concept.table.post_callbacks]
 
-            for join_table in dataset_concept.join:
-                logger.debug(
-                    "Joining concept table %s with %s (how=%s)",
-                    dataset_concept.table.concept,
-                    join_table.concept,
-                    join_table.how,
-                )
-                lf = lf.join(
-                    _read_table(
-                        self.get_path_for_concept_table(join_table, dataset_concept.dataset),
-                        join_table,
-                    ),
-                    how=join_table.how,  # ty: ignore[invalid-argument-type]
-                    suffix=join_table.suffix,
-                    **join_table.join_params,  # ty: ignore[invalid-argument-type]
-                )
-                post_callbacks.extend(join_table.post_callbacks)
-        except FileNotFoundError as e:
-            logger.warning("skipping table %s: %s", dataset_concept.table.concept, e)
-            return
+        for join_table in dataset_concept.join:
+            logger.debug(
+                "Joining concept table %s with %s (how=%s)",
+                dataset_concept.table.concept,
+                join_table.concept,
+                join_table.how,
+            )
+            lf = lf.join(
+                _read_table(join_table),
+                how=join_table.how,  # ty: ignore[invalid-argument-type]
+                suffix=join_table.suffix,
+                # Full joins don't coalesce keys by default, which would leave
+                # subject_id/time null for rows present only on the right side.
+                coalesce=True,
+                **join_table.join_params,  # ty: ignore[invalid-argument-type]
+            )
+            post_callbacks.extend(join_table.post_callbacks)
 
         for expr in post_callbacks:
             lf = lf.with_columns(parse_expr(lf, expr))
@@ -637,18 +683,17 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         columns = dataset_concept.event.model_dump()
         extension = concept.extension_columns.copy()
         extension.update(columns.pop("extension") or {})
+        # Keyed by output column name so several columns may share the same expression.
         mapping = {
-            col_expr: col_name
-            for col_name, col_expr in columns.items()
-            if col_expr is not None and not isinstance(col_expr, list)
-        } | {col_expr: col_name for col_name, col_expr in extension.items() if col_expr is not None}
+            col_name: col_expr for col_name, col_expr in (columns | extension).items() if col_expr is not None
+        }
 
         if dataset_concept.event.text_value is None:
             lf = lf.with_columns(pl.lit(None, dtype=pl.String).alias("text_value"))
         if dataset_concept.event.numeric_value is None:
             lf = lf.with_columns(pl.lit(None, dtype=pl.Float32).alias("numeric_value"))
 
-        for col_expr, col_name in mapping.items():
+        for col_name, col_expr in mapping.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
         # code column
@@ -669,19 +714,54 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             + [pl.col(col).cast(pl.String) for col in extension.keys()]
         )
 
+        return lf
+
+    def get_path_for_concept_table(self, table: BaseConceptTable, dataset: str, version: str) -> Path:
+        concept = self._registry.get(table.concept)
+        if concept is None:
+            raise FileNotFoundError(f"concept not found in registry ({table.concept})")
+        return self.concept_output_file(concept, dataset, version)
+
+    def extract_derived_concept(
+        self,
+        concept: ConceptConfig,
+        dataset_concept: DerivedDatasetConceptConfig,
+    ) -> None:
+        logger.debug(
+            "Extracting derived concept %s for dataset %s",
+            concept.identifier,
+            dataset_concept.dataset,
+        )
+
+        def _scan(table: BaseConceptTable) -> pl.LazyFrame:
+            file_path = self.get_path_for_concept_table(table, dataset_concept.dataset, dataset_concept.version)
+            if not file_path.exists():
+                raise FileNotFoundError(f"file not found ({file_path})")
+            logger.debug(
+                "Reading concept table %s from %s",
+                table.concept,
+                file_path,
+            )
+            return pl.scan_parquet(file_path, low_memory=True)
+
+        try:
+            lf = self.build_derived_frame(concept, dataset_concept, _scan)
+        except FileNotFoundError as e:
+            logger.warning("skipping table %s: %s", dataset_concept.table.concept, e)
+            return
+
         lf = self.apply_limits(concept, lf)
 
-        assert self._workspace_dir is not None
-        output_data_path = self.concept_output_dir(concept)
-        output_data_path.mkdir(parents=True, exist_ok=True)
+        output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(
             "Writing derived concept %s to %s",
             concept.identifier,
-            output_data_path / f"{dataset_concept.dataset}.parquet",
+            output_file,
         )
 
-        lf.sink_parquet(output_data_path / f"{dataset_concept.dataset}.parquet")
+        lf.sink_parquet(output_file)
 
         del lf
         gc.collect()
@@ -695,8 +775,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         The transformer class referenced by the mapping's ``concept_transformer``
         dotted path is instantiated with the concept, the per-dataset mapping
         config, and the mapping's ``kwargs``, then called with this step. It is
-        expected to write its per-dataset parquet output below
-        ``self.concept_output_dir(concept)`` so ``collect()`` picks it up.
+        expected to write its per-dataset parquet output to
+        ``self.concept_output_file(concept, dataset, version)`` so ``collect()`` picks it up.
         Args:
             concept: The concept configuration the transformer runs for
             dataset_concept: The dataset-specific complex mapping configuration

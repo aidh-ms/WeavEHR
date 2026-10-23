@@ -3,12 +3,12 @@ from typing import Optional
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_expr, with_output
 from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
-class ToDatetime(CallbackProtocol):
+class ToDatetime(OutputCallbackProtocol):
     def __init__(
         self,
         year: AstValue,
@@ -56,13 +56,11 @@ class ToDatetime(CallbackProtocol):
             else:
                 raise ValueError(f"Unsupported offset_unit: {self.offset_unit}")
 
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class AddOffset(CallbackProtocol):
+class AddOffset(OutputCallbackProtocol):
     def __init__(
         self,
         datetime: AstValue,
@@ -92,13 +90,11 @@ class AddOffset(CallbackProtocol):
 
         expr = to_expr(lf, self.datetime) + pl.duration(**{self.offset_unit: offset_expr})  # ty: ignore[invalid-argument-type]
 
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class SetTime(CallbackProtocol):
+class SetTime(OutputCallbackProtocol):
     def __init__(
         self,
         datetime: AstValue,
@@ -125,13 +121,11 @@ class SetTime(CallbackProtocol):
             second=to_expr(lf, self.seconds),
         )
 
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class ParseDateTime(CallbackProtocol):
+class ParseDateTime(OutputCallbackProtocol):
     """Concatenate one or more columns/literals into a datetime string and parse it.
 
     Attributes:
@@ -163,13 +157,11 @@ class ParseDateTime(CallbackProtocol):
             separator="",
         ).str.strptime(pl.Datetime, format=self.format, strict=self.strict)
 
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class DatetimeDiff(CallbackProtocol):
+class DatetimeDiff(OutputCallbackProtocol):
     """Compute the difference between two datetime columns as a fractional number of units.
 
     Attributes:
@@ -210,6 +202,5 @@ class DatetimeDiff(CallbackProtocol):
         duration_expr = to_expr(lf, self.end) - to_expr(lf, self.start)
         expr = duration_expr.dt.total_seconds() / self.SECONDS_PER_UNIT[self.unit]
 
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+
+        return with_output(expr, self.output)

@@ -41,13 +41,15 @@ mappings:
   - pattern:
       table: laboratory
       event: LAB
-      code: "(355)(//.*)?$"   # ricu bun, SICdb LaboratoryID 355
+      code: "^(355)(//.*)?$"   # ricu bun, SICdb LaboratoryID 355
     columns:
       numeric_value: col(numeric_value) * 0.467
       text_value: col(text_value)
 ```
 
-The id pattern is anchored with `(//.*)?$` so a short id does not match a longer one.
+The id pattern is anchored at both ends (`^(...)(//.*)?$`). Concept patterns are matched with an
+unanchored regex search, so without the leading `^` a short id such as `708` would also match the
+end of a longer one (`1708`).
 Every conversion factor (bun `* 0.467`, ca `* 4.008`, mg `* 2.431`, phos `* 3.097521`,
 tnt `/ 1000`, weight `* 0.001` g→kg) was checked against the concept's declared `unit`
 before being applied.

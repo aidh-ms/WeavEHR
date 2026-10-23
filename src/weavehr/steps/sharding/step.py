@@ -76,26 +76,31 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         logger.info("Finished sharding step: wrote %d shard file(s)", written_files)
 
     def _selected_concept_files(self, concept_data_path: Path) -> list[Path]:
-        """Find concept Parquet files matching the configured dataset/concept filters."""
+        """Find concept Parquet files matching the configured dataset/concept filters.
+
+        Concept files are laid out as
+        ``<concept path>/<concept version>/<dataset>/<dataset version>.parquet``.
+        """
         datasets = set(self._config.config.datasets)
         concept_filters = self._normalize_concept_filters(self._config.config.concepts)
 
         concept_files: list[Path] = []
         for file_path in sorted(concept_data_path.rglob("*.parquet")):
-            if datasets and file_path.stem not in datasets:
-                continue
-
             relative_file_path = file_path.relative_to(concept_data_path)
             relative_parts = relative_file_path.parts
 
-            if len(relative_parts) < 3:
+            if len(relative_parts) < 4:
                 logger.warning(
                     "Skipping concept file with unexpected path structure: %s",
                     file_path,
                 )
                 continue
 
-            concept_path = Path(*relative_parts[:-2])
+            dataset, dataset_version = relative_parts[-2], file_path.stem
+            if datasets and dataset not in datasets and f"{dataset}/{dataset_version}" not in datasets:
+                continue
+
+            concept_path = Path(*relative_parts[:-3])
 
             if concept_filters and not self._matches_concept_filter(
                 concept_path,

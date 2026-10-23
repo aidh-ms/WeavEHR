@@ -1,10 +1,13 @@
 """Tests for project, workspace, and MEDS dataset storage."""
 
 import json
+from importlib.metadata import version
 from pathlib import Path
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
+from meds.schema import CodeMetadataSchema, DatasetMetadataSchema
 
 from weavehr.storage.base import FileStorage
 from weavehr.storage.meds import MEDSDataset
@@ -94,6 +97,33 @@ class TestWeavEHRProject:
         # contents are preserved (overwrite=False), not wiped
         assert (table_dir / "MEASUREMENT.parquet").exists()
 
+    def test_creates_subdirectories(self, tmp_path: Path) -> None:
+        project = WeavEHRProject(tmp_path / "project")
+
+        assert project.datasets_path.is_dir()
+        assert project.workspace_path.is_dir()
+        assert project.configs_path.is_dir()
+
+    def test_creates_subdirectories_in_existing_root(self, tmp_path: Path) -> None:
+        project_path = tmp_path / "project"
+        project_path.mkdir()
+
+        project = WeavEHRProject(project_path)
+
+        assert project.datasets_path.is_dir()
+        assert project.workspace_path.is_dir()
+        assert project.configs_path.is_dir()
+
+    def test_reopen_with_existing_subdirectories(self, tmp_path: Path) -> None:
+        project_path = tmp_path / "project"
+        WeavEHRProject(project_path)
+
+        reopened = WeavEHRProject(project_path)
+
+        assert reopened.datasets_path.is_dir()
+        assert reopened.workspace_path.is_dir()
+        assert reopened.configs_path.is_dir()
+
     def test_fresh_project_discovers_no_datasets(self, tmp_path: Path) -> None:
         project = WeavEHRProject(tmp_path / "project")
         assert project.datasets == {}
@@ -107,8 +137,17 @@ class TestMEDSDataset:
         metadata = json.loads((dataset.metadata_path / "dataset.json").read_text())
         assert metadata["dataset_name"] == "test"
         assert metadata["etl_name"] == "WeavEHR"
-        assert "meds_version" in metadata
+        assert metadata["etl_version"] == version("weavehr")
+        assert metadata["meds_version"] == version("meds")
         assert "created_at" in metadata
+        DatasetMetadataSchema.validate(metadata)
+
+    def test_write_metadata_does_not_mutate_input(self, tmp_path: Path) -> None:
+        dataset = MEDSDataset(tmp_path / "ds")
+        metadata = {"dataset_name": "test", "dataset_version": "1.0"}
+        dataset.write_metadata(metadata)
+
+        assert metadata == {"dataset_name": "test", "dataset_version": "1.0"}
 
     def test_write_metadata_rejects_invalid_schema(self, tmp_path: Path) -> None:
         dataset = MEDSDataset(tmp_path / "ds")
@@ -135,3 +174,13 @@ class TestMEDSDataset:
         codes = pl.read_parquet(dataset.metadata_path / "codes.parquet")
         assert codes.height == 0
         assert "code" in codes.columns
+
+    @pytest.mark.parametrize("with_data", [True, False])
+    def test_write_codes_matches_meds_schema(self, tmp_path: Path, with_data: bool) -> None:
+        dataset = MEDSDataset(tmp_path / "ds")
+        if with_data:
+            pl.DataFrame({"code": ["a//1", "b//2"]}).write_parquet(dataset.data_path / "x.parquet")
+
+        dataset.write_codes()
+
+        CodeMetadataSchema.validate(pq.read_table(dataset.metadata_path / "codes.parquet"))

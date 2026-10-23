@@ -1,8 +1,10 @@
 """Tests for concept step configuration models (concept, simple/derived/complex)."""
 
+import logging
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
@@ -61,7 +63,15 @@ class TestConceptConfig:
         assert mapping.pattern.code == "(220045//Heart Rate)"
 
     def test_regex_uses_wildcards_for_missing_parts(self) -> None:
-        mapping = MappingConfig.model_validate({"pattern": {"table": "example", "code": "(220045)", }, "columns": {}})
+        mapping = MappingConfig.model_validate(
+            {
+                "pattern": {
+                    "table": "example",
+                    "code": "(220045)",
+                },
+                "columns": {},
+            }
+        )
         assert mapping.pattern.code == "(220045)"
 
 
@@ -123,6 +133,37 @@ class TestDerivedConcept:
             "weavehr.config.concept.patient_weight.1.0.0",
             "weavehr.config.concept.patient_height.1.0.0",
         }
+
+    def test_event_code_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"event\.code"):
+            self.make_derived(event={"numeric_value": "col(bmi)", "code": ["col(code)"]})
+
+    def test_unknown_event_key_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"event\.nmeric_value"):
+            self.make_derived(event={"nmeric_value": "col(bmi)"})
+
+    def test_mapping_with_event_code_is_skipped_on_load(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        concept_file = tmp_path / "bmi.yml"
+        concept_file.write_text("name: bmi\nversion: 1.0.0\nunit: kg/m2\n")
+        mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
+        mapping_dir.mkdir(parents=True)
+        (mapping_dir / "bmi.yml").write_text(
+            """\
+type: derived
+table:
+  concept: patient_weight.1.0.0
+  columns: [subject_id, time, numeric_value]
+event:
+  numeric_value: col(numeric_value)
+  code: [col(code)]
+"""
+        )
+
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            concept = ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
+
+        assert concept.dataset_concepts == []
+        assert "event.code" in caplog.text
 
     def test_join_defaults(self) -> None:
         derived = self.make_derived()

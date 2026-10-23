@@ -74,10 +74,10 @@ WeavEHR requires **Python 3.13+**. You can install WeavEHR via PyPI or from sour
 ### With PyPI
 ```bash
 # with pip
-pip install open-icu
+pip install weavehr
 
 # with uv
-uv add open-icu
+uv add weavehr
 ```
 
 ### With GitHub
@@ -156,7 +156,7 @@ output/project/
     │   ├── data/mimic-iv/3.1/<table>/<EVENT>.parquet
     │   └── metadata/{dataset.json, codes.parquet}
     └── concept/
-        ├── data/<concept>/<version>/<dataset>.parquet
+        ├── data/<concept>/<concept version>/<dataset>/<dataset version>.parquet
         └── metadata/{dataset.json, codes.parquet}
 ```
 

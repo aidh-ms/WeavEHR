@@ -1,9 +1,12 @@
 type: simple
 mappings:
+  # 226707 "Height" is charted in inches (d_items unitname: Inch), so convert to cm as ricu does.
+  # 226730 "Height (cm)" is charted at the same time as 226707 and is deliberately not mapped
+  # to avoid duplicate rows.
   - pattern:
       table: chartevents
       event: CHART
       code: (226707(//.*)?)
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: col(numeric_value) * 2.54
       text_value: col(text_value)

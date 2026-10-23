@@ -457,7 +457,7 @@ def _run_pipeline(
 
 
 def _concept_output(project: WeavEHRProject, name: str) -> pl.DataFrame:
-    path = project.datasets_path / "concept" / "data" / name / "1.0.0" / f"{DATASET}.parquet"
+    path = project.datasets_path / "concept" / "data" / name / "1.0.0" / DATASET / "1.0.parquet"
     return pl.read_parquet(path).sort("time")
 
 
