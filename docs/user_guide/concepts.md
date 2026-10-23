@@ -138,6 +138,15 @@ class VentilationWindows:
     def __call__(self, project: WeavEHRProject) -> None: ...
 ```
 
+### SOFA measurement alignment
+
+SOFA components carry the latest point measurements forward for **one hour**
+by default, including the one-hour boundary. Set `kwargs.window` in a component's
+mapping to override this alignment window. This covers creatinine, PaO₂/FiO₂,
+platelets, bilirubin, GCS and MAP. Urine collection remains a trailing 24-hour
+window; ventilation and pressors retain their separate state-expiry rules.
+Total SOFA still takes each component's worst emitted score over 24 hours.
+
 ### Cardiovascular SOFA
 
 `sofa_cardiovascular` reassesses at every MAP or pressor input event, including

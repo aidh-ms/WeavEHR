@@ -143,6 +143,30 @@ def test_a_component_with_no_current_input_emits_nothing() -> None:
     assert out.height == 1
 
 
+@pytest.mark.parametrize(
+    ("cls", "values", "expected"),
+    [
+        (SofaRenalTransformer, {"creatinine": 2.5}, 2.0),
+        (SofaRespiratoryTransformer, {"O2_partial_pressure": 60.0, "fraction_of_inspired_oxygen": 50.0}, 2.0),
+        (SofaCoagulationTransformer, {"platelet_count": 40.0}, 3.0),
+        (SofaLiverTransformer, {"total_bilirubin": 7.0}, 3.0),
+        (SofaCnsTransformer, {"gcs_total": 5.0}, 4.0),
+        (SofaCardiovascularTransformer, {"mean_arterial_pressure": 60.0}, 1.0),
+    ],
+)
+@pytest.mark.parametrize(("window", "hours"), [(None, 1), ("2h", 2)], ids=["default", "mapping-override"])
+def test_component_measurement_alignment_includes_its_boundary(
+    cls: type[WindowedConceptTransformer], values: dict[str, float], expected: float, window: str | None, hours: int
+) -> None:
+    boundary = at(hours)
+    after = boundary + timedelta(microseconds=1)
+    transformer = make(cls) if window is None else make(cls, window=window)
+    result = transformer.transform(
+        {name: frame((1, T0, value), (1, boundary, None), (1, after, None)) for name, value in values.items()}
+    ).collect()
+    assert result.rows() == [(1, T0, expected), (1, boundary, expected)]
+
+
 class TestCardiovascular:
     @staticmethod
     def rates(*rows: tuple[int, float, float | None, str | None, str | None]) -> pl.LazyFrame:
@@ -631,7 +655,7 @@ class TestRenalCombination:
         # coincident creatinine + urine collapse to one evaluation
         assert renal_scores(renal, frame((1, at(24), crea)), covered_urine((24, urine))) == [expected]
 
-    @pytest.mark.parametrize("alignment_window", ["24h", "1h"], ids=["existing-24h", "proposed-1h"])
+    @pytest.mark.parametrize("alignment_window", ["24h", "1h"], ids=["override-24h", "default-1h"])
     @pytest.mark.parametrize("assessment_minute", [0, 58], ids=["same-clock-hour", "across-clock-hour"])
     def test_lower_creatinine_preserves_a_recent_daily_urine_grade(
         self, alignment_window: str, assessment_minute: int
@@ -698,9 +722,9 @@ class TestRenalCombination:
 
 class TestContinuousTimeSemantics:
     def test_one_event_per_measurement(self, renal: SofaRenalTransformer) -> None:
-        crea = frame((1, T0, 2.0), (1, at(5), 2.0))
+        crea = frame((1, T0, 2.0), (1, at(1), 2.0))
         # three distinct measurement times -> three re-evaluations
-        assert len(renal_scores(renal, crea, frame((1, at(2), 100.0)))) == 3
+        assert len(renal_scores(renal, crea, frame((1, at(0.5), 100.0)))) == 3
 
     def test_creatinine_carried_forward(self, renal: SofaRenalTransformer) -> None:
         crea = frame((1, T0, 4.0))  # score 3, no new creatinine afterwards
@@ -710,10 +734,10 @@ class TestContinuousTimeSemantics:
 
     def test_creatinine_expires_after_the_window(self, renal: SofaRenalTransformer) -> None:
         crea = frame((1, T0, 4.0))
-        # at 24h the creatinine is still current; at 25h it is not, and the urine
+        # at 1h the creatinine is still current; at 2h it is not, and the urine
         # criterion cannot grade either, so nothing is emitted
-        assert renal_scores(renal, crea, frame((1, at(24), 900.0))) == [3.0, 3.0]
-        assert renal_scores(renal, crea, frame((1, at(25), 900.0))) == [3.0]
+        assert renal_scores(renal, crea, frame((1, at(1), 900.0))) == [3.0, 3.0]
+        assert renal_scores(renal, crea, frame((1, at(2), 900.0))) == [3.0]
 
     def test_missing_urine_is_not_zero(self, renal: SofaRenalTransformer) -> None:
         crea = frame((1, T0, 0.5), (1, at(3), 0.5))

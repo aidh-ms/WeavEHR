@@ -10,7 +10,7 @@ directly onto that shared grid.
 
 Thresholds follow ricu, the windowing does not: instead of hourly binning,
 measurements are carried forward within a configurable alignment window
-(24h by default; cardiovascular MAP uses 1h). State inputs have their own
+(1h by default). State inputs have their own
 expiry rules, so a component reflects what is known *now* rather than a
 fixed calendar bin. Urine output is recalculated at every input
 measurement over a separate trailing 24h collection window under
@@ -44,8 +44,10 @@ class SofaComponent(GradedConceptTransformer):
 
     Subclasses implement ``build_inputs`` (so the lookback stays configurable)
     and ``score``. ``window`` comes from the mapping's ``kwargs`` and defaults
-    to 24h unless the component overrides the default.
+    to 1h for measurement alignment. State and collection windows are separate.
     """
+
+    default_window = "1h"
 
     def score(self) -> pl.Expr:
         """Return the 0-4 sub-score expression over the aligned input columns."""
@@ -173,7 +175,6 @@ class SofaCardiovascularTransformer(SofaComponent):
     creates no event. No minimum administration duration is imposed.
     """
 
-    default_window = "1h"
     pressors = ("dopamine_rate", "dobutamine_rate", "epinephrine_rate", "norepinephrine_rate")
 
     def build_inputs(self) -> dict[str, Aggregation]:
