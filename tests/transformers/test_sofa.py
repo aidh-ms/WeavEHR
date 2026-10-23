@@ -12,8 +12,8 @@ Three layers:
   creatinine and urine, and the deepest dependency chain (GCS parts ->
   gcs_total -> sofa_cns, platelets -> sofa_coagulation, both -> sofa).
 
-The general windowing machinery itself is covered in
-``test_windowed_transformer.py``.
+Infusion alignment on the shared windowing grid is covered in
+``test_windowed.py``.
 
 Note on the urine criterion: a trailing sum is reported only across a window
 that was observed end to end, so a lone urine record does not score. The
@@ -144,6 +144,14 @@ def test_a_component_with_no_current_input_emits_nothing() -> None:
 
 
 class TestCardiovascular:
+    @staticmethod
+    def rates(*rows: tuple[int, float, float | None, str | None, str | None]) -> pl.LazyFrame:
+        """Rate events with native stay and infusion identifiers."""
+        return frame(*[(subject, at(hour), rate) for subject, hour, rate, _, _ in rows]).with_columns(
+            pl.Series("stay_id", [row[3] for row in rows], dtype=pl.String),
+            pl.Series("linkorderid", [row[4] for row in rows], dtype=pl.String),
+        )
+
     @pytest.mark.parametrize(
         ("field", "value", "expected"),
         [
@@ -172,6 +180,209 @@ class TestCardiovascular:
     def test_a_stopped_infusion_must_be_charted_as_zero(self) -> None:
         # a rate of 0 is a measurement and scores 0; the tier is not taken
         assert score(make(SofaCardiovascularTransformer), norepinephrine_rate=0.0) == [0.0]
+
+    def test_map_uses_the_latest_value_and_expires_after_one_hour(self) -> None:
+        boundary = at(1.5)
+        out = (
+            make(SofaCardiovascularTransformer)
+            .transform(
+                {
+                    "mean_arterial_pressure": frame((1, T0, 60.0), (1, at(0.5), 75.0)),
+                    "norepinephrine_rate": frame((1, boundary, None), (1, boundary + timedelta(microseconds=1), None)),
+                }
+            )
+            .collect()
+        )
+        assert out.rows() == [(1, T0, 1.0), (1, at(0.5), 0.0), (1, boundary, 0.0)]
+
+    def test_a_stop_reassesses_without_reusing_stale_map(self) -> None:
+        assert scores(
+            make(SofaCardiovascularTransformer),
+            {
+                "mean_arterial_pressure": frame((1, T0, 60.0)),
+                "norepinephrine_rate": self.rates((1, 0.25, 0.2, "100", "A"), (1, 2, 0.0, "100", "A")),
+            },
+        ) == [1.0, 4.0, 0.0]
+
+    @pytest.mark.parametrize(
+        ("drug", "high", "low", "expected"),
+        [
+            ("norepinephrine_rate", 0.2, 0.05, [4.0, 3.0, 0.0]),
+            ("epinephrine_rate", 0.2, 0.05, [4.0, 3.0, 0.0]),
+            ("dopamine_rate", 20.0, 3.0, [4.0, 2.0, 0.0]),
+            ("dobutamine_rate", 2.0, 1.0, [2.0, 2.0, 0.0]),
+        ],
+    )
+    def test_rate_changes_replace_the_previous_rate(
+        self, drug: str, high: float, low: float, expected: list[float]
+    ) -> None:
+        assert (
+            scores(
+                make(SofaCardiovascularTransformer),
+                {drug: self.rates((1, 0, high, "100", "A"), (1, 0.25, low, "100", "A"), (1, 0.5, 0, "100", "A"))},
+            )
+            == expected
+        )
+
+    @pytest.mark.parametrize(
+        ("rate_a", "rate_b", "expected"),
+        [(0.06, 0.06, [3.0, 3.0, 3.0, 0.0]), (0.2, 0.05, [4.0, 4.0, 3.0, 0.0])],
+    )
+    def test_overlaps_use_maximum_and_stops_leave_other_infusions_active(
+        self, rate_a: float, rate_b: float, expected: list[float]
+    ) -> None:
+        assert (
+            scores(
+                make(SofaCardiovascularTransformer),
+                {
+                    "norepinephrine_rate": self.rates(
+                        (1, 0, rate_a, "100", "A"),
+                        (1, 0.25, rate_b, "100", "B"),
+                        (1, 0.5, 0, "100", "A"),
+                        (1, 0.75, 0, "100", "B"),
+                    )
+                },
+            )
+            == expected
+        )
+
+    @pytest.mark.parametrize(("window", "hours", "link"), [("48h", 48, "A"), ("6h", 6, None), ("2h", 2, None)])
+    def test_timeout_is_inclusive_and_only_reassesses_at_input_events(
+        self, window: str, hours: int, link: str | None
+    ) -> None:
+        boundary = at(hours)
+        later = boundary + timedelta(microseconds=1)
+        out = (
+            make(SofaCardiovascularTransformer, pressor_window=window)
+            .transform(
+                {
+                    "norepinephrine_rate": self.rates((1, 0, 0.2, "100", link)),
+                    "mean_arterial_pressure": frame((1, boundary, 75), (1, later, 75), (1, at(hours + 2), 75)),
+                }
+            )
+            .collect()
+        )
+        assert out.rows() == [(1, T0, 4.0), (1, boundary, 4.0), (1, later, 0.0), (1, at(hours + 2), 0.0)]
+
+    def test_a_new_rate_refreshes_the_missing_stop_timeout(self) -> None:
+        assert scores(
+            make(SofaCardiovascularTransformer),
+            {
+                "norepinephrine_rate": self.rates((1, 0, 0.2, "100", "A"), (1, 47, 0.05, "100", "A")),
+                "mean_arterial_pressure": frame((1, at(49), 75), (1, at(95), 75), (1, at(96), 75)),
+            },
+        ) == [4.0, 3.0, 3.0, 3.0, 0.0]
+
+    def test_other_drug_events_do_not_refresh_the_timeout(self) -> None:
+        assert scores(
+            make(SofaCardiovascularTransformer, pressor_window="6h"),
+            {
+                "norepinephrine_rate": self.rates((1, 0, 0.2, "100", None)),
+                "epinephrine_rate": self.rates((1, 5, 0.05, "100", None)),
+                "mean_arterial_pressure": frame((1, at(6), 75), (1, at(7), 75)),
+            },
+        ) == [4.0, 4.0, 4.0, 3.0]
+
+    @pytest.mark.parametrize(("link", "expected"), [("A", [4.0, 4.0, 0.0]), (None, [4.0, 0.0, 0.0])])
+    def test_only_an_identified_matching_stop_confirms_a_long_interval(
+        self, link: str | None, expected: list[float]
+    ) -> None:
+        assert (
+            scores(
+                make(SofaCardiovascularTransformer, pressor_window="6h"),
+                {
+                    "norepinephrine_rate": self.rates((1, 0, 0.2, "100", link), (1, 10, 0, "100", link)),
+                    "mean_arterial_pressure": frame((1, at(8), 75)),
+                },
+            )
+            == expected
+        )
+
+    def test_a_pause_and_restart_do_not_bridge_the_stopped_period(self) -> None:
+        assert scores(
+            make(SofaCardiovascularTransformer),
+            {
+                "norepinephrine_rate": self.rates(
+                    (1, 0, 0.2, "100", "A"),
+                    (1, 1, 0, "100", "A"),
+                    (1, 3, 0.05, "100", "A"),
+                    (1, 4, 0, "100", "A"),
+                ),
+                "mean_arterial_pressure": frame((1, at(2), 75)),
+            },
+        ) == [4.0, 0.0, 0.0, 3.0, 0.0]
+
+    def test_a_linked_recorded_stop_remains_observed_until_its_timeout(self) -> None:
+        out = (
+            make(SofaCardiovascularTransformer, pressor_window="6h")
+            .transform(
+                {
+                    "norepinephrine_rate": self.rates((1, 0, 0.2, "100", "A"), (1, 1, 0, "100", "A")),
+                    "mean_arterial_pressure": frame((1, at(2), None), (1, at(7), None), (1, at(8), None)),
+                }
+            )
+            .collect()
+        )
+        assert out.rows() == [(1, T0, 4.0), (1, at(1), 0.0), (1, at(2), 0.0), (1, at(7), 0.0)]
+
+    def test_identifiers_are_scoped_to_patient_stay_and_drug(self) -> None:
+        out = (
+            make(SofaCardiovascularTransformer)
+            .transform(
+                {
+                    "norepinephrine_rate": self.rates(
+                        (1, 0, 0.2, "100", "A"),
+                        (2, 0.5, 0, "200", "A"),
+                        (1, 2, 0.05, "300", "A"),
+                        (1, 3, 0, "300", "A"),
+                    ),
+                    "epinephrine_rate": self.rates((1, 1, 0, "100", "A")),
+                }
+            )
+            .collect()
+        )
+        assert out.rows() == [(1, T0, 4.0), (1, at(1), 4.0), (1, at(2), 3.0), (1, at(3), 0.0), (2, at(0.5), 0.0)]
+
+    def test_a_stop_with_missing_identity_does_not_stop_an_identified_infusion(self) -> None:
+        assert scores(
+            make(SofaCardiovascularTransformer),
+            {"norepinephrine_rate": self.rates((1, 0, 0.2, "100", "A"), (1, 1, 0, "100", None))},
+        ) == [4.0, 4.0]
+
+    @pytest.mark.parametrize("stopped", [False, True])
+    def test_null_does_not_refresh_and_expiry_is_distinct_from_a_recorded_stop(self, stopped: bool) -> None:
+        out = (
+            make(SofaCardiovascularTransformer, pressor_window="6h")
+            .transform(
+                {
+                    "norepinephrine_rate": self.rates(
+                        (1, 0, 0.2, "100", None), (1, 1, 0 if stopped else None, "100", None)
+                    ),
+                    "mean_arterial_pressure": frame((1, at(7), None)),
+                }
+            )
+            .collect()
+        )
+        assert out.rows() == (
+            [(1, T0, 4.0), (1, at(1), 0.0), (1, at(7), 0.0)] if stopped else [(1, T0, 4.0), (1, at(1), 4.0)]
+        )
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_coincident_stop_and_restart_are_independent_of_row_order(self, reverse: bool) -> None:
+        rows = [(1, 0, 0.2, "100", "A"), (1, 1, 0, "100", "A"), (1, 1, 0.05, "100", "A")]
+        assert scores(
+            make(SofaCardiovascularTransformer),
+            {"norepinephrine_rate": self.rates(*(rows[::-1] if reverse else rows))},
+        ) == [4.0, 3.0]
+
+    def test_empty_inputs_emit_no_assessments(self) -> None:
+        assert (
+            scores(
+                make(SofaCardiovascularTransformer),
+                {"norepinephrine_rate": frame(), "mean_arterial_pressure": frame()},
+            )
+            == []
+        )
 
 
 class TestRespiration:

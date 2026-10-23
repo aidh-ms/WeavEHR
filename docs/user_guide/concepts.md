@@ -90,9 +90,8 @@ identifier is not evidence that the infusion was uninterrupted between records.
 
 The corresponding eICU mappings preserve only `stay_id`. Their
 `infusiondrug` source supplies rate observations rather than paired start/end
-records, so these mappings do not invent an infusion identifier. Missing identity
-and missing ends require an explicit expiry policy in the consumer. Preserving
-metadata does not itself change SOFA's current alignment or expiry behaviour.
+records, so these mappings do not invent an infusion identifier. The cardiovascular
+SOFA consumer applies the alignment and expiry policy described below.
 
 ### Derived concepts
 
@@ -138,6 +137,70 @@ class VentilationWindows:
     def __init__(self, concept, complex_config, **kwargs): ...
     def __call__(self, project: WeavEHRProject) -> None: ...
 ```
+
+### Cardiovascular SOFA
+
+`sofa_cardiovascular` reassesses at every MAP or pressor input event, including
+recorded stops. It uses the **latest MAP within one hour**, rather than the
+worst MAP in that hour. The `window` mapping argument controls this lookback.
+
+Pressor rates have a separate `pressor_window` timeout. Within each dataset,
+patient, stay and drug, native `linkorderid` values identify independent
+infusions across rate changes. A zero stops only its matching infusion. A
+subsequent positive rate restarts it; a positive rate at the same timestamp as
+a zero takes precedence. Concurrent infusions contribute their **maximum rate**,
+not their sum, following the overlap aggregation in
+[ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L486)
+and [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/score/sofa.sql#L140).
+This does not reproduce their time grids, and the component does not apply
+ricu's separate minimum administration duration of one hour.
+
+A linked infusion with a matching zero-rate stop is retained until that stop,
+even if its duration exceeds `pressor_window`. When a matching stop is absent,
+the latest rate remains current through `last_record_time + pressor_window`,
+inclusive. Each new numeric rate refreshes its own stream's timeout; null rates
+and other drugs' events do not. Without an infusion identifier, observations
+form one stream per patient/stay/drug and always use the timeout, including when
+a later zero is recorded. A stop without identity cannot stop an identified
+infusion. A newly observed stay prevents rates from the previous stay carrying
+into its assessments; this cannot detect a stay change absent from all inputs.
+
+Timeout makes a rate unknown at the next input event; it does not generate an
+event at the timeout itself. A recorded zero is observed cessation, whereas
+expiry is missing information. No component score is emitted when all inputs
+are unknown. With a current normal MAP, an expired pressor can yield a component
+score of zero. Total SOFA still uses each component's worst emitted score over
+its own trailing 24-hour window.
+
+The shipped defaults were selected on **2026-10-23 from public demo
+distributions**, not validated as clinical cutoffs:
+
+| Mapping | `window` | `pressor_window` | Empirical basis |
+| --- | --- | --- | --- |
+| MIMIC-IV 2.2 | `1h` | `48h` | Among 1,055 mapped rate segments, the longest was 31.9 h; the longest reconstructed linked start/stop episode was 40.57 h. The fallback rounds above both observed maxima. |
+| eICU-CRD 2.0 | `1h` | `6h` | Among 666 gaps after positive mapped rate observations, the median was 1 h and the 95th percentile was 5.99 h. Thirty-two gaps (4.8%) exceeded 6 h. |
+
+The MIMIC analysis used
+[`inputevents.csv.gz` from demo 2.2](https://physionet.org/files/mimic-iv-demo/2.2/icu/inputevents.csv.gz),
+items 221906, 221289, 221662 and 221653, with the existing `mcg/kg/min`
+selection. Episodes were grouped by stay and `linkorderid`, split at retained
+ends (`statusdescription != "ChangeDose/Rate"`), with simultaneous stop/restart
+treated as continuation. There were 247 closed episodes. All linked streams
+had retained terminal stops, so this sample cannot validate missing-stop expiry.
+
+The eICU analysis used
+[`infusiondrug.csv.gz` from demo 2.0](https://physionet.org/files/eicu-crd-demo/2.0/infusiondrug.csv.gz),
+restricted to the four current mappings' drug names ending in `(mcg/kg/min)`
+and numeric rates: 736 observations across 38 stays. Gaps were measured between
+distinct consecutive timestamps within each stay and source drug name, after
+a positive rate; percentiles used linear interpolation. These are recording
+gaps, not verified infusion durations. The maximum gap was 37.67 h; a long gap
+may contain an unrecorded stop or restart. Other units were excluded, and the
+epinephrine subset contained only four observations in one stay.
+
+MIMIC-IV 3.1 and MIMIC-IV demo 2.2 inherit the MIMIC-IV 2.2 mapping; eICU demo
+2.0 inherits eICU-CRD 2.0. These defaults remain configurable pending clinical
+validation and assessment on representative data.
 
 ## Output layout
 

@@ -2,17 +2,17 @@
 
 Each organ sub-score is a piecewise-constant grade (0-4) over one or two
 inputs, (re)evaluated in continuous time at every contributing measurement.
-All alignment and windowing lives in
+Shared alignment and windowing lives in
 :class:`~weavehr.steps.concept.transformer.windowed.WindowedConceptTransformer`;
-a component only declares which inputs it needs, with the aggregation that
-carries each onto the grid, and a ``score`` expression over the aligned
-columns.
+components declare their inputs, aggregations and scoring expressions. Infusion
+state aggregation retains native identifiers to align independent infusions
+directly onto that shared grid.
 
 Thresholds follow ricu, the windowing does not: instead of hourly binning,
-every input is carried forward only for as long as it can reasonably be
-called current (``window``, 24h by default), so a component reflects what is
-known *now* rather than a fixed calendar bin, and stale data expires instead
-of persisting indefinitely. Urine output is recalculated at every input
+measurements are carried forward within a configurable alignment window
+(24h by default; cardiovascular MAP uses 1h). State inputs have their own
+expiry rules, so a component reflects what is known *now* rather than a
+fixed calendar bin. Urine output is recalculated at every input
 measurement over a separate trailing 24h collection window under
 :class:`SegmentedRollingSum`, so a recorded 0 is real anuria while a window
 that is not fully observed contributes nothing.
@@ -28,6 +28,7 @@ latter is measured from a component event, not from its underlying raw inputs.
 import polars as pl
 
 from weavehr.steps.concept.transformer.windowed import (
+    ActiveState,
     Aggregation,
     GradedConceptTransformer,
     Locf,
@@ -43,7 +44,7 @@ class SofaComponent(GradedConceptTransformer):
 
     Subclasses implement ``build_inputs`` (so the lookback stays configurable)
     and ``score``. ``window`` comes from the mapping's ``kwargs`` and defaults
-    to 24h.
+    to 24h unless the component overrides the default.
     """
 
     def score(self) -> pl.Expr:
@@ -156,23 +157,38 @@ class SofaCnsTransformer(SofaComponent):
 class SofaCardiovascularTransformer(SofaComponent):
     """Cardiovascular sub-score from MAP (mmHg) and vasopressor rates (mcg/kg/min).
 
-    Vasopressor rates are carried forward like any other input, so — as with
-    the urine=0 convention for renal — a stopped infusion must be recorded as
-    a rate of 0; otherwise the last rate persists for the length of the window.
-    A null comparison counts as "not met" (ricu's ``is_true``), so a tier is
-    taken only where one of its conditions is genuinely satisfied.
+    MAP uses the latest measurement within ``window`` (default: 1h). Rates
+    are tracked separately by patient, stay and native ``linkorderid``. A
+    zero stops only its matching infusion; simultaneous infusions contribute
+    their maximum rate, not their sum.
+
+    A linked infusion with a recorded stop remains known until that stop.
+    Otherwise ``pressor_window`` (default: 48h) limits carry-forward from the
+    latest rate record. Without an identifier, observations form one stream
+    per patient/stay/drug and always use that timeout. The shipped eICU mapping
+    sets it to 6h. These provisional defaults come from demo distributions;
+    see the cardiovascular SOFA section in the concept guide.
+
+    Every input event, including a stop, triggers reassessment. Expiry alone
+    creates no event. No minimum administration duration is imposed.
     """
 
+    default_window = "1h"
+    pressors = ("dopamine_rate", "dobutamine_rate", "epinephrine_rate", "norepinephrine_rate")
+
     def build_inputs(self) -> dict[str, Aggregation]:
+        pressor_window = self._kwargs.get("pressor_window", "48h")
         return {
-            name: WindowedLocf(self.window)
-            for name in (
-                "mean_arterial_pressure",
-                "dopamine_rate",
-                "dobutamine_rate",
-                "epinephrine_rate",
-                "norepinephrine_rate",
-            )
+            "mean_arterial_pressure": WindowedLocf(self.window),
+            **{
+                name: ActiveState(
+                    pressor_window,
+                    id_column="linkorderid",
+                    stop_when=pl.col("numeric_value") == 0,
+                    aggregate=pl.Expr.max,
+                )
+                for name in self.pressors
+            },
         }
 
     def score(self) -> pl.Expr:
