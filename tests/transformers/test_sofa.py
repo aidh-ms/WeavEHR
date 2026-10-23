@@ -176,24 +176,32 @@ class TestCardiovascular:
 
 class TestRespiration:
     @pytest.mark.parametrize(
-        ("pao2", "fio2", "vent", "expected"),
+        "vent", [pytest.param(1.0, id="ventilation-on"), pytest.param(0.0, id="ventilation-off")]
+    )
+    @pytest.mark.parametrize(
+        ("pao2", "fio2", "expected_on", "expected_off"),
         [
-            (60.0, 100.0, 1.0, 4.0),  # pafi 60, ventilated
-            (150.0, 100.0, 1.0, 3.0),  # pafi 150, ventilated
-            (250.0, 100.0, 1.0, 2.0),  # pafi 250
-            (350.0, 100.0, 1.0, 1.0),  # pafi 350
-            (500.0, 100.0, 1.0, 0.0),  # pafi 500
-            (60.0, 100.0, 0.0, 2.0),  # pafi 60 but NOT ventilated -> caps at tier 2
+            pytest.param(60.0, 100.0, 4.0, 2.0, id="pafi-60"),
+            pytest.param(100.0, 100.0, 3.0, 2.0, id="boundary-100"),
+            pytest.param(150.0, 100.0, 3.0, 2.0, id="pafi-150"),
+            pytest.param(200.0, 100.0, 2.0, 2.0, id="boundary-200"),
+            pytest.param(250.0, 100.0, 2.0, 2.0, id="pafi-250"),
+            pytest.param(300.0, 100.0, 1.0, 1.0, id="boundary-300"),
+            pytest.param(350.0, 100.0, 1.0, 1.0, id="pafi-350"),
+            pytest.param(400.0, 100.0, 0.0, 0.0, id="boundary-400"),
+            pytest.param(500.0, 100.0, 0.0, 0.0, id="pafi-500"),
         ],
     )
-    def test_pafi_and_ventilation(self, pao2: float, fio2: float, vent: float, expected: float) -> None:
+    def test_pafi_and_ventilation(
+        self, pao2: float, fio2: float, vent: float, expected_on: float, expected_off: float
+    ) -> None:
         result = score(
             make(SofaRespiratoryTransformer),
             O2_partial_pressure=pao2,
             fraction_of_inspired_oxygen=fio2,
             mechanical_ventilation_windows=vent,
         )
-        assert result == [expected]
+        assert result == [expected_on if vent else expected_off]
 
     def test_unknown_ventilation_degrades_to_lower_tiers(self) -> None:
         # pafi 60 with no ventilation record -> cannot reach tier 3/4, scores 2
@@ -207,6 +215,74 @@ class TestRespiration:
 
     def test_one_gas_alone_yields_no_event(self) -> None:
         assert score(make(SofaRespiratoryTransformer), fraction_of_inspired_oxygen=50.0) == []
+
+    @pytest.mark.parametrize(
+        ("vent", "expected_score"),
+        [pytest.param(1.0, 3.0, id="ventilation-on"), pytest.param(0.0, 2.0, id="ventilation-off")],
+    )
+    @pytest.mark.parametrize(
+        ("pao2_time", "fio2_time", "expected_time"),
+        [
+            pytest.param(at(10.5), at(10), at(10.5), id="pao2-arrives-second"),
+            pytest.param(at(10), at(10.5), at(10.5), id="fio2-arrives-second"),
+            pytest.param(
+                at(11) + timedelta(minutes=3),
+                at(10) + timedelta(minutes=58),
+                at(11) + timedelta(minutes=3),
+                id="across-clock-hour",
+            ),
+            pytest.param(at(11), at(10), at(11), id="exactly-one-hour"),
+            pytest.param(at(11) + timedelta(seconds=1), at(10), None, id="fio2-too-old"),
+            pytest.param(at(10), at(11) + timedelta(seconds=1), None, id="pao2-too-old"),
+        ],
+    )
+    def test_gases_align_with_the_latest_other_measurement_within_one_hour(
+        self,
+        vent: float,
+        expected_score: float,
+        pao2_time: datetime,
+        fio2_time: datetime,
+        expected_time: datetime | None,
+    ) -> None:
+        result = (
+            make(SofaRespiratoryTransformer, window="1h")
+            .transform(
+                {
+                    "mechanical_ventilation_windows": frame((1, T0, vent)),
+                    "O2_partial_pressure": frame((1, pao2_time, 60.0)),
+                    "fraction_of_inspired_oxygen": frame((1, fio2_time, 50.0)),
+                }
+            )
+            .collect()
+        )
+        expected = [] if expected_time is None else [(1, expected_time, expected_score)]
+        assert result.rows() == expected
+
+    @pytest.mark.parametrize(
+        ("vent", "updated_gas", "updated_value", "expected_scores"),
+        [
+            pytest.param(1.0, "O2_partial_pressure", 180.0, (3.0, 1.0), id="ventilation-on-pao2-improves"),
+            pytest.param(0.0, "O2_partial_pressure", 180.0, (2.0, 1.0), id="ventilation-off-pao2-improves"),
+            pytest.param(1.0, "O2_partial_pressure", 30.0, (3.0, 4.0), id="ventilation-on-pao2-falls"),
+            pytest.param(0.0, "O2_partial_pressure", 30.0, (2.0, 2.0), id="ventilation-off-pao2-falls"),
+            pytest.param(1.0, "fraction_of_inspired_oxygen", 100.0, (3.0, 4.0), id="ventilation-on-fio2-rises"),
+            pytest.param(0.0, "fraction_of_inspired_oxygen", 100.0, (2.0, 2.0), id="ventilation-off-fio2-rises"),
+            pytest.param(1.0, "fraction_of_inspired_oxygen", 25.0, (3.0, 2.0), id="ventilation-on-fio2-falls"),
+            pytest.param(0.0, "fraction_of_inspired_oxygen", 25.0, (2.0, 2.0), id="ventilation-off-fio2-falls"),
+        ],
+    )
+    def test_latest_gas_value_recalculates_the_component(
+        self, vent: float, updated_gas: str, updated_value: float, expected_scores: tuple[float, float]
+    ) -> None:
+        updated_time = at(10) + timedelta(minutes=5)
+        inputs = {
+            "mechanical_ventilation_windows": frame((1, T0, vent)),
+            "O2_partial_pressure": frame((1, at(10), 60.0)),
+            "fraction_of_inspired_oxygen": frame((1, at(10), 50.0)),
+        }
+        inputs[updated_gas] = pl.concat([inputs[updated_gas], frame((1, updated_time, updated_value))])
+        result = make(SofaRespiratoryTransformer, window="1h").transform(inputs).collect()
+        assert result.rows() == [(1, at(10), expected_scores[0]), (1, updated_time, expected_scores[1])]
 
     def _late_gases(self, **kwargs) -> list:
         transformer = make(SofaRespiratoryTransformer, window="24h", **kwargs)
@@ -227,6 +303,63 @@ class TestRespiration:
         # ...unless the mapping asks for it to expire, which degrades the score
         # to the ventilation-independent tiers
         assert self._late_gases(ventilation_window="24h") == [2.0]
+
+    @pytest.mark.parametrize(
+        ("gas_hour", "expected"),
+        [
+            pytest.param(
+                2.0,
+                [(1, at(2), 3.0), (1, at(2) + timedelta(minutes=5), 2.0)],
+                id="recent-gases-reassessed-at-stop",
+            ),
+            pytest.param(1.0, [(1, at(1), 3.0)], id="stale-gases-cannot-be-scored-at-stop"),
+        ],
+    )
+    def test_ventilation_stop_reassesses_the_component(
+        self, gas_hour: float, expected: list[tuple[int, datetime, float]]
+    ) -> None:
+        result = (
+            make(SofaRespiratoryTransformer, window="1h")
+            .transform(
+                {
+                    "mechanical_ventilation_windows": frame(
+                        (1, T0, 1.0), (1, at(2) + timedelta(minutes=5), 0.0)
+                    ),
+                    "O2_partial_pressure": frame((1, at(gas_hour), 60.0)),
+                    "fraction_of_inspired_oxygen": frame((1, at(gas_hour), 50.0)),
+                }
+            )
+            .collect()
+        )
+        assert result.rows() == expected
+
+    @pytest.mark.parametrize(
+        ("status_hours", "expected_later_score"),
+        [
+            pytest.param((0.0,), 2.0, id="status-expires-without-refresh"),
+            pytest.param((0.0, 1.5), 3.0, id="latest-status-refreshes-timeout"),
+        ],
+    )
+    def test_ventilation_timeout_takes_effect_at_the_next_input_event(
+        self, status_hours: tuple[float, ...], expected_later_score: float
+    ) -> None:
+        gas_time = at(2) - timedelta(minutes=5)
+        later_gas_time = at(2) + timedelta(minutes=5)
+        result = (
+            make(SofaRespiratoryTransformer, window="1h", ventilation_window="2h")
+            .transform(
+                {
+                    "mechanical_ventilation_windows": frame(*[(1, at(hour), 1.0) for hour in status_hours]),
+                    "O2_partial_pressure": frame((1, gas_time, 60.0), (1, later_gas_time, 60.0)),
+                    "fraction_of_inspired_oxygen": frame((1, gas_time, 50.0)),
+                }
+            )
+            .collect()
+        )
+        assert result.rows() == [
+            (1, gas_time, 3.0),
+            (1, later_gas_time, expected_later_score),
+        ]
 
 
 # --- renal: scoring and continuous-time semantics -----------------------------

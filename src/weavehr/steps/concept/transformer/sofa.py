@@ -209,6 +209,11 @@ class SofaRespiratoryTransformer(SofaComponent):
     Ventilation is a state rather than a measurement — it is carried forward
     without expiry, since a patient ventilated for days may generate no new
     ventilation record. Set ``ventilation_window`` to expire it instead.
+
+    Gas measurements and ventilation updates, including stops, trigger
+    reassessment. A score is emitted only when both gas values are current.
+    A configured ventilation timeout makes status unknown at the next input
+    event; expiry alone does not generate an assessment.
     """
 
     def build_inputs(self) -> dict[str, Aggregation]:
