@@ -72,6 +72,28 @@ mappings:
 
 A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions.
 
+For example, the MIMIC-IV mappings for the four cardiovascular SOFA pressors
+preserve their source metadata on both infusion starts and retained ends:
+
+```yaml
+columns:
+  numeric_value: col(originalrate)   # the start mapping; ends still map to zero
+  extension:
+    stay_id: col(stay_id)
+    linkorderid: col(linkorderid)
+```
+
+The native `linkorderid` links an infusion across rate changes. Retained ends
+map to a zero rate, so no separate `event` column is needed for the rate state.
+Match identifiers within the relevant dataset, patient, stay and drug; an
+identifier is not evidence that the infusion was uninterrupted between records.
+
+The corresponding eICU mappings preserve only `stay_id`. Their
+`infusiondrug` source supplies rate observations rather than paired start/end
+records, so these mappings do not invent an infusion identifier. Missing identity
+and missing ends require an explicit expiry policy in the consumer. Preserving
+metadata does not itself change SOFA's current alignment or expiry behaviour.
+
 ### Derived concepts
 
 Derived concepts are computed **from other concepts** rather than from raw events. WeavEHR resolves the dependency graph automatically (topological ordering), so derived concepts can build on other derived concepts.

@@ -128,6 +128,115 @@ class TestSimpleConcepts:
         assert weight["code"].unique().to_list() == ["patient_weight//kg"]
         assert sorted(weight["numeric_value"].to_list()) == [60.0, 80.0]
 
+    @pytest.mark.parametrize("dataset", ["mimic-iv", "eicu-crd"])
+    @pytest.mark.parametrize(
+        ("drug", "itemid"),
+        [("norepinephrine", 221906), ("epinephrine", 221289), ("dopamine", 221662), ("dobutamine", 221653)],
+    )
+    def test_shipped_pressor_mappings_preserve_native_infusion_metadata(
+        self, tmp_path: Path, extraction_config: Path, concept_config: Path, dataset: str, drug: str, itemid: int
+    ) -> None:
+        config_dir = tmp_path / "config"
+        concept_dir = config_dir / "concepts"
+        mapping_dir = config_dir / "testdb" / "1.0" / "mappings"
+        configs = Path(__file__).parents[2] / "configs"
+        name = f"{drug}_rate"
+        version = "2.2" if dataset == "mimic-iv" else "2.0"
+        (concept_dir / f"{name}.yml").write_text((configs / "concepts" / "medications" / f"{name}.yml").read_text())
+        (mapping_dir / f"{name}.yml").write_text(
+            (configs / "datasets" / dataset / version / "mappings" / f"{name}.yml").read_text()
+        )
+        # Metadata must come from the mappings, without dataset-wide extensions.
+        concept_config.write_text(
+            "name: Concept\nversion: 1.0.0\nconfig:\n  extraction_step: Extraction\n"
+            '  mapping_configs:\n    - name: testdb\n      version: "1.0"\n'
+        )
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(config_dir / "testdb" / "1.0" / "tables")
+        load_concept_config(concept_dir, [mapping_dir])
+        ExtractionStep.load(project, extraction_config).run()
+        table = "inputevents" if dataset == "mimic-iv" else "infusiondrug"
+        source = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / table
+        source.mkdir()
+
+        if dataset == "mimic-iv":
+            # Extraction-shaped records: a dose change keeps its linkorderid,
+            # overlapping infusions retain distinct IDs, and IDs may repeat
+            # for another patient. A missing linkorderid stays missing.
+            records = {
+                "INFUSION_START": [
+                    (1, 10, "100", "101", "101", 0.25, None),
+                    (1, 10, "100", "201", "201", 0.125, None),
+                    (1, 11, "100", "102", "101", 0.0625, None),
+                    (1, 14, "100", "301", None, 0.125, None),
+                    (2, 10, "200", "101", "101", 0.125, None),
+                ],
+                "INFUSION_END": [
+                    (1, 11, "100", "101", "101", None, "ChangeDose/Rate"),
+                    (1, 12, "100", "102", "101", None, "Stopped"),
+                    (1, 13, "100", "201", "201", None, "Stopped"),
+                    (1, 15, "100", "301", None, None, "Stopped"),
+                    (2, 12, "200", "101", "101", None, "Stopped"),
+                ],
+            }
+            for event, rows in records.items():
+                pl.DataFrame(
+                    {
+                        "subject_id": [row[0] for row in rows],
+                        "time": [datetime(2024, 1, 1, row[1]) for row in rows],
+                        "stay_id": [row[2] for row in rows],
+                        "orderid": [row[3] for row in rows],
+                        "linkorderid": [row[4] for row in rows],
+                        "originalrate": [str(row[5]) if row[5] is not None else None for row in rows],
+                        "text_value": [row[6] for row in rows],
+                        "numeric_value": [None] * len(rows),
+                        "rateuom": ["mcg/kg/min"] * len(rows),
+                        "code": [f"{event}//{itemid}//{drug}"] * len(rows),
+                    },
+                    schema_overrides={"numeric_value": pl.Float32, "text_value": pl.String},
+                ).write_parquet(source / f"{event}.parquet")
+        else:
+            pl.DataFrame(
+                {
+                    "subject_id": [1, 1, 1],
+                    "time": [datetime(2024, 1, 1, hour) for hour in (10, 11, 12)],
+                    "stay_id": ["100"] * 3,
+                    "code": [f"INFUSION//{drug} (mcg/kg/min)"] * 3,
+                    "numeric_value": [0.25, 0.0625, 0.0],
+                    "text_value": [None] * 3,
+                },
+                schema_overrides={"numeric_value": pl.Float32, "text_value": pl.String},
+            ).write_parquet(source / "INFUSION.parquet")
+
+        ConceptStep.load(project, concept_config).run()
+        result = pl.read_parquet(concept_path(project, name))
+        assert "orderid" not in result.columns
+        assert "event" not in result.columns
+        assert result["code"].unique().to_list() == [f"{name}//mcg/kg/min"]
+        if dataset == "mimic-iv":
+            actual = result.sort("subject_id", "time", "linkorderid").select(
+                "subject_id", "time", "numeric_value", "stay_id", "linkorderid"
+            )
+            assert actual.rows() == [
+                (1, datetime(2024, 1, 1, 10), 0.25, "100", "101"),
+                (1, datetime(2024, 1, 1, 10), 0.125, "100", "201"),
+                (1, datetime(2024, 1, 1, 11), 0.0625, "100", "101"),
+                (1, datetime(2024, 1, 1, 12), 0.0, "100", "101"),
+                (1, datetime(2024, 1, 1, 13), 0.0, "100", "201"),
+                (1, datetime(2024, 1, 1, 14), 0.125, "100", None),
+                (1, datetime(2024, 1, 1, 15), 0.0, "100", None),
+                (2, datetime(2024, 1, 1, 10), 0.125, "200", "101"),
+                (2, datetime(2024, 1, 1, 12), 0.0, "200", "101"),
+            ]
+        else:
+            assert result.sort("time").select("time", "numeric_value", "stay_id").rows() == [
+                (datetime(2024, 1, 1, 10), 0.25, "100"),
+                (datetime(2024, 1, 1, 11), 0.0625, "100"),
+                (datetime(2024, 1, 1, 12), 0.0, "100"),
+            ]
+            assert "linkorderid" not in result.columns
+
 
 class TestDerivedConcepts:
     def test_derived_concept_computed_from_dependencies(self, project: WeavEHRProject) -> None:
