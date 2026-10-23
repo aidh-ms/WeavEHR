@@ -86,7 +86,7 @@ join:                               # further concepts to join in
     columns: [subject_id, time, numeric_value]
     both_on: [subject_id, time]     # default join keys (or left_on/right_on)
     how: full                       # default; inner, left, right, full, semi, anti
-    maintain_order: left            # default; keeps the main table's row order
+    maintain_order: left_right      # default; keeps the main table's row order
     suffix: _right                  # default suffix for overlapping column names
 event:                              # mapping to the output MEDS columns
   numeric_value: <expression>
