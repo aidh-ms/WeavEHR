@@ -72,9 +72,6 @@ docs = [
     "mkdocstrings[python]>=1.0.4",
 ]
 
-[tool.uv]
-exclude-newer = "P7D"
-
 [tool.pytest.ini_options]
 python_files = ["test_*.py", "*_test.py"]
 pythonpath = ["src"]
