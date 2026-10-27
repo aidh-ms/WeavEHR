@@ -10,7 +10,7 @@ directly onto that shared grid.
 
 Thresholds follow ricu, the windowing does not: instead of hourly binning,
 measurements are carried forward within a configurable alignment window
-(1h by default). State inputs have their own
+(1h by default, 2h for respiratory gases). State inputs have their own
 expiry rules, so a component reflects what is known *now* rather than a
 fixed calendar bin. Urine output is recalculated at every input
 measurement over a separate trailing 24h collection window under
@@ -49,7 +49,8 @@ class SofaComponent(GradedConceptTransformer):
 
     Subclasses implement ``build_inputs`` (so the lookback stays configurable)
     and ``score``. ``window`` comes from the mapping's ``kwargs`` and defaults
-    to 1h for measurement alignment. State and collection windows are separate.
+    to 1h for measurement alignment unless the component overrides it. State
+    and collection windows are separate.
     """
 
     default_window = "1h"
@@ -226,6 +227,9 @@ class SofaCardiovascularTransformer(SofaComponent):
 class SofaRespiratoryTransformer(SofaComponent):
     """Respiration sub-score from PaO2/FiO2 (mmHg / %), gated on ventilation.
 
+    Gas measurements use the latest value within ``window`` (default: 2h),
+    including the boundary.
+
     The 4 and 3 tiers require mechanical ventilation; where ventilation status
     is unknown the score degrades to the ventilation-independent tiers (<=2),
     matching ricu's ``is_true(pafi < x & vent)`` with a missing ``vent``. FiO2
@@ -246,6 +250,8 @@ class SofaRespiratoryTransformer(SofaComponent):
     A configured ventilation timeout makes status unknown at the next input
     event; expiry alone does not generate an assessment.
     """
+
+    default_window = "2h"
 
     def build_inputs(self) -> dict[str, Aggregation]:
         return {

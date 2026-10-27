@@ -201,9 +201,10 @@ sepsis outputs after this change.
 ### SOFA measurement alignment
 
 SOFA components carry the latest point measurements forward for **one hour**
-by default, including the one-hour boundary. Set `kwargs.window` in a component's
-mapping to override this alignment window. This covers creatinine, PaO₂/FiO₂,
-platelets, bilirubin, GCS and MAP. Urine collection remains a trailing 24-hour
+by default, except respiratory SOFA, which uses **two hours** for PaO₂/FiO₂.
+Both boundaries are inclusive. Set `kwargs.window` in a component's mapping to
+override this alignment window. Creatinine, platelets, bilirubin, GCS and MAP
+retain the one-hour default. Urine collection remains a trailing 24-hour
 window; ventilation and pressors retain their separate state-expiry rules.
 Total SOFA still takes each component's worst emitted score over 24 hours.
 
@@ -227,7 +228,12 @@ retain their usual meaning.
 Respiratory SOFA consumes `ventilation_start` and `ventilation_end` markers.
 It combines them into 1/0 events only inside the transformer and uses `ActiveState`
 to align ventilation with the gas measurements. No intermediate state concept is written.
-PaO₂/FiO₂ thresholds and the one-hour gas-alignment window are unchanged.
+Gas alignment defaults to **two hours**, following
+[ricu's default matching window](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L192).
+The latest PaO₂ and FiO₂ must each be within that window; no score is emitted
+without both, and missing FiO₂ is not replaced with 21%. Assessments still use
+the input event timestamps rather than ricu's hourly grid. Scoring thresholds
+and ventilation-state rules are unchanged.
 
 The MIMIC-IV mappings select procedure items 225792 and 225794, preserving native
 `orderid` and `stay_id` to pair each procedure's start and end. The eICU mappings

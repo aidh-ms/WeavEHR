@@ -217,21 +217,22 @@ def test_a_component_with_no_current_input_emits_nothing() -> None:
 
 
 @pytest.mark.parametrize(
-    ("cls", "values", "expected"),
+    ("cls", "values", "expected", "default_hours"),
     [
-        (SofaRenalTransformer, {"creatinine": 2.5}, 2.0),
-        (SofaRespiratoryTransformer, {"O2_partial_pressure": 60.0, "fraction_of_inspired_oxygen": 50.0}, 2.0),
-        (SofaCoagulationTransformer, {"platelet_count": 40.0}, 3.0),
-        (SofaLiverTransformer, {"total_bilirubin": 7.0}, 3.0),
-        (SofaCnsTransformer, {"gcs": 5.0}, 4.0),
-        (SofaCardiovascularTransformer, {"mean_arterial_pressure": 60.0}, 1.0),
+        (SofaRenalTransformer, {"creatinine": 2.5}, 2.0, 1),
+        (SofaRespiratoryTransformer, {"O2_partial_pressure": 60.0, "fraction_of_inspired_oxygen": 50.0}, 2.0, 2),
+        (SofaCoagulationTransformer, {"platelet_count": 40.0}, 3.0, 1),
+        (SofaLiverTransformer, {"total_bilirubin": 7.0}, 3.0, 1),
+        (SofaCnsTransformer, {"gcs": 5.0}, 4.0, 1),
+        (SofaCardiovascularTransformer, {"mean_arterial_pressure": 60.0}, 1.0, 1),
     ],
 )
-@pytest.mark.parametrize(("window", "hours"), [(None, 1), ("2h", 2)], ids=["default", "mapping-override"])
+@pytest.mark.parametrize(("window", "hours"), [(None, None), ("3h", 3)], ids=["default", "mapping-override"])
 def test_component_measurement_alignment_includes_its_boundary(
-    cls: type[WindowedConceptTransformer], values: dict[str, float], expected: float, window: str | None, hours: int
+    cls: type[WindowedConceptTransformer], values: dict[str, float], expected: float,
+    default_hours: int, window: str | None, hours: int | None
 ) -> None:
-    boundary = at(hours)
+    boundary = at(default_hours if hours is None else hours)
     after = boundary + timedelta(microseconds=1)
     transformer = make(cls) if window is None else make(cls, window=window)
     result = transformer.transform(
@@ -529,49 +530,44 @@ class TestRespiration:
         transformer = make(SofaRespiratoryTransformer)
         assert score(transformer, O2_partial_pressure=90.0, fraction_of_inspired_oxygen=0.0) == []
 
-    def test_one_gas_alone_yields_no_event(self) -> None:
-        assert score(make(SofaRespiratoryTransformer), fraction_of_inspired_oxygen=50.0) == []
+    @pytest.mark.parametrize("gas", ["O2_partial_pressure", "fraction_of_inspired_oxygen"])
+    def test_one_gas_alone_yields_no_event(self, gas: str) -> None:
+        assert score(make(SofaRespiratoryTransformer), **{gas: 50.0}) == []
 
     @pytest.mark.parametrize(
         ("vent", "expected_score"),
         [pytest.param(1.0, 3.0, id="ventilation-on"), pytest.param(0.0, 2.0, id="ventilation-off")],
     )
     @pytest.mark.parametrize(
-        ("pao2_time", "fio2_time", "expected_time"),
+        ("kwargs", "lag", "assessed"),
         [
-            pytest.param(at(10.5), at(10), at(10.5), id="pao2-arrives-second"),
-            pytest.param(at(10), at(10.5), at(10.5), id="fio2-arrives-second"),
-            pytest.param(
-                at(11) + timedelta(minutes=3),
-                at(10) + timedelta(minutes=58),
-                at(11) + timedelta(minutes=3),
-                id="across-clock-hour",
-            ),
-            pytest.param(at(11), at(10), at(11), id="exactly-one-hour"),
-            pytest.param(at(11) + timedelta(seconds=1), at(10), None, id="fio2-too-old"),
-            pytest.param(at(10), at(11) + timedelta(seconds=1), None, id="pao2-too-old"),
+            pytest.param({}, timedelta(minutes=5), True, id="across-clock-hour"),
+            pytest.param({}, timedelta(hours=1, minutes=49), True, id="newly-included-pair"),
+            pytest.param({}, timedelta(hours=2), True, id="exactly-two-hours"),
+            pytest.param({}, timedelta(hours=2, microseconds=1), False, id="gas-too-old"),
+            pytest.param({"window": "1h"}, timedelta(hours=1), True, id="one-hour-override-boundary"),
+            pytest.param({"window": "1h"}, timedelta(hours=1, microseconds=1), False, id="one-hour-override-expiry"),
         ],
     )
-    def test_gases_align_with_the_latest_other_measurement_within_one_hour(
+    @pytest.mark.parametrize("first_gas", ["O2_partial_pressure", "fraction_of_inspired_oxygen"])
+    def test_gases_align_within_two_hours_unless_overridden(
         self,
         vent: float,
         expected_score: float,
-        pao2_time: datetime,
-        fio2_time: datetime,
-        expected_time: datetime | None,
+        kwargs: dict[str, str],
+        lag: timedelta,
+        assessed: bool,
+        first_gas: str,
     ) -> None:
-        result = (
-            make(SofaRespiratoryTransformer, window="1h")
-            .transform(
-                {
-                    "ventilation_start" if vent else "ventilation_end": frame((1, T0, vent)),
-                    "O2_partial_pressure": frame((1, pao2_time, 60.0)),
-                    "fraction_of_inspired_oxygen": frame((1, fio2_time, 50.0)),
-                }
-            )
-            .collect()
-        )
-        expected = [] if expected_time is None else [(1, expected_time, expected_score)]
+        first_time = at(10) + timedelta(minutes=58)
+        later_time = first_time + lag
+        inputs = {
+            gas: frame((1, first_time if gas == first_gas else later_time, value))
+            for gas, value in (("O2_partial_pressure", 60.0), ("fraction_of_inspired_oxygen", 50.0))
+        }
+        inputs["ventilation_start" if vent else "ventilation_end"] = frame((1, T0, vent))
+        result = make(SofaRespiratoryTransformer, **kwargs).transform(inputs).collect()
+        expected = [(1, later_time, expected_score)] if assessed else []
         assert result.rows() == expected
 
     @pytest.mark.parametrize(
@@ -628,14 +624,18 @@ class TestRespiration:
                 [(1, at(2), 3.0), (1, at(2) + timedelta(minutes=5), 2.0)],
                 id="recent-gases-reassessed-at-stop",
             ),
-            pytest.param(1.0, [(1, at(1), 3.0)], id="stale-gases-cannot-be-scored-at-stop"),
+            pytest.param(
+                1.0, [(1, at(1), 3.0), (1, at(2) + timedelta(minutes=5), 2.0)],
+                id="gases-over-one-hour-old-reassessed-at-stop",
+            ),
+            pytest.param(0.0, [(1, T0, 3.0)], id="stale-gases-cannot-be-scored-at-stop"),
         ],
     )
     def test_ventilation_stop_reassesses_the_component(
         self, gas_hour: float, expected: list[tuple[int, datetime, float]]
     ) -> None:
         result = (
-            make(SofaRespiratoryTransformer, window="1h")
+            make(SofaRespiratoryTransformer)
             .transform(
                 {
                     "ventilation_start": frame((1, T0, 1.0)),
