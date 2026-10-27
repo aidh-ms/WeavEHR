@@ -411,6 +411,14 @@ class TestCardiovascular:
 
 
 class TestRespiration:
+    @staticmethod
+    def markers(*rows: tuple[int, float, str | None, str | None]) -> pl.LazyFrame:
+        """Start/end event presence with native stay and procedure identifiers."""
+        return frame(*[(subject, at(hour), None) for subject, hour, _, _ in rows]).with_columns(
+            pl.Series("stay_id", [row[2] for row in rows], dtype=pl.String),
+            pl.Series("orderid", [row[3] for row in rows], dtype=pl.String),
+        )
+
     @pytest.mark.parametrize(
         "vent", [pytest.param(1.0, id="ventilation-on"), pytest.param(0.0, id="ventilation-off")]
     )
@@ -435,7 +443,7 @@ class TestRespiration:
             make(SofaRespiratoryTransformer),
             O2_partial_pressure=pao2,
             fraction_of_inspired_oxygen=fio2,
-            mechanical_ventilation_windows=vent,
+            **{"ventilation_start" if vent else "ventilation_end": vent},
         )
         assert result == [expected_on if vent else expected_off]
 
@@ -484,7 +492,7 @@ class TestRespiration:
             make(SofaRespiratoryTransformer, window="1h")
             .transform(
                 {
-                    "mechanical_ventilation_windows": frame((1, T0, vent)),
+                    "ventilation_start" if vent else "ventilation_end": frame((1, T0, vent)),
                     "O2_partial_pressure": frame((1, pao2_time, 60.0)),
                     "fraction_of_inspired_oxygen": frame((1, fio2_time, 50.0)),
                 }
@@ -512,7 +520,7 @@ class TestRespiration:
     ) -> None:
         updated_time = at(10) + timedelta(minutes=5)
         inputs = {
-            "mechanical_ventilation_windows": frame((1, T0, vent)),
+            "ventilation_start" if vent else "ventilation_end": frame((1, T0, vent)),
             "O2_partial_pressure": frame((1, at(10), 60.0)),
             "fraction_of_inspired_oxygen": frame((1, at(10), 50.0)),
         }
@@ -525,7 +533,7 @@ class TestRespiration:
         return scores(
             transformer,
             {
-                "mechanical_ventilation_windows": frame((1, T0, 1.0)),
+                "ventilation_start": frame((1, T0, 1.0)),
                 "O2_partial_pressure": frame((1, at(72), 60.0)),
                 "fraction_of_inspired_oxygen": frame((1, at(72), 100.0)),
             },
@@ -558,9 +566,8 @@ class TestRespiration:
             make(SofaRespiratoryTransformer, window="1h")
             .transform(
                 {
-                    "mechanical_ventilation_windows": frame(
-                        (1, T0, 1.0), (1, at(2) + timedelta(minutes=5), 0.0)
-                    ),
+                    "ventilation_start": frame((1, T0, 1.0)),
+                    "ventilation_end": frame((1, at(2) + timedelta(minutes=5), 0.0)),
                     "O2_partial_pressure": frame((1, at(gas_hour), 60.0)),
                     "fraction_of_inspired_oxygen": frame((1, at(gas_hour), 50.0)),
                 }
@@ -585,7 +592,7 @@ class TestRespiration:
             make(SofaRespiratoryTransformer, window="1h", ventilation_window="2h")
             .transform(
                 {
-                    "mechanical_ventilation_windows": frame(*[(1, at(hour), 1.0) for hour in status_hours]),
+                    "ventilation_start": frame(*[(1, at(hour), 1.0) for hour in status_hours]),
                     "O2_partial_pressure": frame((1, gas_time, 60.0), (1, later_gas_time, 60.0)),
                     "fraction_of_inspired_oxygen": frame((1, gas_time, 50.0)),
                 }
@@ -596,6 +603,55 @@ class TestRespiration:
             (1, gas_time, 3.0),
             (1, later_gas_time, expected_later_score),
         ]
+
+    def test_overlapping_episodes_close_independently(self) -> None:
+        result = make(SofaRespiratoryTransformer).transform(
+            {
+                "ventilation_start": self.markers((1, 0, "100", "A"), (1, 0.25, "100", "B")),
+                "ventilation_end": self.markers((1, 0.5, "100", "A"), (1, 0.75, "100", "B")),
+                "O2_partial_pressure": frame((1, T0, 60.0)),
+                "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
+            }
+        ).collect()
+        assert result.rows() == [(1, T0, 4.0), (1, at(0.25), 4.0), (1, at(0.5), 4.0), (1, at(0.75), 2.0)]
+
+    @pytest.mark.parametrize(("order", "expected"), [("A", 4.0), (None, 2.0)])
+    def test_only_an_identified_matching_end_confirms_a_long_episode(
+        self, order: str | None, expected: float
+    ) -> None:
+        result = make(SofaRespiratoryTransformer, ventilation_window="2h").transform(
+            {
+                "ventilation_start": self.markers((1, 0, "100", order)),
+                "ventilation_end": self.markers((1, 4, "100", order)),
+                "O2_partial_pressure": frame((1, at(3), 60.0)),
+                "fraction_of_inspired_oxygen": frame((1, at(3), 100.0)),
+            }
+        ).collect()
+        assert result.rows() == [(1, at(3), expected), (1, at(4), 2.0)]
+
+    @pytest.mark.parametrize("end_order", ["B", None])
+    def test_an_unmatched_end_does_not_stop_an_identified_episode(self, end_order: str | None) -> None:
+        result = make(SofaRespiratoryTransformer).transform(
+            {
+                "ventilation_start": self.markers((1, 0, "100", "A")),
+                "ventilation_end": self.markers((1, 1, "100", end_order)),
+                "O2_partial_pressure": frame((1, T0, 60.0)),
+                "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
+            }
+        ).collect()
+        assert result.rows() == [(1, T0, 4.0), (1, at(1), 4.0)]
+
+    def test_new_stay_context_does_not_inherit_old_ventilation(self) -> None:
+        result = make(SofaRespiratoryTransformer).transform(
+            {
+                "ventilation_start": self.markers((1, 0, "100", "A")),
+                "O2_partial_pressure": frame((1, T0, 60.0), (1, at(0.5), 60.0)).with_columns(
+                    pl.Series("stay_id", ["100", "200"])
+                ),
+                "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
+            }
+        ).collect()
+        assert result.rows() == [(1, T0, 4.0), (1, at(0.5), 2.0)]
 
 
 # --- renal: scoring and continuous-time semantics -----------------------------

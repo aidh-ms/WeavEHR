@@ -31,7 +31,6 @@ from weavehr.steps.concept.transformer.windowed import (
     ActiveState,
     Aggregation,
     GradedConceptTransformer,
-    Locf,
     RollingMax,
     SegmentedRollingSum,
     WindowedLocf,
@@ -223,9 +222,15 @@ class SofaRespiratoryTransformer(SofaComponent):
     matching ricu's ``is_true(pafi < x & vent)`` with a missing ``vent``. FiO2
     is a percentage, so PaO2/FiO2 * 100 yields the ratio in mmHg.
 
-    Ventilation is a state rather than a measurement — it is carried forward
-    without expiry, since a patient ventilated for days may generate no new
-    ventilation record. Set ``ventilation_window`` to expire it instead.
+    Ventilation start/end markers are combined only inside this transformer.
+    ActiveState matches native ``orderid`` values within subject and stay;
+    ``ventilation_id_column`` can select another identifier. Concurrent active
+    episodes keep ventilation on until all have stopped. Unidentified markers
+    form one observation stream per subject/stay.
+
+    ``ventilation_window`` supplies fallback expiry for missing/unlinked stops.
+    A linked recorded stop confirms the state until that end, even beyond the
+    timeout. By default fallback expiry is disabled, preserving carry-forward.
 
     Gas measurements and ventilation updates, including stops, trigger
     reassessment. A score is emitted only when both gas values are current.
@@ -234,14 +239,25 @@ class SofaRespiratoryTransformer(SofaComponent):
     """
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        ventilation_window = self._kwargs.get("ventilation_window")
         return {
             "O2_partial_pressure": WindowedLocf(self.window),
             "fraction_of_inspired_oxygen": WindowedLocf(self.window),
-            "mechanical_ventilation_windows": (
-                WindowedLocf(ventilation_window) if ventilation_window else Locf()
+            "ventilation_state": ActiveState(
+                self._kwargs.get("ventilation_window"),
+                id_column=self._kwargs.get("ventilation_id_column", "orderid"),
+                stop_when=pl.col("numeric_value") == 0,
             ),
         }
+
+    def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        markers = [
+            dependencies[name].with_columns(pl.lit(value, dtype=pl.Float32).alias("numeric_value"))
+            for name, value in (("ventilation_start", 1), ("ventilation_end", 0))
+            if name in dependencies
+        ]
+        if markers:
+            dependencies = {**dependencies, "ventilation_state": pl.concat(markers, how="diagonal_relaxed")}
+        return super().transform(dependencies)
 
     def _pafi(self) -> pl.Expr:
         fio2 = pl.col("fraction_of_inspired_oxygen")
@@ -253,7 +269,7 @@ class SofaRespiratoryTransformer(SofaComponent):
 
     def score(self) -> pl.Expr:
         pafi = self._pafi()
-        ventilated = pl.col("mechanical_ventilation_windows") > 0
+        ventilated = pl.col("ventilation_state") > 0
         return (
             pl.when((pafi < 100) & ventilated)
             .then(4)

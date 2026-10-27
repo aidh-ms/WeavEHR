@@ -178,6 +178,31 @@ platelets, bilirubin, GCS and MAP. Urine collection remains a trailing 24-hour
 window; ventilation and pressors retain their separate state-expiry rules.
 Total SOFA still takes each component's worst emitted score over 24 hours.
 
+### Respiratory SOFA ventilation state
+
+Respiratory SOFA consumes `ventilation_start` and `ventilation_end` markers.
+It combines them into 1/0 events only inside the transformer and uses `ActiveState`
+to align ventilation with the gas measurements. No intermediate state concept is written.
+PaO₂/FiO₂ thresholds and the one-hour gas-alignment window are unchanged.
+
+The MIMIC-IV mappings select procedure items 225792 and 225794, preserving native
+`orderid` and `stay_id` to pair each procedure's start and end. The eICU mappings
+use the existing respiratory-charting `Start` and `Off`/`off` markers and preserve
+`stay_id`; those observations have no shared episode identifier.
+
+An end stops its matching episode; overlapping identified episodes keep ventilation
+on until all have ended. Identifiers are scoped to patient and stay. A new stay
+observed in any input prevents ventilation from the old stay carrying into that
+assessment; a stay change absent from all inputs cannot be detected.
+
+`kwargs.ventilation_window` sets fallback expiry after the latest start/update.
+A linked recorded end confirms the episode until that end, even beyond the timeout;
+unidentified observations always use the configured fallback. Its boundary is
+inclusive. Expiry is evaluated at the next input event; it creates no timestamp.
+The default is `null` (no forced expiry), preserving the previous default until a
+ventilation-specific timeout is agreed. `kwargs.ventilation_id_column` can select
+a native linking field other than the default `orderid`.
+
 ### Cardiovascular SOFA
 
 `sofa_cardiovascular` reassesses at every MAP or pressor input event, including

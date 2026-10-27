@@ -1,0 +1,10 @@
+type: simple
+mappings:
+  - pattern:
+      table: procedureevents
+      event: PROCEDURE_END
+      code: (225792(//.*)?|225794(//.*)?)
+    columns:
+      extension:
+        stay_id: col(stay_id)
+        orderid: col(orderid)

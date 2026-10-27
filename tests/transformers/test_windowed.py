@@ -154,3 +154,14 @@ def test_stop_predicate_can_use_metadata_with_a_null_numeric_value(transformer: 
         }
     ).collect()
     assert result["numeric_value"].to_list() == [-3.0, -3.0, 0.0, 0.0, -1.0]
+
+
+def test_no_timeout_keeps_a_state_until_its_recorded_stop(transformer: RateTransformer) -> None:
+    transformer.inputs = {
+        **transformer.inputs,
+        "rate": ActiveState(None, id_column="pump", stop_when=pl.col("numeric_value") == 0).of("dose"),
+    }
+    result = transformer.transform(
+        {"dose": events([0, 72], [1.0, 0.0], pump=["A", "A"]), "pulse": events([48, 96], [80.0, 80.0])}
+    ).collect()
+    assert result["numeric_value"].to_list() == [1.0, 1.0, 0.0, 0.0]

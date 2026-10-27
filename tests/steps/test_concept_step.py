@@ -1,6 +1,6 @@
 """End-to-end tests for the concept step on synthetic fixture data."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -31,6 +31,73 @@ def project(tmp_path: Path, extraction_config: Path, concept_config: Path) -> We
 
 def concept_path(project: WeavEHRProject, name: str) -> Path:
     return project.datasets_path / "concept" / "data" / name / "1.0.0" / "testdb" / "1.0.parquet"
+
+
+@pytest.mark.parametrize(("dataset", "version"), [("mimic-iv", "2.2"), ("eicu-crd", "2.0")])
+def test_respiratory_sofa_consumes_mapped_start_and_end_markers(
+    tmp_path: Path, extraction_config: Path, concept_config: Path, dataset: str, version: str
+) -> None:
+    """Exercise shipped marker mappings and SOFA together on extraction-shaped rows."""
+    configs = Path(__file__).parents[2] / "configs"
+    config_dir = tmp_path / "config"
+    concept_dir = config_dir / "concepts"
+    mapping_dir = config_dir / "testdb" / "1.0" / "mappings"
+    for name in ("ventilation_start", "ventilation_end", "sofa_respiratory"):
+        category = "outcome" if name == "sofa_respiratory" else "respiratory"
+        (concept_dir / f"{name}.yml").write_text((configs / "concepts" / category / f"{name}.yml").read_text())
+        (mapping_dir / f"{name}.yml").write_text(
+            (configs / "datasets" / dataset / version / "mappings" / f"{name}.yml").read_text()
+        )
+    for name, unit, value in (("O2_partial_pressure", "mmHg", 60), ("fraction_of_inspired_oxygen", "%", 100)):
+        (concept_dir / f"{name}.yml").write_text(f'name: {name}\nversion: 1.0.0\nunit: "{unit}"\n')
+        (mapping_dir / f"{name}.yml").write_text(
+            "type: simple\nmappings:\n  - pattern:\n      table: vitals\n      event: CHART\n"
+            f"      code: ^220045//\n    columns:\n      numeric_value: const({value})\n"
+        )
+    # The marker mappings themselves must retain stay/episode metadata.
+    concept_config.write_text(
+        "name: Concept\nversion: 1.0.0\nconfig:\n  extraction_step: Extraction\n"
+        '  mapping_configs:\n    - name: testdb\n      version: "1.0"\n'
+    )
+    project = WeavEHRProject(tmp_path / "project")
+    load_extracation_config(config_dir / "testdb" / "1.0" / "tables")
+    load_concept_config(concept_dir, [mapping_dir])
+    ExtractionStep.load(project, extraction_config).run()
+
+    start = datetime(2024, 1, 1, 8)
+    end = start + timedelta(minutes=30)
+    if dataset == "mimic-iv":
+        table, code = "procedureevents", "225792//Invasive Ventilation"
+        events = {"PROCEDURE_START": [(start, None)], "PROCEDURE_END": [(end, None)]}
+    else:
+        table, code = "respiratorycharting", "respFlowCareData//RT Vent On/Off"
+        events = {"RESPIRATORY_CHART": [(start, "Start"), (end, "Off")]}
+    source = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / table
+    source.mkdir()
+    for event, rows in events.items():
+        pl.DataFrame(
+            {
+                "subject_id": [1] * len(rows),
+                "time": [row[0] for row in rows],
+                "code": [f"{event}//{code}"] * len(rows),
+                "numeric_value": [None] * len(rows),
+                "text_value": [row[1] for row in rows],
+                "stay_id": ["100"] * len(rows),
+                **({"orderid": ["101"] * len(rows)} if dataset == "mimic-iv" else {}),
+            },
+            schema_overrides={"numeric_value": pl.Float32, "text_value": pl.String},
+        ).write_parquet(source / f"{event}.parquet")
+
+    ConceptStep.load(project, concept_config).run()
+    for name in ("ventilation_start", "ventilation_end"):
+        markers = pl.read_parquet(concept_path(project, name))
+        assert markers["stay_id"].to_list() == ["100"]
+        if dataset == "mimic-iv":
+            assert markers["orderid"].to_list() == ["101"]
+    result = pl.read_parquet(concept_path(project, "sofa_respiratory")).sort("time")
+    assert result.select("subject_id", "time", "numeric_value").rows() == [
+        (1, start, 4.0), (1, end, 2.0), (1, datetime(2024, 1, 1, 9), 2.0)
+    ]
 
 
 class TestSimpleConcepts:

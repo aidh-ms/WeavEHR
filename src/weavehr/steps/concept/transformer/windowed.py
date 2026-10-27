@@ -158,14 +158,15 @@ class ActiveState(Aggregation):
 
     Numeric updates replace the preceding value of the same identifier;
     ``stop_when`` identifies stops. A known matching stop confirms preceding
-    updates up to that stop. Otherwise values expire after ``window``, inclusive.
-    Missing identifiers form one observation stream per subject/stay, always
-    subject to expiry. Coincident stops and updates use the update, irrespective
+    updates up to that stop. Otherwise values expire after ``window``, inclusive;
+    ``None`` disables fallback expiry.
+    Missing identifiers form one observation stream per subject/stay, using
+    the configured fallback expiry. Coincident stops and updates use the update, irrespective
     of its numeric value. Conflicting simultaneous updates use the largest value.
 
     Args:
         window: Timeout since the latest numeric update when no identified
-            matching stop is available.
+            matching stop is available; None carries values until a stop/update.
         id_column: Name of the input column linking one state's updates and
             stop, e.g. ``linkorderid`` for an infusion across rate changes.
             Its values need only be unique within the same subject and stay.
@@ -187,7 +188,7 @@ class ActiveState(Aggregation):
 
     def __init__(
         self,
-        window: str,
+        window: str | None,
         *,
         id_column: str,
         stop_when: pl.Expr,
@@ -230,7 +231,11 @@ class ActiveState(Aggregation):
                     ~pl.col("__is_stop") & pl.col("__state").is_not_null() & pl.col("__stop").is_not_null()
                 )
                 .then(pl.col("__stop"))
-                .otherwise(pl.col(_TIME).dt.offset_by(self._window))
+                .otherwise(
+                    pl.col(_TIME).dt.offset_by(self._window)
+                    if self._window is not None
+                    else pl.lit(None, dtype=pl.Datetime("us"))
+                )
             )
             .rename({_SUBJECT: "__subject", _TIME: "__start", "__stay": "__state_stay"})
         )
@@ -242,7 +247,7 @@ class ActiveState(Aggregation):
                 pl.col(_context(self._stay_column)).eq_missing(pl.col("__state_stay"))
                 | pl.col("__state_stay").is_null(),
                 pl.col(_TIME) >= pl.col("__start"),
-                pl.col(_TIME) <= pl.col("__expires"),
+                pl.col("__expires").is_null() | (pl.col(_TIME) <= pl.col("__expires")),
                 pl.col("__next").is_null() | (pl.col(_TIME) < pl.col("__next")),
             )
             .group_by(_SUBJECT, _TIME)

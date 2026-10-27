@@ -1,0 +1,12 @@
+type: simple
+mappings:
+  # Invasive/non-invasive ventilation procedure markers, paired by native orderid.
+  # Event presence marks the start; no numeric measurement is required.
+  - pattern:
+      table: procedureevents
+      event: PROCEDURE_START
+      code: (225792(//.*)?|225794(//.*)?)
+    columns:
+      extension:
+        stay_id: col(stay_id)
+        orderid: col(orderid)
