@@ -44,6 +44,7 @@ Configs use expressions in three contexts with different expectations:
 | `first_not_null(a, b, ..., output=...)` | Row-wise first non-null value (coalesce) — useful for schema harmonisation |
 | `max(a, b, ..., output=...)` | Row-wise maximum across columns |
 | `cast(value, dtype, strict=False, output=...)` | Cast to a dtype (`int64`, `float32`, `string`, `datetime`, …) |
+| `strip_str(value, characters=None, output=...)` | Trim whitespace, or a supplied character set, from both ends; e.g. `strip_str(text_value, " %")` turns `"60%"` into `"60"` |
 | `replace(condition, then_value, else_value, output=...)` | Conditional value (`when/then/otherwise`) |
 
 ### Date and time
