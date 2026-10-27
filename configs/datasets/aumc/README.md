@@ -76,15 +76,74 @@ differences for CRP, base excess, troponin T, and band-form neutrophils.
 
 Urine output is a separate AMSTEL ETL case. The relevant legacy urine events
 are duplicated in the OMOP representation because the corresponding unit
-source code occurs twice in AMSTEL's source-to-concept mapping. This produces
-the remaining urine coverage and value discrepancy and is not corrected in
-the WeavEHR concept mapping.
+source code occurs twice in AMSTEL's source-to-concept mapping. This explains
+part of the remaining urine coverage and value discrepancy. Medical review
+additionally supported retaining genuine urine-output sources beyond the
+narrower `ricu` UrineCAD definition, including nephrostomy-related and other
+urinary drainage measurements. Bladder-irrigation output (`Spoelblaas`) is a
+specific exception: drainage volume can include irrigation fluid and must not
+be assumed to represent true urine production without accounting for the
+corresponding input. Source-level handling of this case remains a separate
+follow-up rather than being removed through a blanket OMOP-concept filter.
 
 Neutrophils and lymphocytes are intentionally not considered fully reproduced
 by the current `simple` mappings. The corresponding `ricu` concepts can use
 the cross-concept `blood_cell_ratio` calculation with white blood cell count.
-Implementing that dependency requires derived/complex concept logic and is
-deferred rather than approximated in a simple mapping.
+Medical review confirmed that lymphocyte percentages and absolute lymphocyte
+counts are distinct measurements and should not be merged as interchangeable
+raw values merely to reproduce `ricu` coverage. Implementing any derived
+cross-concept conversion therefore requires explicit derived/complex concept
+logic and is deferred rather than approximated in a simple mapping.
+
+### Medical review of validation discrepancies
+
+A focused medical review of the remaining clinically or semantically
+unresolved AUMC validation differences was completed on **2026-10-27**. The
+review covered 10 concepts selected after technical triage of the 48 YAIB
+dynamic variables. The comparison used WeavEHR AUMC 1.5.0 in its AMSTEL-derived
+OMOP representation and the `ricu` AUMC 1.0.2 native-table representation over
+the first 168 hours.
+
+The review decisions were:
+
+| Concept | Decision | Mapping implication |
+|---|---|---|
+| `methemoglobin` | include | retain OMOP concept `3007930` and its Met-Hb/FMetHb variants |
+| `mean_corpuscular_hemoglobin_concentration` | include | retain OMOP concept `40762530` and the M.C.H.C./MCHC/LabZis2 variants |
+| `partial_thromboplastin_time` | include | retain OMOP concept `3013466`; APTT, CEF-KAOL.T and Cephalinetyd variants are clinically compatible |
+| `chloride` | include | retain OMOP concepts `3014576` and `3018572`, including Astrup/ISE chloride |
+| `temperature` | include | retain blood, esophageal, bladder, rectal, axillary, oral and tympanic measurement sites |
+| `fraction_of_inspired_oxygen` | include | retain OMOP concepts `3025408` and `3020716`, including the reviewed O2 Volume source |
+| `lymphocytes` | partial / conditional | percentage and absolute-count measurements must retain distinct semantics; derived handling requires separate implementation |
+| `urine_output` | partial / conditional | retain genuine additional urine sources, but handle bladder-irrigation (`Spoelblaas`) output separately |
+| `creatine_kinase_MB` | uncertain | keep the current CK-MB mass mapping unchanged pending unit/value-distribution and source-semantic follow-up |
+| `prothrombin_time_international_normalized_ratio` | uncertain | keep the current mapping unchanged until INR versus PT/Quick semantics are verified |
+
+The six `include` decisions are intentionally treated as confirmation of the
+existing broader WeavEHR source coverage rather than requests to narrow the
+mappings to match `ricu`. In these cases, high presence disagreement alone is
+not evidence of an incorrect mapping.
+
+The two `partial / conditional` decisions require concept-specific follow-up
+instead of a blanket adjustment:
+
+- `lymphocytes`: percentages and absolute counts are clinically distinct;
+- `urine_output`: bladder-irrigation output may contain instilled fluid and
+  therefore cannot automatically be interpreted as urine production.
+
+The two `uncertain` decisions are deliberately left unchanged. Mapping changes
+must not be made solely to reduce disagreement with `ricu` while the clinical
+semantics remain unresolved.
+
+This validation treats `ricu` as a reproducibility/reference implementation,
+not as an unquestioned clinical gold standard for source inclusion. In
+particular, the medical review found several cases in which broader WeavEHR
+coverage is clinically appropriate.
+
+The complete technical triage, reviewer rationale, decision table and
+manuscript-oriented interpretation are maintained in the companion
+[`weavehr-yaib`](https://github.com/TobiasVeronaLaser/weavehr-yaib)
+validation repository.
 
 Not yet mapped / not cleanly mappable from OMOP:
 - **Drug infusion rates** (`*_rate`, `*_duration`): AMSTEL stores the rate in
