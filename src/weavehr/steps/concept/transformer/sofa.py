@@ -147,10 +147,10 @@ class SofaCnsTransformer(SofaComponent):
     """Central-nervous-system sub-score from the Glasgow Coma Scale total (3-15)."""
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {"gcs_total": WindowedLocf(self.window)}
+        return {"gcs": WindowedLocf(self.window)}
 
     def score(self) -> pl.Expr:
-        gcs = pl.col("gcs_total")
+        gcs = pl.col("gcs")
         return (
             pl.when(gcs < 6).then(4).when(gcs < 10).then(3).when(gcs < 13).then(2).when(gcs < 15).then(1).otherwise(0)
         )

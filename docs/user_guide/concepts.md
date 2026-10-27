@@ -138,6 +138,37 @@ class VentilationWindows:
     def __call__(self, project: WeavEHRProject) -> None: ...
 ```
 
+### GCS
+
+`gcs_total` preserves directly recorded totals, currently mapped for eICU.
+The computed `gcs` concept uses a thin `GcsTransformer` wrapper to chain two
+shared operations lazily: `WindowedSumTransformer` reconstructs a total from
+`gcs_eye`, `gcs_motor` and `gcs_verbal`, then `pick_latest` combines that result
+with `gcs_total`. No intermediate concept is written.
+
+Each component's latest numeric value remains current for six hours, including
+the boundary. The mapping's `kwargs.window` controls this lookback. Missing
+components contribute their normal maxima: eye 4, motor 6 and verbal 5.
+Null entries neither refresh values nor generate new assessments.
+
+`pick_latest` preserves source timestamps. The latest assessment wins; at a
+shared timestamp, the recorded `gcs_total` takes precedence. MIMIC-IV uses the
+reconstructed total, since it has no recorded-total mapping. CNS SOFA consumes
+`gcs` with its own one-hour alignment window.
+
+Only numeric source measurements generate assessments. Expiry alone creates no
+event. A patient with no numeric GCS observations has no GCS timeline; total SOFA
+already treats a missing CNS component as zero.
+
+Six-hour component carry-forward and normal-value imputation follow
+[ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L362).
+The recency rule deliberately differs from ricu's preference for any still-current
+recorded total. ETT/sedation correction remains a separate policy.
+
+`gcs_total` retains source-table provenance; computed `gcs` retains dataset
+provenance. Regenerate these concepts and dependent CNS, SOFA and
+sepsis outputs after this change.
+
 ### SOFA measurement alignment
 
 SOFA components carry the latest point measurements forward for **one hour**

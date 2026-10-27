@@ -10,7 +10,7 @@ Three layers:
   alignment as well as scoring;
 - two end-to-end tests through the real pipeline: the renal component over
   creatinine and urine, and the deepest dependency chain (GCS parts ->
-  gcs_total -> sofa_cns, platelets -> sofa_coagulation, both -> sofa).
+  gcs -> sofa_cns, platelets -> sofa_coagulation, both -> sofa).
 
 Infusion alignment on the shared windowing grid is covered in
 ``test_windowed.py``.
@@ -32,6 +32,7 @@ import pytest
 from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.transformer.base import BaseConceptTransformer
 from weavehr.steps.concept.transformer.sofa import (
     SofaCardiovascularTransformer,
     SofaCnsTransformer,
@@ -48,7 +49,7 @@ T0 = datetime(2024, 1, 1, 0, 0)
 DATASET = "testdb"
 
 
-def make(cls: type[WindowedConceptTransformer], **kwargs) -> WindowedConceptTransformer:
+def make[T: BaseConceptTransformer](cls: type[T], **kwargs) -> T:
     """Build a transformer for ``transform``-only testing.
 
     ``transform`` is pure and never touches the step, so none is needed.
@@ -62,7 +63,7 @@ def make(cls: type[WindowedConceptTransformer], **kwargs) -> WindowedConceptTran
 
 @pytest.fixture
 def renal() -> SofaRenalTransformer:
-    return cast(SofaRenalTransformer, make(SofaRenalTransformer))
+    return make(SofaRenalTransformer)
 
 
 def at(hours: float) -> datetime:
@@ -129,7 +130,7 @@ def test_liver(bilirubin: float, expected: float) -> None:
     [(15, 0.0), (14, 1.0), (13, 1.0), (12, 2.0), (10, 2.0), (9, 3.0), (6, 3.0), (5, 4.0), (3, 4.0)],
 )
 def test_cns(gcs: float, expected: float) -> None:
-    assert score(make(SofaCnsTransformer), gcs_total=gcs) == [expected]
+    assert score(make(SofaCnsTransformer), gcs=gcs) == [expected]
 
 
 def test_a_component_with_no_current_input_emits_nothing() -> None:
@@ -150,7 +151,7 @@ def test_a_component_with_no_current_input_emits_nothing() -> None:
         (SofaRespiratoryTransformer, {"O2_partial_pressure": 60.0, "fraction_of_inspired_oxygen": 50.0}, 2.0),
         (SofaCoagulationTransformer, {"platelet_count": 40.0}, 3.0),
         (SofaLiverTransformer, {"total_bilirubin": 7.0}, 3.0),
-        (SofaCnsTransformer, {"gcs_total": 5.0}, 4.0),
+        (SofaCnsTransformer, {"gcs": 5.0}, 4.0),
         (SofaCardiovascularTransformer, {"mean_arterial_pressure": 60.0}, 1.0),
     ],
 )
@@ -979,10 +980,11 @@ subject_id,charttime,itemid,valuenum
 CHAIN_LABS_CSV = """\
 subject_id,charttime,itemid,valuenum
 1,2024-01-01 00:00:00,EYE,1
-1,2024-01-01 00:00:00,MOTOR,1
-1,2024-01-01 00:00:00,VERBAL,1
+1,2024-01-01 00:10:00,MOTOR,1
+1,2024-01-01 00:20:00,VERBAL,1
 1,2024-01-01 00:00:00,PLT,30
 1,2024-01-01 01:00:00,PLT,200
+1,2024-01-01 02:00:00,TOTAL,12
 """
 
 
@@ -1022,11 +1024,11 @@ def test_end_to_end_sofa_renal_concept(tmp_path: Path) -> None:
 def test_end_to_end_total_sofa_chain(tmp_path: Path) -> None:
     """The deepest dependency chain: complex concepts depending on complex ones.
 
-    GCS parts -> gcs_total (sum) -> sofa_cns, platelets -> sofa_coagulation,
+    GCS inputs -> gcs -> sofa_cns, platelets -> sofa_coagulation,
     and sofa (total) -> both components. Exercises ordering and cross-timestamp
     alignment through the real ConceptStep.
     """
-    win_sum = "weavehr.steps.concept.transformer.windowed.WindowedSumTransformer"
+    gcs_mappings = Path(__file__).parents[2] / "configs" / "datasets" / "eicu-crd" / "2.0" / "mappings"
     sofa_total = "weavehr.steps.concept.transformer.sofa.SofaTransformer"
     sofa_cns = "weavehr.steps.concept.transformer.sofa.SofaCnsTransformer"
     sofa_coag = "weavehr.steps.concept.transformer.sofa.SofaCoagulationTransformer"
@@ -1035,24 +1037,24 @@ def test_end_to_end_total_sofa_chain(tmp_path: Path) -> None:
         tmp_path,
         CHAIN_LABS_CSV,
         concepts=[
-            ("GCS_eye", "points"),
-            ("GCS_motor", "points"),
-            ("GCS_verbal", "points"),
+            ("gcs_eye", "points"),
+            ("gcs_motor", "points"),
+            ("gcs_verbal", "points"),
             ("gcs_total", "points"),
+            ("gcs", "points"),
             ("platelet_count", "K/uL"),
             ("sofa_cns", "points"),
             ("sofa_coagulation", "points"),
             ("sofa", "points"),
         ],
         mappings={
-            "GCS_eye": _simple_mapping_yml("EYE"),
-            "GCS_motor": _simple_mapping_yml("MOTOR"),
-            "GCS_verbal": _simple_mapping_yml("VERBAL"),
+            "gcs_eye": _simple_mapping_yml("EYE"),
+            "gcs_motor": _simple_mapping_yml("MOTOR"),
+            "gcs_verbal": _simple_mapping_yml("VERBAL"),
+            "gcs_total": _simple_mapping_yml("TOTAL"),
             "platelet_count": _simple_mapping_yml("PLT"),
-            "gcs_total": _complex_mapping_yml(
-                win_sum, ["GCS_eye", "GCS_motor", "GCS_verbal"], as_terms=True
-            ),
-            "sofa_cns": _complex_mapping_yml(sofa_cns, ["gcs_total"]),
+            "gcs": (gcs_mappings / "gcs.yml").read_text(),
+            "sofa_cns": _complex_mapping_yml(sofa_cns, ["gcs"]),
             "sofa_coagulation": _complex_mapping_yml(sofa_coag, ["platelet_count"]),
             "sofa": _complex_mapping_yml(sofa_total, ["sofa_cns", "sofa_coagulation"], as_terms=True),
         },
@@ -1060,8 +1062,11 @@ def test_end_to_end_total_sofa_chain(tmp_path: Path) -> None:
 
     sofa = _concept_output(project, "sofa")
 
-    # GCS 1+1+1=3 -> CNS 4; PLT 30 -> coag 3; total 7 at 00:00.
-    # At 01:00 PLT 200 -> current coag 0, but the severe thrombocytopenia
-    # remains inside the 24h SOFA window: worst coag 3 + worst CNS 4 = 7.
-    assert sofa["code"].to_list() == ["sofa//points", "sofa//points"]
-    assert sofa["numeric_value"].to_list() == [7.0, 7.0]
+    # As the three parts arrive, GCS falls from 12 to 7 to 3 (CNS 2, 3, 4).
+    # The later recorded total 12 takes precedence over those older parts.
+    assert not (project.datasets_path / "concept" / "data" / "gcs_components").exists()
+    assert _concept_output(project, "gcs_total")["numeric_value"].to_list() == [12.0]
+    assert _concept_output(project, "gcs")["numeric_value"].to_list() == [12.0, 7.0, 3.0, 12.0]
+    # The worst CNS 4 and coagulation 3 persist in total SOFA despite recovery.
+    assert sofa["code"].to_list() == ["sofa//points"] * 5
+    assert sofa["numeric_value"].to_list() == [5.0, 6.0, 7.0, 7.0, 7.0]

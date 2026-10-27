@@ -1,4 +1,4 @@
-"""Active-state alignment on the shared grid, using invented observations."""
+"""Shared event alignment and selection, using invented observations."""
 
 from datetime import datetime, timedelta
 from typing import cast
@@ -9,7 +9,7 @@ import pytest
 from weavehr import ConceptStep
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.concept import ConceptConfig
-from weavehr.steps.concept.transformer.windowed import ActiveState, WindowedConceptTransformer, WindowedLocf
+from weavehr.steps.concept.transformer.windowed import ActiveState, WindowedConceptTransformer, WindowedLocf, pick_latest
 
 T0 = datetime(2024, 1, 1)
 
@@ -43,6 +43,29 @@ def events(hours: list[float], values: list[float | None], **metadata: list[str]
             **metadata,
         }
     )
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_latest_assessment_preserves_timestamps_and_first_stream_wins_ties(reverse: bool) -> None:
+    frames = [events([0, 2], [1.0, 2.0]), events([1, 2], [9.0, 99.0])]
+    result = pick_latest(*(frames[::-1] if reverse else frames)).collect()
+    assert result.rows() == [
+        (1, T0, 1.0),
+        (1, T0 + timedelta(hours=1), 9.0),
+        (1, T0 + timedelta(hours=2), 99.0 if reverse else 2.0),
+    ]
+
+
+def test_latest_assessment_ignores_null_values_and_absent_streams() -> None:
+    result = pick_latest(None, events([0, 1], [None, 3.0]), events([0, 2], [2.0, None])).collect()
+    assert result.rows() == [(1, T0, 2.0), (1, T0 + timedelta(hours=1), 3.0)]
+
+
+@pytest.mark.parametrize("frames", [(), (None,)])
+def test_latest_assessment_without_inputs_is_typed_empty(frames: tuple[None, ...]) -> None:
+    result = pick_latest(*frames).collect()
+    assert result.is_empty()
+    assert result.schema == {"subject_id": pl.Int64, "time": pl.Datetime("us"), "numeric_value": pl.Float32}
 
 
 def test_original_rows_and_custom_metadata_survive_alignment(transformer: RateTransformer) -> None:

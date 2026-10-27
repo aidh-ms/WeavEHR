@@ -656,15 +656,45 @@ class GradedConceptTransformer(WindowedConceptTransformer):
         return pl.when(self.observed()).then(self.grade()).otherwise(None).cast(pl.Float32)
 
 
+def pick_latest(*frames: pl.LazyFrame | None) -> pl.LazyFrame:
+    """Merge numeric assessments at their source timestamps; first frame wins ties.
+
+    Each new assessment is the latest value at its timestamp. Null values and
+    absent streams add no assessments. This neither carries values forward nor
+    creates new timestamps, so upstream measurement validity stays unchanged.
+    """
+    candidates = [
+        frame.select(
+            pl.col(_SUBJECT).cast(pl.Int64),
+            pl.col(_TIME).cast(pl.Datetime("us")),
+            pl.col("numeric_value").cast(pl.Float32),
+            pl.lit(priority).alias("__priority"),
+        )
+        for priority, frame in enumerate(frames)
+        if frame is not None
+    ]
+    if not candidates:
+        return pl.LazyFrame(schema={_SUBJECT: pl.Int64, _TIME: pl.Datetime("us"), "numeric_value": pl.Float32})
+    return (
+        pl.concat(candidates)
+        .filter(pl.col("numeric_value").is_not_null())
+        .group_by(_SUBJECT, _TIME)
+        .agg(pl.col("numeric_value").sort_by("__priority").first())
+        .sort(_SUBJECT, _TIME)
+    )
+
+
 class WindowedSumTransformer(WindowedConceptTransformer):
     """Sum of the most recent value of each input within a trailing window.
 
     Fully declarative: the summed concepts are the declared ``concepts`` of the
     mapping, or the (unversioned) names listed in ``kwargs.terms``; ``window``
     controls how long a term's last value stays current (default 24h). A term
-    with no value inside the window contributes 0, so the sum is defined as
-    soon as any one term is. Used for aggregate concepts such as a GCS total
-    (eye + motor + verbal); SOFA overrides the aggregation to use maxima.
+    with no value inside the window contributes 0 unless ``kwargs.missing_values``
+    supplies a per-term default. Set ``kwargs.numeric_only`` to ignore null-valued
+    source events, so only numeric measurements trigger assessment. Used for
+    aggregate concepts such as reconstructed GCS (eye + motor + verbal);
+    SOFA overrides the aggregation to use maxima.
     """
 
     default_window = "24h"
@@ -677,10 +707,15 @@ class WindowedSumTransformer(WindowedConceptTransformer):
         if not self.inputs:
             terms = self._kwargs.get("terms") or list(dependencies)
             self.inputs = {name: WindowedLocf(self.window) for name in terms}
+        if self._kwargs.get("numeric_only", False):
+            dependencies = {
+                name: frame.filter(pl.col("numeric_value").is_not_null()) for name, frame in dependencies.items()
+            }
         return super().transform(dependencies)
 
     def compute(self) -> pl.Expr:
-        return pl.sum_horizontal(*[pl.col(name).fill_null(0) for name in self.inputs]).cast(pl.Float32)
+        defaults = self._kwargs.get("missing_values", {})
+        return pl.sum_horizontal(*[pl.col(name).fill_null(defaults.get(name, 0)) for name in self.inputs]).cast(pl.Float32)
 
 
 class WindowedMaxTransformer(WindowedSumTransformer):
