@@ -215,6 +215,13 @@ values normally. These reductions occur inside score calculations; ordinary
 mapped concepts retain every record. Urine volumes still sum, and state inputs
 retain their existing rules.
 
+SOFA and GCS ignore numeric `NaN` and positive or negative infinity inside
+their calculations. Those rows neither generate assessments nor refresh
+measurement or state validity, and invalid urine entries do not establish
+collection coverage or bridge recording gaps. Ordinary mapped concepts retain
+the original records. Finite zero values and valueless ventilation markers
+retain their usual meaning.
+
 ### Respiratory SOFA ventilation state
 
 Respiratory SOFA consumes `ventilation_start` and `ventilation_end` markers.

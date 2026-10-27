@@ -33,7 +33,7 @@ class GcsTransformer(WindowedConceptTransformer):
         }
 
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
-        numeric = {name: frame.filter(pl.col("numeric_value").is_not_null()) for name, frame in dependencies.items()}
+        numeric = {name: frame.filter(pl.col("numeric_value").is_finite()) for name, frame in dependencies.items()}
         return super().transform(numeric)
 
     def compute(self) -> pl.Expr:

@@ -38,6 +38,12 @@ from weavehr.steps.concept.transformer.windowed import (
 )
 
 
+def _finite_inputs(dependencies: dict[str, pl.LazyFrame]) -> dict[str, pl.LazyFrame]:
+    """Ignore non-finite measurements while retaining valueless marker events."""
+    value = pl.col("numeric_value")
+    return {name: frame.filter(value.is_null() | value.is_finite()) for name, frame in dependencies.items()}
+
+
 class SofaComponent(GradedConceptTransformer):
     """A single SOFA organ sub-score (0-4).
 
@@ -47,6 +53,9 @@ class SofaComponent(GradedConceptTransformer):
     """
 
     default_window = "1h"
+
+    def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        return super().transform(_finite_inputs(dependencies))
 
     def score(self) -> pl.Expr:
         """Return the 0-4 sub-score expression over the aligned input columns."""
@@ -302,4 +311,4 @@ class SofaTransformer(WindowedSumTransformer):
         if not self.inputs:
             terms = self._kwargs.get("terms") or list(dependencies)
             self.inputs = {name: RollingMax(self.window, closed="both") for name in terms}
-        return super().transform(dependencies)
+        return super().transform(_finite_inputs(dependencies))

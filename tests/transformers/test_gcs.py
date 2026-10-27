@@ -72,12 +72,30 @@ def test_components_use_independent_latest_values_across_timestamps() -> None:
      ("gcs_verbal", 1.0, 5.0, 11.0), ("gcs_total", 3.0, 15.0, 3.0)],
 )
 @pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
 def test_exact_timestamp_ties_use_minimum_then_allow_recovery(
-    name: str, minimum: float, normal: float, expected: float, reverse: bool
+    name: str, minimum: float, normal: float, expected: float, reverse: bool, invalid: float
 ) -> None:
-    source = frame((1, T0, minimum), (1, T0, normal), (1, T0, None), (1, at(1), normal))
+    source = frame((1, T0, minimum), (1, T0, normal), (1, T0, None), (1, T0, invalid),
+                   (1, at(0.5), invalid), (1, at(1), normal))
     result = reconstruct({name: source.reverse() if reverse else source})
     assert result.rows() == [(1, T0, expected), (1, at(1), 15.0)]
+
+
+@pytest.mark.parametrize("name", [*DEFAULTS, "gcs_total", "gcs_unable"])
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_inputs_alone_produce_no_gcs_assessment(name: str, invalid: float) -> None:
+    assert reconstruct({name: frame((1, T0, invalid))}).is_empty()
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_unable_flag_neither_clears_nor_refreshes_the_correction(invalid: float) -> None:
+    after = at(6) + timedelta(microseconds=1)
+    result = reconstruct({
+        "gcs_unable": frame((1, T0, 1.0), (1, at(2), invalid)),
+        "gcs_total": frame((1, at(1), 7.0), (1, at(3), 7.0), (1, after, 7.0)),
+    })
+    assert result.rows() == [(1, at(1), 15.0), (1, at(3), 15.0), (1, after, 7.0)]
 
 
 @pytest.mark.parametrize(

@@ -149,17 +149,60 @@ def test_cns(gcs: float, expected: float) -> None:
     ids=["creatinine", "platelets", "bilirubin", "gcs", "map", "pao2", "fio2"],
 )
 @pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
 def test_exact_timestamp_ties_use_worst_values_but_later_measurements_replace_them(
     cls: type[WindowedConceptTransformer], field: str, values: tuple[float, float],
-    other: dict[str, float], expected: float, reverse: bool
+    other: dict[str, float], expected: float, reverse: bool, invalid: float
 ) -> None:
     later, carried = T0 + timedelta(minutes=5), T0 + timedelta(minutes=10)
     source = frame((1, T0, values[0]), (1, T0, values[1]), (1, T0, None),
-                   (1, later, values[1]), (1, carried, None))
+                   (1, T0, invalid), (1, later, values[1]),
+                   (1, later + timedelta(minutes=1), invalid), (1, carried, None))
     inputs = {name: frame((1, T0, value)) for name, value in other.items()}
     inputs[field] = source.reverse() if reverse else source
     result = make(cls).transform(inputs).collect()
     assert result.rows() == [(1, T0, expected), (1, later, 0.0), (1, carried, 0.0)]
+
+
+@pytest.mark.parametrize("cls", [SofaRenalTransformer, SofaCoagulationTransformer, SofaLiverTransformer,
+                                 SofaCnsTransformer, SofaCardiovascularTransformer, SofaRespiratoryTransformer,
+                                 SofaTransformer])
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_inputs_alone_produce_no_sofa_assessment(
+    cls: type[WindowedConceptTransformer], invalid: float
+) -> None:
+    transformer = make(cls)
+    inputs = {name: frame((1, T0, invalid)) for name in transformer.inputs or ("sofa_renal",)}
+    assert transformer.transform(inputs).collect().is_empty()
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_creatinine_does_not_refresh_its_alignment_window(invalid: float) -> None:
+    after = at(1) + timedelta(microseconds=1)
+    result = make(SofaRenalTransformer).transform({
+        "creatinine": frame((1, T0, 2.5), (1, at(0.5), invalid)),
+        "urine_output": frame((1, at(0.75), 10.0), (1, after, 10.0)),
+    }).collect()
+    assert result.rows() == [(1, T0, 2.0), (1, at(0.75), 2.0)]
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_pressor_rate_neither_stops_nor_refreshes_an_infusion(invalid: float) -> None:
+    after = at(1) + timedelta(microseconds=1)
+    result = make(SofaCardiovascularTransformer, pressor_window="1h").transform({
+        "norepinephrine_rate": frame((1, T0, 0.2), (1, at(0.5), invalid)),
+        "mean_arterial_pressure": frame((1, at(0.75), 80.0), (1, after, 80.0)),
+    }).collect()
+    assert result.rows() == [(1, T0, 4.0), (1, at(0.75), 4.0), (1, after, 0.0)]
+
+
+@pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_urine_does_not_bridge_a_recording_gap(invalid: float) -> None:
+    urine = frame(*[(1, at(hour), invalid if hour == 12 else 0.0) for hour in range(25)])
+    result = make(SofaRenalTransformer, urine_output_gap="1h").transform({
+        "urine_output": urine, "creatinine": frame((1, at(24), 2.5)),
+    }).collect()
+    assert result.rows() == [(1, at(24), 2.0)]
 
 
 def test_a_component_with_no_current_input_emits_nothing() -> None:
