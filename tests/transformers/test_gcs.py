@@ -125,3 +125,87 @@ def test_subjects_and_output_schema_remain_separate() -> None:
     result = reconstruct({"gcs_eye": frame((1, T0, 2.0)), "gcs_motor": frame((2, at(1), 2.0))})
     assert result.rows() == [(1, T0, 13.0), (2, at(1), 11.0)]
     assert result.schema == {"subject_id": pl.Int64, "time": pl.Datetime("us"), "numeric_value": pl.Float32}
+
+
+@pytest.mark.parametrize(("eye", "motor"), [(4.0, 6.0), (2.0, 4.0)])
+def test_unable_sets_total_to_fifteen_even_with_abnormal_eye_and_motor(eye: float, motor: float) -> None:
+    result = reconstruct(
+        {
+            "gcs_eye": frame((1, T0, eye)),
+            "gcs_motor": frame((1, T0, motor)),
+            "gcs_verbal": frame((1, T0, 1.0)),
+            "gcs_unable": frame((1, T0, 1.0)),
+        }
+    )
+    assert result.rows() == [(1, T0, 15.0)]
+
+
+def test_unable_overrides_simultaneous_and_newer_recorded_totals() -> None:
+    result = reconstruct(
+        {
+            "gcs_verbal": frame((1, T0, 1.0)),
+            "gcs_unable": frame((1, T0, 1.0)),
+            "gcs_total": frame((1, T0, 3.0), (1, at(1), 7.0)),
+        }
+    )
+    assert result.rows() == [(1, T0, 15.0), (1, at(1), 15.0)]
+
+
+def test_zero_flag_clears_the_correction_at_the_next_assessment() -> None:
+    result = reconstruct(
+        {
+            "gcs_eye": frame((1, T0, 2.0)),
+            "gcs_motor": frame((1, T0, 4.0)),
+            "gcs_verbal": frame((1, T0, 1.0), (1, at(1), 1.0), (1, at(2), 4.0)),
+            "gcs_unable": frame((1, T0, 1.0), (1, at(0.5), 0.0)),
+        }
+    )
+    assert result.rows() == [(1, T0, 15.0), (1, at(1), 7.0), (1, at(2), 10.0)]
+
+
+@pytest.mark.parametrize(("window", "hours"), [("6h", 6), ("1h", 1)])
+def test_unable_expires_after_the_window_without_other_inputs_refreshing_it(window: str, hours: int) -> None:
+    before = at(hours) - timedelta(minutes=1)
+    after = at(hours) + timedelta(microseconds=1)
+    result = reconstruct(
+        {
+            "gcs_eye": frame((1, before, 2.0), (1, after, 2.0)),
+            "gcs_motor": frame((1, at(hours), 4.0)),
+            "gcs_verbal": frame((1, T0, 1.0)),
+            "gcs_unable": frame((1, T0, 1.0)),
+        },
+        window=window,
+    )
+    assert result.rows() == [(1, T0, 15.0), (1, before, 15.0), (1, at(hours), 15.0), (1, after, 11.0)]
+
+
+def test_new_verbal_measurements_do_not_clear_or_refresh_the_flag() -> None:
+    result = reconstruct(
+        {
+            "gcs_unable": frame((1, T0, 1.0)),
+            "gcs_verbal": frame((1, at(1), 1.0), (1, at(5), 1.0)),
+            "gcs_eye": frame((1, at(7), 2.0)),
+        }
+    )
+    assert result.rows() == [(1, at(1), 15.0), (1, at(5), 15.0), (1, at(7), 9.0)]
+
+
+@pytest.mark.parametrize("prior_score", [False, True])
+def test_unable_flags_do_not_generate_assessments(prior_score: bool) -> None:
+    inputs = {"gcs_unable": frame((1, at(1), 1.0))}
+    if prior_score:
+        inputs["gcs_eye"] = frame((1, T0, 2.0))
+    result = reconstruct(inputs)
+    assert result.rows() == ([(1, T0, 13.0)] if prior_score else [])
+    assert result.schema == {"subject_id": pl.Int64, "time": pl.Datetime("us"), "numeric_value": pl.Float32}
+
+
+@pytest.mark.parametrize("flags", [(0.0, 1.0), (1.0, 0.0)])
+def test_any_positive_flag_wins_at_the_same_timestamp(flags: tuple[float, float]) -> None:
+    result = reconstruct(
+        {
+            "gcs_unable": frame(*[(1, T0, value) for value in flags]),
+            "gcs_total": frame((1, T0, 3.0), (1, at(1), 7.0)),
+        }
+    )
+    assert result.rows() == [(1, T0, 15.0), (1, at(1), 15.0)]

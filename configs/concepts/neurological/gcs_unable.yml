@@ -1,0 +1,8 @@
+# Dataset-defined indication for applying the GCS total correction to 15.
+# Numeric 1 applies the correction; 0 clears it. Null means no new assessment.
+name: gcs_unable
+version: 1.0.0
+unit: boolean
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

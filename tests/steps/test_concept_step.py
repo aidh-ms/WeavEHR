@@ -1,5 +1,6 @@
 """End-to-end tests for the concept step on synthetic fixture data."""
 
+import gzip
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -31,6 +32,97 @@ def project(tmp_path: Path, extraction_config: Path, concept_config: Path) -> We
 
 def concept_path(project: WeavEHRProject, name: str) -> Path:
     return project.datasets_path / "concept" / "data" / name / "1.0.0" / "testdb" / "1.0.parquet"
+
+
+def test_gcs_unable_correction_reaches_cns_sofa(
+    tmp_path: Path, data_dir: Path, table_config_dir: Path, extraction_config: Path, concept_config: Path
+) -> None:
+    """Synthetic native chart rows through shipped extraction, mappings and CNS SOFA."""
+    configs = Path(__file__).parents[2] / "configs"
+    dataset_configs = configs / "datasets" / "mimic-iv" / "2.2"
+    config_dir = tmp_path / "config"
+    concept_dir = config_dir / "concepts"
+    mapping_dir = config_dir / "testdb" / "1.0" / "mappings"
+    (table_config_dir / "chartevents.yml").write_text((dataset_configs / "tables" / "chartevents.yml").read_text())
+    for name in ("gcs_eye", "gcs_motor", "gcs_verbal", "gcs_unable", "gcs", "sofa_cns"):
+        category = "outcome" if name == "sofa_cns" else "neurological"
+        (concept_dir / f"{name}.yml").write_text((configs / "concepts" / category / f"{name}.yml").read_text())
+        (mapping_dir / f"{name}.yml").write_text((dataset_configs / "mappings" / f"{name}.yml").read_text())
+
+    start = datetime(2024, 1, 1, 8)
+    later = start + timedelta(hours=1)
+    chart = pl.DataFrame(
+        [
+            (1, start, 220739, 2.0, "To pain"),
+            (1, start, 223901, 4.0, "Flex-withdraws"),
+            (1, start, 223900, 1.0, "No Response-ETT"),
+            (1, start + timedelta(minutes=30), 223900, None, "Unable to assess"),
+            (1, later, 223900, 1.0, "No Response"),
+            (2, start, 220739, 2.0, "To pain"),
+            (2, start, 223901, 4.0, "Flex-withdraws"),
+            (2, start, 223900, 1.0, "No Response"),
+            (3, start, 220739, 1.0, "None"),
+            (3, start, 223901, 1.0, "No response"),
+            (3, start, 223900, None, "No Response-ETT"),
+            (4, start, 223900, 1.0, None),
+            (5, start, 223900, None, "No Response-ETT"),
+            (5, later, 220739, 1.0, "None"),
+        ],
+        schema=["subject_id", "charttime", "itemid", "valuenum", "value"],
+        orient="row",
+    ).with_columns(
+        hadm_id=pl.col("subject_id"),
+        stay_id=pl.col("subject_id"),
+        caregiver_id=pl.lit(1),
+        storetime=pl.col("charttime"),
+        valueuom=pl.lit(None, dtype=pl.String),
+        warning=pl.lit(0),
+    )
+    source = data_dir / "icu"
+    source.mkdir()
+    items = pl.DataFrame(
+        {"itemid": [220739, 223901, 223900], "label": ["GCS - Eye Opening", "GCS - Motor", "GCS - Verbal"]}
+    )
+    for name, data in (("chartevents", chart), ("d_items", items)):
+        with gzip.open(source / f"{name}.csv.gz", "wt") as file:
+            file.write(data.write_csv(datetime_format="%Y-%m-%d %H:%M:%S"))
+
+    project = WeavEHRProject(tmp_path / "project")
+    load_extracation_config(table_config_dir)
+    load_concept_config(concept_dir, [mapping_dir])
+    ExtractionStep.load(project, extraction_config).run()
+    ConceptStep.load(project, concept_config).run()
+
+    verbal = pl.read_parquet(concept_path(project, "gcs_verbal")).sort("subject_id", "time")
+    assert verbal.select("subject_id", "time", "numeric_value", "text_value").rows() == [
+        (1, start, 1.0, "No Response-ETT"),
+        (1, start + timedelta(minutes=30), None, "Unable to assess"),
+        (1, later, 1.0, "No Response"),
+        (2, start, 1.0, "No Response"),
+        (3, start, None, "No Response-ETT"),
+        (4, start, 1.0, None),
+        (5, start, None, "No Response-ETT"),
+    ]
+    unable = pl.read_parquet(concept_path(project, "gcs_unable")).sort("subject_id", "time")
+    assert unable.select("subject_id", "time", "numeric_value", "text_value").rows() == [
+        (1, start, 1.0, "No Response-ETT"),
+        (1, later, 0.0, "No Response"),
+        (2, start, 0.0, "No Response"),
+        (3, start, 1.0, "No Response-ETT"),
+        (4, start, 0.0, None),
+        (5, start, 1.0, "No Response-ETT"),
+    ]
+    # Subject 5's valueless verbal entry remains null: its marker only takes
+    # effect at the later eye measurement, without an assessment at start.
+    for name, expected in (
+        ("gcs", [15.0, 7.0, 7.0, 15.0, 11.0, 15.0]),
+        ("sofa_cns", [0.0, 3.0, 3.0, 0.0, 2.0, 0.0]),
+    ):
+        result = pl.read_parquet(concept_path(project, name)).sort("subject_id", "time")
+        assert result.select("subject_id", "time").rows() == [
+            (1, start), (1, later), (2, start), (3, start), (4, start), (5, later)
+        ]
+        assert result["numeric_value"].to_list() == expected
 
 
 @pytest.mark.parametrize(("dataset", "version"), [("mimic-iv", "2.2"), ("eicu-crd", "2.0")])
