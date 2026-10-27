@@ -132,10 +132,15 @@ class WindowedLocf(Aggregation):
     matching ``join_asof(tolerance=...)``); otherwise the input reads as
     missing. This is the aggregation to use when a concept should reflect
     "what we currently know" but stale data must not be treated as current.
+    ``aggregate`` resolves exact timestamp ties (default: last non-null value).
     """
 
-    def __init__(self, window: str) -> None:
+    def __init__(self, window: str, *, aggregate: Callable[[pl.Expr], pl.Expr] = pl.Expr.last) -> None:
         self._window = window
+        self._aggregate = aggregate
+
+    def collapse(self, col: str) -> pl.Expr:
+        return self._aggregate(pl.col(col).drop_nulls())
 
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         return lf.with_columns(

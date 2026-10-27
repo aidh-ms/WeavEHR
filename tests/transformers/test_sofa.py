@@ -133,6 +133,35 @@ def test_cns(gcs: float, expected: float) -> None:
     assert score(make(SofaCnsTransformer), gcs=gcs) == [expected]
 
 
+@pytest.mark.parametrize(
+    ("cls", "field", "values", "other", "expected"),
+    [
+        (SofaRenalTransformer, "creatinine", (5.5, 1.0), {}, 4.0),
+        (SofaCoagulationTransformer, "platelet_count", (10.0, 200.0), {}, 4.0),
+        (SofaLiverTransformer, "total_bilirubin", (13.0, 0.5), {}, 4.0),
+        (SofaCnsTransformer, "gcs", (3.0, 15.0), {}, 4.0),
+        (SofaCardiovascularTransformer, "mean_arterial_pressure", (60.0, 80.0), {}, 1.0),
+        (SofaRespiratoryTransformer, "O2_partial_pressure", (60.0, 450.0),
+         {"fraction_of_inspired_oxygen": 100.0, "ventilation_start": 1.0}, 4.0),
+        (SofaRespiratoryTransformer, "fraction_of_inspired_oxygen", (100.0, 21.0),
+         {"O2_partial_pressure": 90.0, "ventilation_start": 1.0}, 4.0),
+    ],
+    ids=["creatinine", "platelets", "bilirubin", "gcs", "map", "pao2", "fio2"],
+)
+@pytest.mark.parametrize("reverse", [False, True])
+def test_exact_timestamp_ties_use_worst_values_but_later_measurements_replace_them(
+    cls: type[WindowedConceptTransformer], field: str, values: tuple[float, float],
+    other: dict[str, float], expected: float, reverse: bool
+) -> None:
+    later, carried = T0 + timedelta(minutes=5), T0 + timedelta(minutes=10)
+    source = frame((1, T0, values[0]), (1, T0, values[1]), (1, T0, None),
+                   (1, later, values[1]), (1, carried, None))
+    inputs = {name: frame((1, T0, value)) for name, value in other.items()}
+    inputs[field] = source.reverse() if reverse else source
+    result = make(cls).transform(inputs).collect()
+    assert result.rows() == [(1, T0, expected), (1, later, 0.0), (1, carried, 0.0)]
+
+
 def test_a_component_with_no_current_input_emits_nothing() -> None:
     """The zero that a total sums must come from a measurement, not from silence."""
     transformer = make(SofaCoagulationTransformer, window="24h")

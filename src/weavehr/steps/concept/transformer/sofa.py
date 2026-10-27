@@ -69,7 +69,7 @@ class SofaRenalTransformer(SofaComponent):
     def build_inputs(self) -> dict[str, Aggregation]:
         urine_window = "24h"
         return {
-            "creatinine": WindowedLocf(self.window),
+            "creatinine": WindowedLocf(self.window, aggregate=pl.Expr.max),
             "urine_output": SegmentedRollingSum(
                 urine_window, gap=self._kwargs.get("urine_output_gap", urine_window)
             ),
@@ -104,7 +104,7 @@ class SofaCoagulationTransformer(SofaComponent):
     """Coagulation sub-score from platelet count (10^3/uL)."""
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {"platelet_count": WindowedLocf(self.window)}
+        return {"platelet_count": WindowedLocf(self.window, aggregate=pl.Expr.min)}
 
     def score(self) -> pl.Expr:
         platelets = pl.col("platelet_count")
@@ -125,7 +125,7 @@ class SofaLiverTransformer(SofaComponent):
     """Liver sub-score from total bilirubin (mg/dL)."""
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {"total_bilirubin": WindowedLocf(self.window)}
+        return {"total_bilirubin": WindowedLocf(self.window, aggregate=pl.Expr.max)}
 
     def score(self) -> pl.Expr:
         bilirubin = pl.col("total_bilirubin")
@@ -146,7 +146,7 @@ class SofaCnsTransformer(SofaComponent):
     """Central-nervous-system sub-score from the Glasgow Coma Scale total (3-15)."""
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {"gcs": WindowedLocf(self.window)}
+        return {"gcs": WindowedLocf(self.window, aggregate=pl.Expr.min)}
 
     def score(self) -> pl.Expr:
         gcs = pl.col("gcs")
@@ -179,7 +179,7 @@ class SofaCardiovascularTransformer(SofaComponent):
     def build_inputs(self) -> dict[str, Aggregation]:
         pressor_window = self._kwargs.get("pressor_window", "48h")
         return {
-            "mean_arterial_pressure": WindowedLocf(self.window),
+            "mean_arterial_pressure": WindowedLocf(self.window, aggregate=pl.Expr.min),
             **{
                 name: ActiveState(
                     pressor_window,
@@ -240,8 +240,8 @@ class SofaRespiratoryTransformer(SofaComponent):
 
     def build_inputs(self) -> dict[str, Aggregation]:
         return {
-            "O2_partial_pressure": WindowedLocf(self.window),
-            "fraction_of_inspired_oxygen": WindowedLocf(self.window),
+            "O2_partial_pressure": WindowedLocf(self.window, aggregate=pl.Expr.min),
+            "fraction_of_inspired_oxygen": WindowedLocf(self.window, aggregate=pl.Expr.max),
             "ventilation_state": ActiveState(
                 self._kwargs.get("ventilation_window"),
                 id_column=self._kwargs.get("ventilation_id_column", "orderid"),

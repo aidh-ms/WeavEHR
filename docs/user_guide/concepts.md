@@ -207,6 +207,14 @@ platelets, bilirubin, GCS and MAP. Urine collection remains a trailing 24-hour
 window; ventilation and pressors retain their separate state-expiry rules.
 Total SOFA still takes each component's worst emitted score over 24 hours.
 
+Exact timestamp ties use the worst-value direction: maximum creatinine,
+bilirubin and FiO₂; minimum platelets, MAP, GCS and PaO₂. GCS reconstruction
+also takes the minimum of tied component or recorded-total values; correction
+flags keep their existing precedence. Later measurements replace these tied
+values normally. These reductions occur inside score calculations; ordinary
+mapped concepts retain every record. Urine volumes still sum, and state inputs
+retain their existing rules.
+
 ### Respiratory SOFA ventilation state
 
 Respiratory SOFA consumes `ventilation_start` and `ventilation_end` markers.

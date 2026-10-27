@@ -67,6 +67,20 @@ def test_components_use_independent_latest_values_across_timestamps() -> None:
 
 
 @pytest.mark.parametrize(
+    ("name", "minimum", "normal", "expected"),
+    [("gcs_eye", 1.0, 4.0, 12.0), ("gcs_motor", 1.0, 6.0, 10.0),
+     ("gcs_verbal", 1.0, 5.0, 11.0), ("gcs_total", 3.0, 15.0, 3.0)],
+)
+@pytest.mark.parametrize("reverse", [False, True])
+def test_exact_timestamp_ties_use_minimum_then_allow_recovery(
+    name: str, minimum: float, normal: float, expected: float, reverse: bool
+) -> None:
+    source = frame((1, T0, minimum), (1, T0, normal), (1, T0, None), (1, at(1), normal))
+    result = reconstruct({name: source.reverse() if reverse else source})
+    assert result.rows() == [(1, T0, expected), (1, at(1), 15.0)]
+
+
+@pytest.mark.parametrize(
     ("name", "value", "expected"), [("gcs_eye", 2.0, 13.0), ("gcs_motor", 3.0, 12.0), ("gcs_verbal", 2.0, 12.0)]
 )
 def test_missing_components_default_to_normal(name: str, value: float, expected: float) -> None:

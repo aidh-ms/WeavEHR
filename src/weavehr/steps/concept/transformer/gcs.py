@@ -16,6 +16,7 @@ class GcsTransformer(WindowedConceptTransformer):
 
     Components use a six-hour lookback and normal defaults. Recorded totals
     win same-timestamp ties; subsequent component measurements take precedence.
+    Conflicting measurements of one numeric GCS input at the same time use its minimum.
     The latest ``gcs_unable`` flag uses the same lookback: 1 overrides the total
     to 15, 0 clears the correction. Datasets supply the flag independently of
     component measurements. Flags alone do not generate assessments.
@@ -26,15 +27,13 @@ class GcsTransformer(WindowedConceptTransformer):
     optional_inputs = triggers | {"gcs_unable"}
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {name: WindowedLocf(self.window) for name in (*_DEFAULTS, "gcs_total", "gcs_unable")}
+        return {
+            name: WindowedLocf(self.window, aggregate=pl.Expr.max if name == "gcs_unable" else pl.Expr.min)
+            for name in (*_DEFAULTS, "gcs_total", "gcs_unable")
+        }
 
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
         numeric = {name: frame.filter(pl.col("numeric_value").is_not_null()) for name, frame in dependencies.items()}
-        if "gcs_unable" in numeric:
-            # Any indication wins when multiple source records coincide.
-            numeric["gcs_unable"] = (
-                numeric["gcs_unable"].group_by("subject_id", "time").agg(pl.col("numeric_value").max())
-            )
         return super().transform(numeric)
 
     def compute(self) -> pl.Expr:
