@@ -11,6 +11,7 @@ physical files and inherited/merged configs are validated. They guard the
 configuration library — the part of WeavEHR most contributors will touch.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -320,6 +321,70 @@ def test_aumc_inherits_omop_tables() -> None:
     assert measurement.identifier == "weavehr.config.table.aumc.1.5.0.measurement"
     assert measurement.type == "parquet"  # parquet default flows through inheritance
     assert measurement.events  # inherited from omop
+
+
+
+AUMC_MEDICALLY_REVIEWED_INCLUDE_SOURCES = {
+    "methemoglobin": {"3007930"},
+    "mean_corpuscular_hemoglobin_concentration": {"40762530"},
+    "partial_thromboplastin_time": {"3013466"},
+    "chloride": {"3014576", "3018572"},
+    "temperature": {
+        "21490586",
+        "21490588",
+        "3022060",
+        "21490870",
+        "3025085",
+        "3006322",
+        "3025163",
+    },
+    "fraction_of_inspired_oxygen": {"3025408", "3020716"},
+}
+
+
+@pytest.mark.parametrize(
+    ("mapping_name", "included_ids"),
+    AUMC_MEDICALLY_REVIEWED_INCLUDE_SOURCES.items(),
+    ids=AUMC_MEDICALLY_REVIEWED_INCLUDE_SOURCES,
+)
+def test_aumc_medically_reviewed_include_sources(
+    mapping_name: str,
+    included_ids: set[str],
+) -> None:
+    """Medical review confirmed the source coverage of these AUMC mappings.
+
+    This regression test fixes the clinically reviewed source-selection
+    semantics. It deliberately does not validate value transformations such as
+    the existing MCHC unit conversion, which were not independently established
+    by the source-inclusion review.
+    """
+    mapping_file = CONFIG_ROOT / "datasets" / "aumc" / "1.5.0" / "mappings" / f"{mapping_name}.yml"
+    data = yaml.safe_load(mapping_file.read_text())
+
+    assert data["type"] == "simple"
+    assert len(data["mappings"]) == 1
+
+    mapping = data["mappings"][0]
+    assert mapping["pattern"]["table"] == "measurement"
+    assert mapping["pattern"]["event"] == "MEASUREMENT"
+
+    pattern = re.compile(mapping["pattern"]["code"])
+
+    # Every medically confirmed source must match both the bare OMOP concept
+    # code and the form carrying source-level provenance after "//".
+    for source_id in included_ids:
+        assert pattern.fullmatch(source_id)
+        assert pattern.fullmatch(f"{source_id}//review-source")
+
+    # The reviewed mappings must not accidentally absorb source IDs belonging
+    # to another medically reviewed concept.
+    all_reviewed_ids = set().union(*AUMC_MEDICALLY_REVIEWED_INCLUDE_SOURCES.values())
+    for source_id in all_reviewed_ids - included_ids:
+        assert pattern.fullmatch(source_id) is None
+        assert pattern.fullmatch(f"{source_id}//review-source") is None
+
+    assert pattern.fullmatch("999999999") is None
+
 
 
 def test_mimic_versions_inherit_reference_configs() -> None:
