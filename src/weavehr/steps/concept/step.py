@@ -537,11 +537,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
                     lf = lf.with_columns(expr.cast(pl.Float64, strict=False).alias("numeric_value"))
 
-                # code column
-                lf = lf.with_columns(pl.lit(concept.code).alias("code"))
-
                 for expr in mapping.filters:
                     lf = lf.filter(parse_expr(lf, expr))
+
+                # Preserve source codes through filtering, then assign the concept code.
+                lf = lf.with_columns(pl.lit(concept.code).alias("code"))
 
                 lf = lf.select(
                     [

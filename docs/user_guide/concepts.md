@@ -69,6 +69,7 @@ mappings:
 - `pattern.code` is a regular expression fragment matched against the full code, so alternations select multiple items at once: `(225792//Invasive Ventilation|225794//Non-invasive Ventilation)`. A fully custom regex can be given as `pattern.regex` instead.
 - `columns.numeric_value` / `columns.text_value` are expressions evaluated on the matched rows; constants work too (`numeric_value: const(1)` for flag-style concepts).
 - `columns.extension` maps extra output column names to expressions evaluated on the source rows. Use it for dataset-specific metadata, such as an infusion identifier. These expressions override same-named concept and dataset-wide extension expressions. Extension values are written as strings; mappings without a particular extension produce null for that column when their outputs are combined.
+- `filters` see the mapped timestamps, values and extensions while `code` still contains the source extraction code. After filtering, `code` is replaced with the harmonised concept code (`<name>//<unit>`).
 
 A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions.
 
@@ -345,9 +346,13 @@ Pairing, window lengths and the cumulative-minimum baseline follow
 The MIMIC-IV antibiotic mapping extends ricu's prescription regex with
 ceftriaxone, meropenem and linezolid, which also appear in
 [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/medication/antibiotic.sql),
-plus ertapenem, imipenem and daptomycin. Prescription markers use the prescribed
-treatment start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo
-2.2 inherit these mappings.
+plus ertapenem, imipenem and daptomycin. Its prescription exclusions follow
+mimic-code: `BASE` records, eye/ear and topical routes, and drug names containing
+`cream`, `gel`, `ophth oint` or `desensitization` are excluded. Prescriptions
+without a recorded route or drug type do not qualify. Drug-name exclusions inspect
+the original prescription code. Prescription markers use the prescribed treatment
+start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo 2.2 inherit
+these mappings.
 
 These are retrospective labels: the culture or antibiotic confirming a pair
 can occur after the reported onset. Calculations use continuous timestamps

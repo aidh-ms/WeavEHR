@@ -346,6 +346,34 @@ class TestDerivedConcepts:
 
 
 class TestConceptStepRobustness:
+    def test_mapping_filters_source_codes_and_mapped_values(
+        self, tmp_path: Path, extraction_config: Path, concept_config: Path
+    ) -> None:
+        mapping_dir = tmp_path / "config" / "testdb" / "1.0" / "mappings"
+        (mapping_dir / "heart_rate.yml").write_text(
+            """type: simple
+mappings:
+  - pattern:
+      table: vitals
+      event: CHART
+      code: "220045|220050"
+    columns:
+      numeric_value: col(numeric_value) / 10
+    filters:
+      - str_contains(code, "220045")
+      - col(numeric_value) > 8
+"""
+        )
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        load_concept_config(tmp_path / "config" / "concepts", [mapping_dir])
+        ExtractionStep.load(project, extraction_config).run()
+        ConceptStep.load(project, concept_config).run()
+
+        result = pl.read_parquet(concept_path(project, "heart_rate"))
+        assert result.select("subject_id", "time", "code").rows() == [(1, datetime(2024, 1, 1, 9), "heart_rate//bpm")]
+        assert result["numeric_value"].to_list() == pytest.approx([8.2])
+
     def test_mappings_with_different_extensions_preserve_rows_and_fill_missing_metadata(
         self, tmp_path: Path, extraction_config: Path, concept_config: Path
     ) -> None:
