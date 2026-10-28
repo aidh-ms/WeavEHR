@@ -45,6 +45,7 @@ Configs use expressions in three contexts with different expectations:
 | `max(a, b, ..., output=...)` | Row-wise maximum across columns |
 | `cast(value, dtype, strict=False, output=...)` | Cast to a dtype (`int64`, `float32`, `string`, `datetime`, …) |
 | `strip_str(value, characters=None, output=...)` | Trim whitespace, or a supplied character set, from both ends; e.g. `strip_str(text_value, " %")` turns `"60%"` into `"60"` |
+| `str_contains(value, pattern, output=...)` | Test strings against a regular expression; null values remain null. |
 | `replace(condition, then_value, else_value, output=...)` | Conditional value (`when/then/otherwise`) |
 
 ### Date and time

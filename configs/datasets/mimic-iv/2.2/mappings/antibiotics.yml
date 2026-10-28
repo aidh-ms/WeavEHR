@@ -14,6 +14,11 @@ mappings:
       text_value: col(text_value)
     filters:
       - drop_na(time)
+      # Route/form exclusions follow mimic-code antibiotic.sql at 303d26c.
+      # Missing drug_type or route is ineligible, as in its SQL predicates.
+      - col(drug_type) != "BASE"
+      - not str_contains(route, "^(OU|OS|OD|AU|AS|AD|TP)$|(?i:ear|eye)")
+      - not str_contains(code, "(?i)cream|desensitization|ophth oint|gel")
   - pattern:
       table: inputevents
       event: INFUSION_START

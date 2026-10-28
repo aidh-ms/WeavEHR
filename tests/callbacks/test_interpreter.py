@@ -163,3 +163,11 @@ class TestParseExpr:
     def test_filter_usage(self, lf: pl.LazyFrame) -> None:
         filtered = collect(lf.filter(parse_expr(lf, "col(a) >= 2")))
         assert_frame_equal(filtered, collect(lf).filter(pl.col("a") >= 2))
+
+    def test_string_matching_in_a_filter_preserves_unknown_values(self) -> None:
+        lf = pl.LazyFrame({"label": ["alpha", "BETA", None, "alphabet", "zalpha"]})
+        assert evaluate(lf, 'str_contains(label, "(?i)^alpha$|beta")').to_list() == [True, True, None, False, False]
+        filtered = collect(
+            lf.filter(parse_expr(lf, 'col(label) == None or not str_contains(label, "(?i)^alpha$|beta")'))
+        )
+        assert filtered["label"].to_list() == [None, "alphabet", "zalpha"]
