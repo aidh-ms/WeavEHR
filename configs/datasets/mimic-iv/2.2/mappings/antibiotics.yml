@@ -2,10 +2,12 @@ type: simple
 mappings:
   # Infection pairing uses the prescribed treatment start (ricu's abx input),
   # while the extracted MEDICATION_ORDER itself retains its order timestamp.
+  # Extend ricu's prescription names with ceftriaxone, meropenem and linezolid
+  # (also in mimic-code at 303d26c), plus ertapenem, imipenem and daptomycin.
   - pattern:
       table: prescriptions
       event: MEDICATION_ORDER
-      code: (?i)(aztreonam|bactrim|cephalexin|chloramphenicol|cipro|flagyl|metronidazole|nitrofurantoin|tazobactam|rifampin|sulfadiazine|timentin|trimethoprim|(amika|gentami|vanco)cin|(amoxi|ampi|dicloxa|naf|oxa|peni|pipera)cillin|(azithro|clarithro|erythro|clinda|strepto|tobra|vanco)mycin|cef(azolin|tazidime|adroxil|epime|otetan|otaxime|podoxime|uroxime)|(doxy|mino|tetra)cycline|(levofl|moxifl|ofl)oxacin|macro(bid|dantin)|(una|zo)syn)
+      code: (?i)(aztreonam|bactrim|cephalexin|chloramphenicol|cipro|flagyl|metronidazole|nitrofurantoin|tazobactam|rifampin|sulfadiazine|timentin|trimethoprim|(amika|gentami|vanco)cin|(amoxi|ampi|dicloxa|naf|oxa|peni|pipera)cillin|(azithro|clarithro|erythro|clinda|strepto|tobra|vanco)mycin|cef(azolin|tazidime|adroxil|epime|otetan|otaxime|podoxime|uroxime|triaxone)|(mero|imi|erta)penem|linezolid|daptomycin|(doxy|mino|tetra)cycline|(levofl|moxifl|ofl)oxacin|macro(bid|dantin)|(una|zo)syn)
     columns:
       time: parse_date_time(prescribed_start, format="%Y-%m-%d %H:%M:%S%.f")
       numeric_value: const(1)

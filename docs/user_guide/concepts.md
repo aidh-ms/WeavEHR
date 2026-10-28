@@ -317,6 +317,44 @@ MIMIC-IV 3.1 and MIMIC-IV demo 2.2 inherit the MIMIC-IV 2.2 mapping; eICU demo
 2.0 inherits eICU-CRD 2.0. These defaults remain configurable pending clinical
 validation and assessment on representative data.
 
+### Suspected infection and Sepsis-3
+
+`suspected_infection` pairs antibiotic treatment with body-fluid sampling:
+sampling follows antibiotics within 24 hours, or antibiotics follow sampling
+within 72 hours. The earlier event dates the suspicion. Both boundaries are
+inclusive; neither positive culture results nor a sustained antibiotic course
+are required.
+
+`sepsis3` assesses **every** suspected-infection window independently. Within
+the inclusive interval from 48 hours before suspicion to 24 hours after it,
+the first observed SOFA rise of at least `kwargs.sofa_increase` (default: 2)
+above the running minimum produces an onset event. An elevated first score
+alone does not qualify, and observations outside that window do not establish
+its baseline.
+
+Several windows can produce several events for the same patient. Overlapping
+windows can produce identical onset timestamps; `Sepsis3Transformer` collapses
+these copies by `subject_id` and `time` after assessing every window. Later
+distinct onsets are retained. Selecting a first onset per patient or episode
+belongs downstream; the transformer no longer takes an `infection_window`
+selector. This deliberately differs from ricu's default selection of only its
+first infection window.
+Pairing, window lengths and the cumulative-minimum baseline follow
+[ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-sep3.R).
+
+The MIMIC-IV antibiotic mapping extends ricu's prescription regex with
+ceftriaxone, meropenem and linezolid, which also appear in
+[mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/medication/antibiotic.sql),
+plus ertapenem, imipenem and daptomycin. Prescription markers use the prescribed
+treatment start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo
+2.2 inherit these mappings.
+
+These are retrospective labels: the culture or antibiotic confirming a pair
+can occur after the reported onset. Calculations use continuous timestamps
+and patient timelines. Partial SOFA scores and changes in measurement coverage
+can affect the apparent rise; no additional SOFA completeness or washout rule
+is applied here.
+
 ## Output layout
 
 Each concept is written per dataset and dataset version:

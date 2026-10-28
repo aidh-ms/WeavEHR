@@ -1,12 +1,13 @@
-"""Suspected infection and Sepsis-3 using ricu's default interpretation.
+"""Suspected infection and Sepsis-3 using ricu's pairing and SOFA-rise rules.
 
 Infection pairs antibiotic treatment with body-fluid sampling: sampling must
 follow antibiotics within 24h, or antibiotics must follow sampling within
 72h. The earlier event dates the suspicion. Sepsis requires an observed SOFA
 increase of at least two points within [suspicion - 48h, suspicion + 24h],
 relative to the running minimum *inside that window*. An elevated initial
-SOFA alone does not qualify. By default only the first infection window is
-considered, even if a later window would qualify.
+SOFA alone does not qualify. Every infection window is assessed independently
+and contributes its first qualifying onset. Selecting a first event per
+patient or episode is left to downstream processing.
 
 These are retrospective event labels, not real-time alarms: dating an event
 earlier than the antibiotic/culture pair's confirmation uses later evidence.
@@ -99,14 +100,15 @@ class SuspectedInfectionTransformer(BaseConceptTransformer):
 
 
 class Sepsis3Transformer(BaseConceptTransformer):
-    """First qualifying SOFA rise in a suspected-infection window.
+    """First qualifying SOFA rise in every suspected-infection window.
 
-    ``infection_window`` selects ``first`` (ricu default), ``last`` or ``any``
-    suspected-infection window per subject. ``sofa_increase`` defaults to 2.
+    ``sofa_increase`` defaults to 2.
     The baseline is always the cumulative minimum of observed scores within
-    each inclusive -48/+24h window; it is never implicitly zero. ``any``
-    returns the earliest qualifying SOFA time across all windows. No event is
-    emitted for a noncase or for missing/unusable SOFA observations.
+    each inclusive -48/+24h window; it is never implicitly zero. Overlapping
+    windows reporting the same subject and onset time produce one event;
+    later distinct onsets are retained. Selecting a first onset per patient
+    or episode is left downstream. No event is emitted for a noncase or for
+    missing/unusable SOFA observations.
     """
 
     strict_dependencies = False
@@ -117,16 +119,12 @@ class Sepsis3Transformer(BaseConceptTransformer):
         complex_config: "ComplexDatasetConceptConfig",
         step: "ConceptStep",
         *,
-        infection_window: str = "first",
         sofa_increase: float = 2,
         **kwargs,
     ) -> None:
         super().__init__(concept, complex_config, step, **kwargs)
-        if infection_window not in {"first", "last", "any"}:
-            raise ValueError("infection_window must be 'first', 'last', or 'any'")
         if not math.isfinite(sofa_increase) or sofa_increase <= 0:
             raise ValueError("sofa_increase must be finite and positive")
-        self._infection_window = infection_window
         self._sofa_increase = sofa_increase
 
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
@@ -135,12 +133,7 @@ class Sepsis3Transformer(BaseConceptTransformer):
             logger.warning("Sepsis-3 requires %s; producing no events.", sorted(missing))
             return _empty_events()
 
-        infections = _markers(dependencies["suspected_infection"])
-        if self._infection_window != "any":
-            time = pl.col("time")
-            select_time = time.min() if self._infection_window == "first" else time.max()
-            infections = infections.group_by("subject_id").agg(select_time)
-        infections = infections.rename({"time": "infection_time"})
+        infections = _markers(dependencies["suspected_infection"]).rename({"time": "infection_time"})
 
         sofa = (
             dependencies["sofa"]
@@ -166,8 +159,10 @@ class Sepsis3Transformer(BaseConceptTransformer):
             .sort("subject_id", "infection_time", "time")
             .with_columns(baseline=pl.col("sofa").cum_min().over("subject_id", "infection_time"))
             .filter(pl.col("sofa") - pl.col("baseline") >= self._sofa_increase)
-            .group_by("subject_id")
+            .group_by("subject_id", "infection_time")
             .agg(pl.col("time").min())
+            .select("subject_id", "time")
+            .unique(subset=["subject_id", "time"])
             .with_columns(numeric_value=pl.lit(1, dtype=pl.Float32))
             .sort("subject_id", "time")
         )

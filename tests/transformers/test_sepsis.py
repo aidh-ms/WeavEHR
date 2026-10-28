@@ -126,23 +126,36 @@ def test_infection_window_includes_minus_48_and_plus_24_hours(rise_hour: float) 
     assert onsets(result) == ([(1, at(rise_hour), 1.0)] if rise_hour <= 24 else [])
 
 
-@pytest.mark.parametrize(("selection", "expected"), [("first", []), ("last", [100]), ("any", [100])])
-def test_first_infection_is_selected_before_searching_for_a_qualifying_rise(selection, expected) -> None:
+def test_later_infection_is_assessed_when_the_first_window_does_not_qualify() -> None:
     result = classify(
         events((1, -1, 0), (1, 0, 0), (1, 60, 0), (1, 100, 2)),
         events((1, 100, 1), (1, 0, 1)),
-        infection_window=selection,
     )
-    assert onsets(result) == [(1, at(hour), 1.0) for hour in expected]
+    assert onsets(result) == [(1, at(100), 1.0)]
 
 
-def test_any_window_returns_one_earliest_onset_and_subjects_are_independent() -> None:
+def test_each_window_returns_its_first_onset_and_subjects_are_independent() -> None:
     result = classify(
         events((1, 100, 2), (1, 60, 0), (1, 0, 2), (1, -1, 0), (2, 0, 5), (2, 1, 5)),
         events((1, 100, 1), (1, 0, 1), (2, 0, 1)),
-        infection_window="any",
     )
-    assert onsets(result) == [(1, at(0), 1.0)]
+    assert onsets(result) == [(1, at(0), 1.0), (1, at(100), 1.0)]
+
+
+def test_overlapping_infection_windows_have_independent_baselines() -> None:
+    result = classify(
+        events((1, -1, 0), (1, 0, 2), (1, 1, 2), (1, 50, 4)),
+        events((1, 0, 1), (1, 48, 1)),
+    )
+    assert onsets(result) == [(1, at(0), 1.0), (1, at(50), 1.0)]
+
+
+def test_overlapping_windows_emit_one_copy_per_subject_and_onset() -> None:
+    result = classify(
+        events((1, -1, 0), (1, 2, 2), (1, 3, 3), (2, -1, 0), (2, 2, 2)),
+        events((1, 0, 1), (1, 1, 1), (2, 0, 1)),
+    )
+    assert onsets(result) == [(1, at(2), 1.0), (2, at(2), 1.0)]
 
 
 def test_duplicate_scores_are_order_independent_and_missing_scores_are_not_zero() -> None:
@@ -162,11 +175,6 @@ def test_invalid_increase_threshold_fails_loudly(threshold) -> None:
         make(Sepsis3Transformer, sofa_increase=threshold)
 
 
-def test_invalid_window_selection_fails_loudly() -> None:
-    with pytest.raises(ValueError, match="infection_window"):
-        make(Sepsis3Transformer, infection_window="earliest_case")
-
-
 @pytest.mark.parametrize("missing", ["sofa", "suspected_infection"])
 def test_missing_sepsis_input_returns_typed_empty_events(missing: str) -> None:
     inputs = {"sofa": events((1, 0, 0), (1, 1, 2)), "suspected_infection": events((1, 0, 1))}
@@ -184,9 +192,14 @@ def test_shipped_sepsis_mappings_run_through_the_concept_pipeline(tmp_path: Path
         tmp_path,
         """subject_id,charttime,itemid,valuenum
 1,2024-01-01 00:00:00,SOFA,0
+1,2024-01-01 00:30:00,ANTIBIOTIC,1
 1,2024-01-01 01:00:00,SOFA,2
 1,2024-01-01 01:00:00,ANTIBIOTIC,1
 1,2024-01-01 02:00:00,CULTURE,1
+1,2024-01-10 00:00:00,SOFA,0
+1,2024-01-10 01:00:00,SOFA,2
+1,2024-01-10 01:00:00,ANTIBIOTIC,1
+1,2024-01-10 02:00:00,CULTURE,1
 2,2024-01-01 00:00:00,SOFA,5
 2,2024-01-01 01:00:00,SOFA,5
 2,2024-01-01 01:00:00,ANTIBIOTIC,1
@@ -208,8 +221,11 @@ def test_shipped_sepsis_mappings_run_through_the_concept_pipeline(tmp_path: Path
         },
     )
     suspicion = _concept_output(project, "suspected_infection")
-    assert sorted(suspicion["subject_id"].to_list()) == [1, 2]
+    assert sorted(suspicion["subject_id"].to_list()) == [1, 1, 1, 2]
     result = _concept_output(project, "sepsis3")
-    assert result.select("subject_id", "time", "numeric_value").rows() == [(1, datetime(2024, 1, 1, 1), 1.0)]
-    assert result["code"].to_list() == ["sepsis3//boolean"]
+    assert result.select("subject_id", "time", "numeric_value").rows() == [
+        (1, datetime(2024, 1, 1, 1), 1.0),
+        (1, datetime(2024, 1, 10, 1), 1.0),
+    ]
+    assert result["code"].to_list() == ["sepsis3//boolean"] * 2
     assert result.schema["numeric_value"] == pl.Float32
