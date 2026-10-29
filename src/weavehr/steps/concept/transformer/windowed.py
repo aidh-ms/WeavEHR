@@ -121,11 +121,7 @@ class WindowedLocf(Aggregation):
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         return lf.with_columns(
             pl.when(
-                pl.when(pl.col(col).is_not_null())
-                .then(pl.col(_TIME))
-                .otherwise(None)
-                .forward_fill()
-                .over(_SUBJECT)
+                pl.when(pl.col(col).is_not_null()).then(pl.col(_TIME)).otherwise(None).forward_fill().over(_SUBJECT)
                 >= _ago(self._window)
             )
             .then(pl.col(col).forward_fill().over(_SUBJECT))
@@ -160,11 +156,7 @@ class RollingSum(_Rolling):
         if self._missing_is_zero:
             return lf.with_columns(total.fill_null(0).alias(col))
         count = (
-            pl.col(col)
-            .is_not_null()
-            .cast(pl.Int32)
-            .rolling_sum_by(_TIME, self._window, closed="right")
-            .over(_SUBJECT)
+            pl.col(col).is_not_null().cast(pl.Int32).rolling_sum_by(_TIME, self._window, closed="right").over(_SUBJECT)
         )
         return lf.with_columns(pl.when(count > 0).then(total).otherwise(None).alias(col))
 
@@ -207,12 +199,7 @@ class SegmentedRollingSum(_Rolling):
         # is unique per (subject, time), so its value one row back is the
         # *previous* record whenever the current row is itself a record
         lf = lf.with_columns(
-            pl.when(pl.col(_present(col)))
-            .then(pl.col(_TIME))
-            .otherwise(None)
-            .forward_fill()
-            .over(_SUBJECT)
-            .alias(last)
+            pl.when(pl.col(_present(col))).then(pl.col(_TIME)).otherwise(None).forward_fill().over(_SUBJECT).alias(last)
         )
 
         # a record opens a new segment if nothing precedes it or the preceding
@@ -234,12 +221,7 @@ class SegmentedRollingSum(_Rolling):
 
         return lf.with_columns(
             pl.when((pl.col(start) <= _ago(self._window)) & (pl.col(last) >= _ago(self._gap)))
-            .then(
-                pl.col(col)
-                .rolling_sum_by(_TIME, self._window, closed="right")
-                .over(_SUBJECT)
-                .fill_null(0)
-            )
+            .then(pl.col(col).rolling_sum_by(_TIME, self._window, closed="right").over(_SUBJECT).fill_null(0))
             .otherwise(None)
             .alias(col)
         ).drop(last, start)
@@ -291,10 +273,7 @@ class Exists(_Rolling):
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         return lf.with_columns(
             (
-                pl.col(_present(col))
-                .cast(pl.Int32)
-                .rolling_sum_by(_TIME, self._window, closed="both")
-                .over(_SUBJECT)
+                pl.col(_present(col)).cast(pl.Int32).rolling_sum_by(_TIME, self._window, closed="both").over(_SUBJECT)
                 > 0
             ).alias(col)
         )

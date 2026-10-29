@@ -409,15 +409,7 @@ config:
         load_extracation_config(config_dir)
         ExtractionStep.load(project, config_file).run()
 
-        output = (
-            project.datasets_path
-            / "extraction"
-            / "data"
-            / "decimaldb"
-            / "1.0"
-            / "vitals"
-            / "CHART.parquet"
-        )
+        output = project.datasets_path / "extraction" / "data" / "decimaldb" / "1.0" / "vitals" / "CHART.parquet"
         df = pl.read_parquet(output).sort("subject_id")
 
         assert df.height == 2
