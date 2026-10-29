@@ -20,13 +20,13 @@ from weavehr.callbacks._callbacks.algebra import (
 from weavehr.callbacks._callbacks.conditional import Replace
 from weavehr.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
 from weavehr.callbacks._callbacks.reshape import SplitExplode
-from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
+from weavehr.callbacks._callbacks.selector import FirstNotNull, Max, Min
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
 from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode
 from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
 from weavehr.callbacks.interpreter import parse_expr
-from weavehr.callbacks.proto import CallbackProtocol, UnknownColumnError
+from weavehr.callbacks.proto import AstValue, CallbackProtocol, UnknownColumnError
 from weavehr.callbacks.proto import ColumnRef as C
 from weavehr.utils.dtype import resolve_dtype
 
@@ -129,9 +129,10 @@ class TestShortcutsAndConditional:
             FirstDistinct("a", "missing"),
             FirstNotNull("a", "missing"),
             Max("a", "missing"),
+            Min("a", "missing"),
             SplitExplode("missing"),
         ],
-        ids=["value", "drop_na", "first_distinct", "first_not_null", "max", "split_explode"],
+        ids=["value", "drop_na", "first_distinct", "first_not_null", "max", "min", "split_explode"],
     )
     def test_unknown_column_raises(self, lf: pl.LazyFrame, callback: CallbackProtocol) -> None:
         with pytest.raises(UnknownColumnError, match="Unknown column 'missing'"):
@@ -156,9 +157,25 @@ class TestSelectors:
     def test_first_not_null_empty(self, lf: pl.LazyFrame) -> None:
         assert apply(lf, FirstNotNull(output=None)) == [None, None, None]
 
-    def test_max(self, lf: pl.LazyFrame) -> None:
-        assert apply(lf, Max("a", "b", output=None)) == [2.0, 4.0, 9.0]
-        assert apply(lf, Max(["a", "b"], output=None)) == [2.0, 4.0, 9.0]
+    @pytest.mark.parametrize(
+        ("callback_cls", "fields", "expected"),
+        [
+            (Min, ["a", "b"], [1.0, 2.0, 3.0]),
+            (Max, ["a", "b"], [2.0, 4.0, 9.0]),
+            (Min, ["maybe", "a"], [2.0, 4.0, 9.0]),
+            (Max, ["maybe", "a"], [2.0, 5.0, 9.0]),
+            (Min, ["maybe"], [None, 5.0, None]),
+            (Max, ["maybe"], [None, 5.0, None]),
+            (Min, [], [None, None, None]),
+            (Max, [], [None, None, None]),
+        ],
+    )
+    def test_horizontal_selector(
+        self, lf: pl.LazyFrame, callback_cls: type[Min | Max], fields: list[AstValue], expected: list[float | None]
+    ) -> None:
+        result = collect(lf.with_columns(callback_cls(*fields, output="selected")(lf)))
+        assert result["selected"].to_list() == expected
+        assert apply(lf, callback_cls(fields)) == expected
 
     @pytest.mark.parametrize("callback_cls", [FirstNotNull, Max])
     def test_output_is_optional(self, lf: pl.LazyFrame, callback_cls: type[FirstNotNull | Max]) -> None:

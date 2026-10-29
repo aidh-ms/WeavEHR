@@ -62,6 +62,7 @@ Configs use expressions in three contexts with different expectations:
 | `const(value, output=...)` | A constant value, e.g. `const(kg)` as a code part or `const(1)` as a flag |
 | `first_not_null(a, b, ..., output=...)` | Row-wise first non-null value (coalesce) — useful for schema harmonisation |
 | `max(a, b, ..., output=...)` | Row-wise maximum across columns |
+| `min(a, b, ..., output=...)` | Row-wise minimum across columns, ignoring nulls when a value is available |
 | `cast(value, dtype, strict=False, output=...)` | Cast to a dtype (`int64`, `float32`, `string`, `datetime`, …) |
 | `strip_str(value, characters=None, output=...)` | Trim whitespace, or a supplied character set, from both ends; e.g. `strip_str(text_value, " %")` turns `"60%"` into `"60"` |
 | `str_contains(value, pattern, output=...)` | Test strings against a regular expression; null values remain null. |

@@ -1,4 +1,4 @@
-from typing import Optional, Sequence
+from typing import Callable, ClassVar, Optional, Sequence
 
 import polars as pl
 from polars import LazyFrame
@@ -56,51 +56,30 @@ class FirstNotNull(OutputCallbackProtocol):
         return with_output(expr, self.output)
 
 
-@register_callback_cls
-class Max(OutputCallbackProtocol):
-    """Create a column containing the maximum value across multiple columns.
+class _HorizontalSelector(OutputCallbackProtocol):
+    """Apply a horizontal reduction to named columns, with optional output aliasing."""
 
-    This callback evaluates the specified source columns row-wise and returns
-    the maximum value for each row. Null values are ignored when at least one
-    non-null value is present. If all specified fields are null for a row, the
-    resulting value is null.
-    """
+    _aggregate: ClassVar[Callable[[list[pl.Expr]], pl.Expr]]
 
     def __init__(self, *fields: AstValue, output: Optional[str] = None) -> None:
-        """Initialize the callback.
-
-        Args:
-            fields: Source column names whose row-wise maximum is selected.
-            output: Name of the output column. If `None`, the resulting
-                expression is returned without an alias.
-        """
-        if len(fields) == 1 and isinstance(fields[0], list):
-            self.fields: Sequence[AstValue] = fields[0]
-        else:
-            self.fields = fields
-
+        self.fields = fields[0] if len(fields) == 1 and isinstance(fields[0], list) else fields
         self.output = output
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
-        """Create an expression for the row-wise maximum.
-
-        Args:
-            lf: Input LazyFrame.
-
-        Returns:
-            An expression containing the maximum value across the specified
-            fields for each row, optionally aliased with the output column name.
-            If no fields are specified, an expression containing null values is
-            returned.
-        """
-        cols = [resolve_column(lf, f) for f in self.fields]
-
-        # Optional: empty list handling
-        if not cols:
-            # With no inputs, output is always null.
-            expr = pl.lit(None)
-            return with_output(expr, self.output)
-
-        expr = pl.max_horizontal(cols)
-
+        cols = [resolve_column(lf, field) for field in self.fields]
+        expr = self._aggregate(cols) if cols else pl.lit(None)
         return with_output(expr, self.output)
+
+
+@register_callback_cls
+class Min(_HorizontalSelector):
+    """Select the row-wise minimum, ignoring nulls when a value is available."""
+
+    _aggregate = staticmethod(pl.min_horizontal)
+
+
+@register_callback_cls
+class Max(_HorizontalSelector):
+    """Select the row-wise maximum, ignoring nulls when a value is available."""
+
+    _aggregate = staticmethod(pl.max_horizontal)
