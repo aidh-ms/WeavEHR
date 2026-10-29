@@ -121,7 +121,7 @@ events:
   - name: CENTRAL_VENOUS_PRESSURE
     columns:
       code:
-        - const(mmH20)
+        - const(mmH2O)
       numeric_value: col(cvp)
     filters:
       - drop_na(cvp)
