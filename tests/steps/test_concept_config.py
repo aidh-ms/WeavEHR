@@ -168,6 +168,34 @@ event:
     def test_join_defaults(self) -> None:
         derived = self.make_derived()
         join = derived.join[0]
-        assert join.both_on == ["subject_id", "time"]
-        assert join.how == "full"
-        assert join.join_params == {"on": ["subject_id", "time"]}
+        assert join.join_params == {
+            "how": "full",
+            "maintain_order": "left_right",
+            "on": ["subject_id", "time"],
+            "left_on": None,
+            "right_on": None,
+        }
+
+    def test_join_left_right_keys_replace_default_keys(self) -> None:
+        derived = self.make_derived(
+            join=[
+                {
+                    "concept": "patient_height.1.0.0",
+                    "left_on": ["subject_id"],
+                    "right_on": ["subject_id"],
+                    "maintain_order": "none",
+                }
+            ]
+        )
+        join = derived.join[0]
+        assert join.join_params == {
+            "how": "full",
+            "maintain_order": "none",
+            "on": None,
+            "left_on": ["subject_id"],
+            "right_on": ["subject_id"],
+        }
+
+    def test_join_cross_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            self.make_derived(join=[{"concept": "patient_height.1.0.0", "how": "cross"}])

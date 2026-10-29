@@ -91,6 +91,25 @@ For example, the bundled MIMIC-IV labevents table config is `WeavEHR.config.tabl
 
 For dataset-bound configs the name, dataset, and version are inferred from the file's location (`configs/datasets/<dataset>/<version>/tables/<name>.yml`), so the YAML files themselves stay minimal.
 
+## Loading configurations
+
+Importing `weavehr` does not load any configuration. The dataset and concept configurations bundled in `configs/` are loaded into the global registries (`dataset_config_registry`, `concept_config_registry`) when the first step is created, once per process. To control loading yourself:
+
+```python
+from pathlib import Path
+
+from weavehr import auto_load_configs, dataset_config_registry
+
+# Register custom configs first: bundled configs never replace a config already
+# registered under the same identifier.
+dataset_config_registry.load(Path("my_configs/datasets/my-icu/1.0/tables"))
+
+auto_load_configs()                      # load the bundled configs now
+auto_load_configs(Path("my_configs"))    # or load a directory with the same layout as configs/
+```
+
+Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call always loads.
+
 ## The MEDS output
 
 Each step's `datasets/<step name>/` directory is a self-contained [MEDS](https://github.com/Medical-Event-Data-Standard/meds) dataset:
@@ -101,13 +120,15 @@ Each step's `datasets/<step name>/` directory is a self-contained [MEDS](https:/
 
 ## Logging
 
-WeavEHR uses standard Python logging under the `weavehr` logger:
+WeavEHR uses standard Python logging under the `weavehr` logger. Like any library, it only attaches a `logging.NullHandler` and leaves output to your application: records propagate to the root logger, so `logging.basicConfig(level=logging.INFO)` or pytest's `caplog` work as usual. For a quick console setup, WeavEHR provides a helper:
 
 ```python
 from weavehr.logging import configure_logging, set_log_level
 
-configure_logging(level="INFO")   # console logging
+configure_logging(level="INFO")   # console logging to stdout (stops propagation to the root logger)
 set_log_level("DEBUG")            # change verbosity later
 ```
+
+`INFO` reports step progress; registering individual configurations is logged at `DEBUG`.
 
 `DEBUG` traces every table, join, event, and written file — useful when developing new configurations.

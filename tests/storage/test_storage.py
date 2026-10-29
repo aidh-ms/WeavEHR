@@ -1,12 +1,13 @@
 """Tests for project, workspace, and MEDS dataset storage."""
 
 import json
+from importlib.metadata import version
 from pathlib import Path
 
 import polars as pl
 import pyarrow.parquet as pq
 import pytest
-from meds.schema import CodeMetadataSchema
+from meds.schema import CodeMetadataSchema, DatasetMetadataSchema
 
 from weavehr.storage.base import FileStorage
 from weavehr.storage.meds import MEDSDataset
@@ -136,8 +137,17 @@ class TestMEDSDataset:
         metadata = json.loads((dataset.metadata_path / "dataset.json").read_text())
         assert metadata["dataset_name"] == "test"
         assert metadata["etl_name"] == "WeavEHR"
-        assert "meds_version" in metadata
+        assert metadata["etl_version"] == version("weavehr")
+        assert metadata["meds_version"] == version("meds")
         assert "created_at" in metadata
+        DatasetMetadataSchema.validate(metadata)
+
+    def test_write_metadata_does_not_mutate_input(self, tmp_path: Path) -> None:
+        dataset = MEDSDataset(tmp_path / "ds")
+        metadata = {"dataset_name": "test", "dataset_version": "1.0"}
+        dataset.write_metadata(metadata)
+
+        assert metadata == {"dataset_name": "test", "dataset_version": "1.0"}
 
     def test_write_metadata_rejects_invalid_schema(self, tmp_path: Path) -> None:
         dataset = MEDSDataset(tmp_path / "ds")

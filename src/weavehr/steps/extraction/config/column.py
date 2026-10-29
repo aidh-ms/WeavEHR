@@ -6,10 +6,11 @@ type specifications and optional type conversion parameters.
 
 from typing import Any
 
+import polars as pl
 from polars.datatypes import DataTypeClass
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
-from weavehr.steps.extraction.config.dtype import DTYPES
+from weavehr.utils.dtype import resolve_dtype
 
 
 class ColumnConfig(BaseModel):
@@ -17,7 +18,7 @@ class ColumnConfig(BaseModel):
 
     Attributes:
         name: Name of the column
-        type: String type name (must be in DTYPES mapping)
+        type: Dtype name from `weavehr.utils.dtype.DTYPES` (case-insensitive, stored lowercase)
         params: Additional parameters for type conversion
         dtype: Computed Polars data type
     """
@@ -31,7 +32,16 @@ class ColumnConfig(BaseModel):
         description="Additional parameters for type conversion.",
     )
 
+    @field_validator("type")
+    @classmethod
+    def _validate_type(cls, value: str) -> str:
+        resolve_dtype(value)
+        return value.lower()
+
     @computed_field
     @property
     def dtype(self) -> DataTypeClass:
-        return DTYPES[self.type]
+        # "datetime" columns are read as raw strings and parsed later using `params`.
+        if self.type == "datetime":
+            return pl.String
+        return resolve_dtype(self.type)
