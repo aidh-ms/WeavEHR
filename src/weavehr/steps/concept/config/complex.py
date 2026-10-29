@@ -11,7 +11,9 @@ if TYPE_CHECKING:
 
 
 class ConceptTransformerProtocol(Protocol):
-    def __init__(self, concept: "ConceptConfig", complex_config: "ComplexDatasetConceptConfig", step: "ConceptStep", **kwargs): ...
+    def __init__(
+        self, concept: "ConceptConfig", complex_config: "ComplexDatasetConceptConfig", step: "ConceptStep", **kwargs
+    ): ...
     def __call__(self) -> None: ...
 
 

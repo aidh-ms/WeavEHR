@@ -81,12 +81,12 @@ class AkiCreatinineTransformer(AkiComponent):
     def build_inputs(self) -> dict[str, Aggregation]:
         return {
             "creatinine": WindowedLocf(self.window),
-            "creatinine_baseline": RollingMin(
-                self._kwargs.get("baseline_window", self.default_baseline_window)
-            ).of("creatinine"),
-            "creatinine_acute_minimum": RollingMin(
-                self._kwargs.get("acute_window", self.default_acute_window)
-            ).of("creatinine"),
+            "creatinine_baseline": RollingMin(self._kwargs.get("baseline_window", self.default_baseline_window)).of(
+                "creatinine"
+            ),
+            "creatinine_acute_minimum": RollingMin(self._kwargs.get("acute_window", self.default_acute_window)).of(
+                "creatinine"
+            ),
             "renal_replacement_therapy": Exists(self.window),
         }
 

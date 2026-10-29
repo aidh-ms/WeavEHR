@@ -104,8 +104,8 @@ from weavehr import auto_load_configs, dataset_config_registry
 # registered under the same identifier.
 dataset_config_registry.load(Path("my_configs/datasets/my-icu/1.0/tables"))
 
-auto_load_configs()                      # load the bundled configs now
-auto_load_configs(Path("my_configs"))    # or load a directory with the same layout as configs/
+auto_load_configs()  # load the bundled configs now
+auto_load_configs(Path("my_configs"))  # or load a directory with the same layout as configs/
 ```
 
 Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call always loads.
@@ -125,8 +125,8 @@ WeavEHR uses standard Python logging under the `weavehr` logger. Like any librar
 ```python
 from weavehr.logging import configure_logging, set_log_level
 
-configure_logging(level="INFO")   # console logging to stdout (stops propagation to the root logger)
-set_log_level("DEBUG")            # change verbosity later
+configure_logging(level="INFO")  # console logging to stdout (stops propagation to the root logger)
+set_log_level("DEBUG")  # change verbosity later
 ```
 
 `INFO` reports step progress; registering individual configurations is logged at `DEBUG`.
