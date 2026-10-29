@@ -122,6 +122,8 @@ Processing order:
 3. *After all joins:* the table's `post_join_callbacks` → `post_join_filters` → `transformations`
 4. *Per event:* `pre_callbacks` → column mapping and code construction → `callbacks` → `filters` → `transformations` → cast to MEDS schema → `output_filters`
 
+All events of a table are written in one Polars query, so Polars can usually run steps 1–3 once and share the result between the events, rather than parsing and joining the source again for every event. Whether a read is shared is up to Polars' query optimiser. Events that filter a source column by value range, like eICU's two `CENTRAL_VENOUS_PRESSURE` events, can end up reading the source on their own.
+
 A practical example from eICU, where timestamps are stored as minute offsets from ICU admission and have to be reconstructed:
 
 ```yaml

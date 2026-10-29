@@ -142,6 +142,84 @@ class TestExtractionStep:
         assert weight["numeric_value"].to_list() == [80.0, 60.0]
         assert height["numeric_value"].to_list() == [2.0, 1.5]
 
+    def test_events_with_the_same_name_share_one_file(
+        self, tmp_path: Path, extraction_config: Path, table_config_dir: Path
+    ) -> None:
+        """Like eICU's two CENTRAL_VENOUS_PRESSURE events, which split one column by unit."""
+        measurements = table_config_dir / "measurements.yml"
+        measurements.write_text(
+            measurements.read_text().split("events:\n")[0]
+            + dedent(
+                """\
+                events:
+                  - name: WEIGHT
+                    columns:
+                      code:
+                        - const(heavy)
+                      numeric_value: col(weight_kg)
+                    filters:
+                      - drop_if(weight_kg <= 70)
+                  - name: WEIGHT
+                    columns:
+                      code:
+                        - const(light)
+                      numeric_value: col(weight_kg)
+                    filters:
+                      - drop_if(weight_kg > 70)
+                  - name: HEIGHT
+                    columns:
+                      code:
+                        - const(m)
+                      numeric_value: col(height_m)
+                """
+            )
+        )
+
+        project = run_extraction(tmp_path, extraction_config)
+
+        weight = pl.read_parquet(
+            project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "measurements" / "WEIGHT.parquet"
+        )
+        assert weight.select("code", "numeric_value").rows() == [("WEIGHT//heavy", 80.0), ("WEIGHT//light", 60.0)]
+
+        workspace = project.workspace_path / "extraction" / "testdb" / "1.0" / "measurements"
+        assert sorted(p.name for p in workspace.iterdir()) == ["HEIGHT.parquet", "WEIGHT.parquet"]
+
+    def test_appends_to_existing_event_output(self, tmp_path: Path, extraction_config: Path) -> None:
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        step = ExtractionStep.load(project, extraction_config)
+        step.setup_config()
+        step.setup_project()
+
+        workspace = project.workspace_path / "extraction" / "testdb" / "1.0" / "measurements"
+        workspace.mkdir(parents=True)
+        existing = pl.DataFrame(
+            {
+                "subject_id": [9],
+                "time": [datetime(2023, 1, 1)],
+                "code": ["WEIGHT//earlier"],
+                "numeric_value": [1.0],
+                "text_value": [None],
+                "stay_id": [90],
+            },
+            schema={
+                "subject_id": pl.Int64,
+                "time": pl.Datetime(time_unit="us"),
+                "code": pl.String,
+                "numeric_value": pl.Float32,
+                "text_value": pl.String,
+                "stay_id": pl.Int64,
+            },
+        )
+        existing.write_parquet(workspace / "WEIGHT.parquet")
+
+        step.extract()
+
+        weight = pl.read_parquet(workspace / "WEIGHT.parquet")
+        assert weight["numeric_value"].to_list() == [1.0, 80.0, 60.0]
+        assert sorted(p.name for p in workspace.iterdir()) == ["HEIGHT.parquet", "WEIGHT.parquet"]
+
     @pytest.mark.parametrize(
         ("include_event_name", "expected_code"),
         [
