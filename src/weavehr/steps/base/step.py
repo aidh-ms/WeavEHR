@@ -100,6 +100,17 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         """
         return self._project.datasets_path / self._step_name / self.COMPLETION_MARKER
 
+    @property
+    def output_path(self) -> Path:
+        """Directory holding the output of this step.
+
+        A completed earlier run is only reused while its output still exists.
+
+        Returns:
+            ``<project>/datasets/<step>``, which also holds the completion marker
+        """
+        return self._project.datasets_path / self._step_name
+
     def run(self) -> WorkspaceDir:
         """Execute the complete step workflow.
 
@@ -115,22 +126,22 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             The workspace directory containing intermediate results
 
         Note:
-            The step is skipped if overwrite=False, its workspace exists, and an
-            earlier run wrote the completion marker. Otherwise the step's
-            workspace and dataset directories are emptied and the step runs from
-            scratch, so an interrupted run is redone rather than reused or
-            appended to.
+            The step is skipped if overwrite=False, an earlier run wrote the
+            completion marker, and its output (`output_path`) still exists.
+            Otherwise the step's workspace and dataset directories are emptied
+            and the step runs from scratch, so an interrupted run is redone
+            rather than reused or appended to.
         """
-        workspace_exists = (self._project.workspace_path / self._step_name).exists()
         completed = self.completion_marker.exists()
-        skip = not self._config.overwrite and workspace_exists and completed
+        output_exists = self.output_path.exists()
+        skip = not self._config.overwrite and completed and output_exists
 
         logger.debug(
-            "Step '%s': overwrite=%s, workspace_exists=%s, completed=%s, skip=%s",
+            "Step '%s': overwrite=%s, completed=%s, output_exists=%s, skip=%s",
             self._step_name,
             self._config.overwrite,
-            workspace_exists,
             completed,
+            output_exists,
             skip,
         )
 
@@ -222,9 +233,9 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
     def collect(self) -> None:
         """Collect workspace results into the final MEDS dataset.
 
-        Copies all Parquet files from the workspace directory to the dataset's
-        data directory, then writes dataset metadata and code vocabulary files
-        to complete the MEDS-compliant output.
+        Moves all Parquet files from the workspace directory to the dataset's
+        data directory, so the data is not kept twice, then writes dataset
+        metadata and code vocabulary files to complete the MEDS-compliant output.
         """
         if self._workspace_dir is None or self._dataset is None:
             logger.debug(
@@ -244,9 +255,9 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             dest_path = self._dataset.data_path / relative_path
             dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-            logger.debug("Copying %s -> %s", file_path, dest_path)
+            logger.debug("Moving %s -> %s", file_path, dest_path)
 
-            shutil.copy(file_path, dest_path)
+            shutil.move(file_path, dest_path)
 
         self._dataset.write_metadata(self._config.dataset.metadata)
         self._dataset.write_codes()

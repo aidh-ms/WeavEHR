@@ -154,6 +154,11 @@ class PersistenceStep(
 
         return Path(filename).stem
 
+    @property
+    def output_path(self) -> Path:
+        """The persisted source tables stay in the workspace (see `collect`)."""
+        return self._project.workspace_path / self._step_name
+
     def collect(self) -> None:
         """Skip MEDS collection for persisted source tables."""
         logger.info(

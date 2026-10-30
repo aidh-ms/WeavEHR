@@ -49,11 +49,11 @@ Every step's `run()` follows the same lifecycle:
 1. **Load configurations** — each entry in the step's `config_files` list is read recursively from disk into the step's configuration registry, honouring `includes`/`excludes` and `overwrite`. The merged registry is saved to `<project>/configs/`.
 2. **Set up directories** — a workspace directory (`workspace/<step name>`) and a MEDS dataset (`datasets/<step name>`) are created.
 3. **Extract** — the step's core logic writes Parquet files into its workspace.
-4. **Collect** — the workspace's Parquet files are copied into `datasets/<step name>/data/`, and MEDS metadata is generated: `metadata/dataset.json` (dataset metadata plus ETL/MEDS version info) and `metadata/codes.parquet` (the vocabulary of all distinct codes in the output).
+4. **Collect** — the workspace's Parquet files are moved into `datasets/<step name>/data/`, so the data is not stored twice, and MEDS metadata is generated: `metadata/dataset.json` (dataset metadata plus ETL/MEDS version info) and `metadata/codes.parquet` (the vocabulary of all distinct codes in the output).
 
 ### Skipping and overwriting
 
-A step that finishes successfully writes a marker file, `datasets/<step>/.complete`. If that marker and the step's workspace exist and the step config has `overwrite: false` (the default), the step is skipped entirely. Otherwise, including after an interrupted run, the step empties its own workspace and dataset directories and runs from scratch, so partial output is never reused or appended to. A skipped step also leaves the config snapshot in `configs/` untouched, so it keeps describing the data on disk. Set `overwrite: true` in the step YAML to force re-computation. This makes pipeline scripts safely re-runnable.
+A step that finishes successfully writes a marker file, `datasets/<step>/.complete`. If that marker exists and the step config has `overwrite: false` (the default), the step is skipped entirely. Deleting a step's workspace, which is empty after a successful run, does not change that; deleting its dataset does make it run again. The persistence step is the exception: its output stays in its workspace, so it runs again if the workspace is gone. Otherwise, including after an interrupted run, the step empties its own workspace and dataset directories and runs from scratch, so partial output is never reused or appended to. A skipped step also leaves the config snapshot in `configs/` untouched, so it keeps describing the data on disk. Set `overwrite: true` in the step YAML to force re-computation. This makes pipeline scripts safely re-runnable.
 
 ### Common step configuration
 
