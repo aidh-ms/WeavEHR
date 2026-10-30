@@ -5,12 +5,19 @@ mappings:
       event: INFUSION
       code: (?i)(bactrim|cipro|flagyl|metronidazole|zithromax|zosyn|(((amika|cleo|ofloxa)|(azithro|clinda|tobra|vanco)my)c|(ampi|oxa|peni|pipera)cill|cefazol|levaqu|rifamp)in)
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: const(1)
       text_value: col(text_value)
+      extension:
+        coverage_end: add_offset(time, 1, offset_unit="minutes")
   - pattern:
       table: medication
       event: MEDICATION_ORDER
       code: (?i)(cipro|flagyl|maxipime|metronidazole|tazobactam|zosyn|cef(azolin|epime)|(((azithro|clinda|vanco)my|ofloxa|vanco)c|levaqu|piperacill|roceph)in)
     columns:
-      numeric_value: col(numeric_value)
+      time: col(prescribed_start)
+      numeric_value: const(1)
       text_value: col(text_value)
+      extension:
+        coverage_end: col(prescribed_end)
+    filters:
+      - drop_na(time)

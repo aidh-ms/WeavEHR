@@ -2,37 +2,46 @@
 
 Each organ sub-score is a piecewise-constant grade (0-4) over one or two
 inputs, (re)evaluated in continuous time at every contributing measurement.
-All alignment and windowing lives in
+Shared alignment and windowing lives in
 :class:`~weavehr.steps.concept.transformer.windowed.WindowedConceptTransformer`;
-a component only declares which inputs it needs, with the aggregation that
-carries each onto the grid, and a ``score`` expression over the aligned
-columns.
+components declare their inputs, aggregations and scoring expressions. Infusion
+state aggregation retains native identifiers to align independent infusions
+directly onto that shared grid.
 
 Thresholds follow ricu, the windowing does not: instead of hourly binning,
-every input is carried forward only for as long as it can reasonably be
-called current (``window``, 24h by default), so a component reflects what is
-known *now* rather than a fixed calendar bin, and stale data expires instead
-of persisting indefinitely. Urine output is summed over the same trailing
-window under :class:`SegmentedRollingSum`, so a recorded 0 is real anuria
-while a window that is not fully observed contributes nothing.
+measurements are carried forward within a configurable alignment window
+(1h by default, 2h for respiratory gases). State inputs have their own
+expiry rules, so a component reflects what is known *now* rather than a
+fixed calendar bin. Urine output is recalculated at every input
+measurement over a separate trailing 24h collection window under
+:class:`SegmentedRollingSum`, so a recorded 0 is real anuria while a window
+that is not fully observed contributes nothing.
 
 A component emits no event where none of its inputs is currently known, so an
 absent component is distinguishable from a component scoring 0. The total
-(:class:`SofaTransformer`) then sums the most recent value of each sub-score
-within its own window, treating an unknown component as 0 — the usual
-convention, and the reason components must not emit spurious zeros.
+(:class:`SofaTransformer`) then sums the worst emitted value of each sub-score
+within its own trailing window, treating an unknown component as 0. The
+component alignment window and the total's score window are separate: the
+latter is measured from a component event, not from its underlying raw inputs.
 """
 
 import polars as pl
 
 from weavehr.steps.concept.transformer.windowed import (
+    ActiveState,
     Aggregation,
     GradedConceptTransformer,
-    Locf,
+    RollingMax,
     SegmentedRollingSum,
     WindowedLocf,
     WindowedSumTransformer,
 )
+
+
+def _finite_inputs(dependencies: dict[str, pl.LazyFrame]) -> dict[str, pl.LazyFrame]:
+    """Ignore non-finite measurements while retaining valueless marker events."""
+    value = pl.col("numeric_value")
+    return {name: frame.filter(value.is_null() | value.is_finite()) for name, frame in dependencies.items()}
 
 
 class SofaComponent(GradedConceptTransformer):
@@ -40,8 +49,14 @@ class SofaComponent(GradedConceptTransformer):
 
     Subclasses implement ``build_inputs`` (so the lookback stays configurable)
     and ``score``. ``window`` comes from the mapping's ``kwargs`` and defaults
-    to 24h.
+    to 1h for measurement alignment unless the component overrides it. State
+    and collection windows are separate.
     """
+
+    default_window = "1h"
+
+    def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        return super().transform(_finite_inputs(dependencies))
 
     def score(self) -> pl.Expr:
         """Return the 0-4 sub-score expression over the aligned input columns."""
@@ -54,16 +69,19 @@ class SofaComponent(GradedConceptTransformer):
 class SofaRenalTransformer(SofaComponent):
     """Renal sub-score from serum creatinine (mg/dL) and windowed urine output (mL).
 
-    Urine output is segmented on ``urine_output_gap`` (default: the component
-    window), so the volume sub-score is graded only across a window that was
-    actually observed end to end and whose stream is still running.
+    At every urine or creatinine event, recalculate the preceding 24h urine
+    collection and combine it with the latest creatinine within ``window``.
+    Urine output is segmented on ``urine_output_gap`` (default: 24h), so the
+    volume sub-score is graded only across a window observed end to end and
+    whose stream is still running.
     """
 
     def build_inputs(self) -> dict[str, Aggregation]:
+        urine_window = "24h"
         return {
-            "creatinine": WindowedLocf(self.window),
+            "creatinine": WindowedLocf(self.window, aggregate=pl.Expr.max),
             "urine_output": SegmentedRollingSum(
-                self.window, gap=self._kwargs.get("urine_output_gap", self.window)
+                urine_window, gap=self._kwargs.get("urine_output_gap", urine_window)
             ),
         }
 
@@ -96,7 +114,7 @@ class SofaCoagulationTransformer(SofaComponent):
     """Coagulation sub-score from platelet count (10^3/uL)."""
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {"platelet_count": WindowedLocf(self.window)}
+        return {"platelet_count": WindowedLocf(self.window, aggregate=pl.Expr.min)}
 
     def score(self) -> pl.Expr:
         platelets = pl.col("platelet_count")
@@ -117,7 +135,7 @@ class SofaLiverTransformer(SofaComponent):
     """Liver sub-score from total bilirubin (mg/dL)."""
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {"total_bilirubin": WindowedLocf(self.window)}
+        return {"total_bilirubin": WindowedLocf(self.window, aggregate=pl.Expr.max)}
 
     def score(self) -> pl.Expr:
         bilirubin = pl.col("total_bilirubin")
@@ -138,10 +156,10 @@ class SofaCnsTransformer(SofaComponent):
     """Central-nervous-system sub-score from the Glasgow Coma Scale total (3-15)."""
 
     def build_inputs(self) -> dict[str, Aggregation]:
-        return {"gcs_total": WindowedLocf(self.window)}
+        return {"gcs": WindowedLocf(self.window, aggregate=pl.Expr.min)}
 
     def score(self) -> pl.Expr:
-        gcs = pl.col("gcs_total")
+        gcs = pl.col("gcs")
         return (
             pl.when(gcs < 6).then(4).when(gcs < 10).then(3).when(gcs < 13).then(2).when(gcs < 15).then(1).otherwise(0)
         )
@@ -150,23 +168,37 @@ class SofaCnsTransformer(SofaComponent):
 class SofaCardiovascularTransformer(SofaComponent):
     """Cardiovascular sub-score from MAP (mmHg) and vasopressor rates (mcg/kg/min).
 
-    Vasopressor rates are carried forward like any other input, so — as with
-    the urine=0 convention for renal — a stopped infusion must be recorded as
-    a rate of 0; otherwise the last rate persists for the length of the window.
-    A null comparison counts as "not met" (ricu's ``is_true``), so a tier is
-    taken only where one of its conditions is genuinely satisfied.
+    MAP uses the latest measurement within ``window`` (default: 1h). Rates
+    are tracked separately by patient, stay and native ``linkorderid``. A
+    zero stops only its matching infusion; simultaneous infusions contribute
+    their maximum rate, not their sum.
+
+    A linked infusion with a recorded stop remains known until that stop.
+    Otherwise ``pressor_window`` (default: 48h) limits carry-forward from the
+    latest rate record. Without an identifier, observations form one stream
+    per patient/stay/drug and always use that timeout. The shipped eICU mapping
+    sets it to 6h. These provisional defaults come from demo distributions;
+    see the cardiovascular SOFA section in the concept guide.
+
+    Every input event, including a stop, triggers reassessment. Expiry alone
+    creates no event. No minimum administration duration is imposed.
     """
 
+    pressors = ("dopamine_rate", "dobutamine_rate", "epinephrine_rate", "norepinephrine_rate")
+
     def build_inputs(self) -> dict[str, Aggregation]:
+        pressor_window = self._kwargs.get("pressor_window", "48h")
         return {
-            name: WindowedLocf(self.window)
-            for name in (
-                "mean_arterial_pressure",
-                "dopamine_rate",
-                "dobutamine_rate",
-                "epinephrine_rate",
-                "norepinephrine_rate",
-            )
+            "mean_arterial_pressure": WindowedLocf(self.window, aggregate=pl.Expr.min),
+            **{
+                name: ActiveState(
+                    pressor_window,
+                    id_column="linkorderid",
+                    stop_when=pl.col("numeric_value") == 0,
+                    aggregate=pl.Expr.max,
+                )
+                for name in self.pressors
+            },
         }
 
     def score(self) -> pl.Expr:
@@ -195,25 +227,52 @@ class SofaCardiovascularTransformer(SofaComponent):
 class SofaRespiratoryTransformer(SofaComponent):
     """Respiration sub-score from PaO2/FiO2 (mmHg / %), gated on ventilation.
 
+    Gas measurements use the latest value within ``window`` (default: 2h),
+    including the boundary.
+
     The 4 and 3 tiers require mechanical ventilation; where ventilation status
     is unknown the score degrades to the ventilation-independent tiers (<=2),
     matching ricu's ``is_true(pafi < x & vent)`` with a missing ``vent``. FiO2
     is a percentage, so PaO2/FiO2 * 100 yields the ratio in mmHg.
 
-    Ventilation is a state rather than a measurement — it is carried forward
-    without expiry, since a patient ventilated for days may generate no new
-    ventilation record. Set ``ventilation_window`` to expire it instead.
+    Ventilation start/end markers are combined only inside this transformer.
+    ActiveState matches native ``orderid`` values within subject and stay;
+    ``ventilation_id_column`` can select another identifier. Concurrent active
+    episodes keep ventilation on until all have stopped. Unidentified markers
+    form one observation stream per subject/stay.
+
+    ``ventilation_window`` supplies fallback expiry for missing/unlinked stops.
+    A linked recorded stop confirms the state until that end, even beyond the
+    timeout. By default fallback expiry is disabled, preserving carry-forward.
+
+    Gas measurements and ventilation updates, including stops, trigger
+    reassessment. A score is emitted only when both gas values are current.
+    A configured ventilation timeout makes status unknown at the next input
+    event; expiry alone does not generate an assessment.
     """
 
+    default_window = "2h"
+
     def build_inputs(self) -> dict[str, Aggregation]:
-        ventilation_window = self._kwargs.get("ventilation_window")
         return {
-            "O2_partial_pressure": WindowedLocf(self.window),
-            "fraction_of_inspired_oxygen": WindowedLocf(self.window),
-            "mechanical_ventilation_windows": (
-                WindowedLocf(ventilation_window) if ventilation_window else Locf()
+            "O2_partial_pressure": WindowedLocf(self.window, aggregate=pl.Expr.min),
+            "fraction_of_inspired_oxygen": WindowedLocf(self.window, aggregate=pl.Expr.max),
+            "ventilation_state": ActiveState(
+                self._kwargs.get("ventilation_window"),
+                id_column=self._kwargs.get("ventilation_id_column", "orderid"),
+                stop_when=pl.col("numeric_value") == 0,
             ),
         }
+
+    def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        markers = [
+            dependencies[name].with_columns(pl.lit(value, dtype=pl.Float32).alias("numeric_value"))
+            for name, value in (("ventilation_start", 1), ("ventilation_end", 0))
+            if name in dependencies
+        ]
+        if markers:
+            dependencies = {**dependencies, "ventilation_state": pl.concat(markers, how="diagonal_relaxed")}
+        return super().transform(dependencies)
 
     def _pafi(self) -> pl.Expr:
         fio2 = pl.col("fraction_of_inspired_oxygen")
@@ -225,7 +284,7 @@ class SofaRespiratoryTransformer(SofaComponent):
 
     def score(self) -> pl.Expr:
         pafi = self._pafi()
-        ventilated = pl.col("mechanical_ventilation_windows") > 0
+        ventilated = pl.col("ventilation_state") > 0
         return (
             pl.when((pafi < 100) & ventilated)
             .then(4)
@@ -240,10 +299,22 @@ class SofaRespiratoryTransformer(SofaComponent):
 
 
 class SofaTransformer(WindowedSumTransformer):
-    """Total SOFA: the most recent value of each sub-score within ``window``.
+    """Total SOFA: sum of each component's worst score within ``window``.
 
-    Purely declarative — list the six sub-score concepts as the mapping's
-    dependencies (or under ``kwargs.terms``) and set ``window`` to control how
-    long a sub-score stays current. Re-evaluated whenever any sub-score is
-    updated; a sub-score with no value in the window contributes 0.
+    The trailing interval is ``[t - window, t]``; ``window`` defaults to 24h,
+    including the left boundary as in ricu's ``sofa_score``.
+    Each component is maximised separately before summing, so organ maxima
+    need not occur simultaneously. Components are the mapping's dependencies
+    or the names in ``kwargs.terms``. A component with no score in the window
+    contributes 0.
+
+    Evaluated at component event timestamps, using those emitted scores as
+    observations. No events are generated solely because a score expires, and
+    the window does not track the age of raw inputs used to derive a score.
     """
+
+    def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        if not self.inputs:
+            terms = self._kwargs.get("terms") or list(dependencies)
+            self.inputs = {name: RollingMax(self.window, closed="both") for name in terms}
+        return super().transform(_finite_inputs(dependencies))

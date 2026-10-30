@@ -546,7 +546,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 concept.identifier,
                 output_file,
             )
-            pl.scan_parquet(files).sink_parquet(output_file)
+            pl.concat([pl.scan_parquet(file) for file in files], how="diagonal").sink_parquet(output_file)
 
         logger.debug(
             "Cleaning up temporary concept files for %s in %s",
@@ -594,8 +594,13 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         extension_columns = concept.extension_columns.copy()
         extension_columns.update(dataset_extension_columns or {})
+        extension_columns.update(mapping.columns.extension)
         for col_name, col_expr in extension_columns.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
+
+        # Preserve the source timestamp unless this mapping derives a new one.
+        if mapping.columns.time is not None:
+            lf = lf.with_columns(parse_expr(lf, mapping.columns.time).alias("time"))
 
         # value columns
         if mapping.columns.text_value is None:
@@ -610,11 +615,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
             lf = lf.with_columns(expr.cast(pl.Float64, strict=False).alias("numeric_value"))
 
-        # code column
-        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
-
         for expr in mapping.filters:
             lf = lf.filter(parse_expr(lf, expr))
+
+        # Preserve source codes through filtering, then assign the concept code.
+        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
 
         lf = lf.select(
             [

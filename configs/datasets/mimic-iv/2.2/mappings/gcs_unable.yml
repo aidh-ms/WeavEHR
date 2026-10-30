@@ -1,0 +1,13 @@
+# MIMIC: ETT applies the correction; an ordinary numeric verbal assessment clears it.
+# Explicit ETT text remains evidence even when the numeric verbal value is null.
+type: simple
+mappings:
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: (223900(//.*)?)
+    columns:
+      numeric_value: replace(col(text_value) == "No Response-ETT", 1, replace(col(numeric_value) != None, 0, None))
+      text_value: col(text_value)
+    filters:
+      - col(numeric_value) != None

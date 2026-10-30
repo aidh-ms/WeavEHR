@@ -28,9 +28,11 @@ single expression, so multi-stage features (segmentation, completeness flags)
 are expressible; helper columns are namespaced ``__`` and dropped again.
 """
 
+from collections.abc import Callable
 from copy import copy
 from logging import ERROR, WARNING
-from typing import TYPE_CHECKING
+from re import escape
+from typing import TYPE_CHECKING, Literal
 
 import polars as pl
 
@@ -61,6 +63,14 @@ def _ago(window: str) -> pl.Expr:
     return pl.col(_TIME).dt.offset_by(f"-{window}")
 
 
+def _context(column: str) -> str:
+    return f"__context_{column}"
+
+
+def _optional_string(column: str) -> pl.Expr:
+    return pl.coalesce(pl.col(f"^{escape(column)}$").cast(pl.String), pl.lit(None, dtype=pl.String))
+
+
 class Aggregation:
     """Carries one input concept's events onto the evaluation grid.
 
@@ -68,14 +78,19 @@ class Aggregation:
     into a single grid value. ``align`` turns that per-timestamp column into
     the windowed feature; it receives the grid (sorted by subject and time,
     with ``__present_<col>`` already computed) and must return it with ``col``
-    replaced and any helper column removed again.
+    replaced and any helper column removed again. Aggregations needing original
+    rows, before coincident records or metadata are discarded, override
+    ``align_events`` instead.
 
     Attributes:
         source: The dependency concept to read, when it differs from the name
             the aligned column is given. Set through :meth:`of`.
+        context_columns: Optional string metadata carried onto the shared grid
+            from all inputs, taking the latest non-null value per subject.
     """
 
     source: str | None = None
+    context_columns: tuple[str, ...] = ()
 
     def of(self, concept: str) -> "Aggregation":
         """Return a copy of this aggregation reading from ``concept``.
@@ -97,6 +112,10 @@ class Aggregation:
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         raise NotImplementedError
 
+    def align_events(self, lf: pl.LazyFrame, col: str, events: pl.LazyFrame | None) -> pl.LazyFrame:
+        """Align onto the shared grid, optionally using the original source rows."""
+        return self.align(lf, col)
+
 
 class Locf(Aggregation):
     """Last observation carried forward, without expiry."""
@@ -113,10 +132,15 @@ class WindowedLocf(Aggregation):
     matching ``join_asof(tolerance=...)``); otherwise the input reads as
     missing. This is the aggregation to use when a concept should reflect
     "what we currently know" but stale data must not be treated as current.
+    ``aggregate`` resolves exact timestamp ties (default: last non-null value).
     """
 
-    def __init__(self, window: str) -> None:
+    def __init__(self, window: str, *, aggregate: Callable[[pl.Expr], pl.Expr] = pl.Expr.last) -> None:
         self._window = window
+        self._aggregate = aggregate
+
+    def collapse(self, col: str) -> pl.Expr:
+        return self._aggregate(pl.col(col).drop_nulls())
 
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         return lf.with_columns(
@@ -132,6 +156,114 @@ class WindowedLocf(Aggregation):
             .otherwise(None)
             .alias(col)
         )
+
+
+class ActiveState(Aggregation):
+    """Combine current numeric values from independently tracked states.
+
+    Numeric updates replace the preceding value of the same identifier;
+    ``stop_when`` identifies stops. A known matching stop confirms preceding
+    updates up to that stop. Otherwise values expire after ``window``, inclusive;
+    ``None`` disables fallback expiry.
+    Missing identifiers form one observation stream per subject/stay, using
+    the configured fallback expiry. Coincident stops and updates use the update, irrespective
+    of its numeric value. Conflicting simultaneous updates use the largest value.
+
+    Args:
+        window: Timeout since the latest numeric update when no identified
+            matching stop is available; None carries values until a stop/update.
+        id_column: Name of the input column linking one state's updates and
+            stop, e.g. ``linkorderid`` for an infusion across rate changes.
+            Its values need only be unique within the same subject and stay.
+            Missing/null identifiers share one unidentified observation stream.
+        stop_when: Boolean expression evaluated on the original input rows,
+            e.g. ``pl.col("numeric_value") == 0`` or a source end flag. Null
+            predicates are treated as false. Stops may have null numeric values.
+        stay_column: Name of the input column identifying the encounter, e.g.
+            ``stay_id``. It keeps a reused state identifier in a later stay
+            separate. The latest non-null stay from any input selects the
+            current encounter; without stay metadata, only subject scope is
+            available. Both column arguments are field names, not ID values.
+        aggregate: Polars expression reduction over current non-stop values
+            from distinct states, including valid zeros and negatives. Defaults
+            to ``pl.Expr.max``; use e.g. ``pl.Expr.sum`` to add concurrent values.
+            If only known stops remain, yields zero; without current observations,
+            yields null.
+    """
+
+    def __init__(
+        self,
+        window: str | None,
+        *,
+        id_column: str,
+        stop_when: pl.Expr,
+        stay_column: str = "stay_id",
+        aggregate: Callable[[pl.Expr], pl.Expr] = pl.Expr.max,
+    ) -> None:
+        self._window = window
+        self._id_column = id_column
+        self._stop_when = stop_when
+        self._stay_column = stay_column
+        self._aggregate = aggregate
+        self.context_columns = (stay_column,)
+
+    def align_events(self, lf: pl.LazyFrame, col: str, events: pl.LazyFrame | None) -> pl.LazyFrame:
+        if events is None:
+            return lf
+        keys = [_SUBJECT, "__stay", "__state"]
+        states = (
+            events.select(
+                pl.col(_SUBJECT).cast(pl.Int64),
+                pl.col(_TIME).cast(pl.Datetime("us")),
+                pl.col("numeric_value").cast(pl.Float32).alias("__value"),
+                _optional_string(self._stay_column).alias("__stay"),
+                _optional_string(self._id_column).alias("__state"),
+                self._stop_when.fill_null(False).alias("__is_stop"),
+            )
+            .filter(pl.col("__value").is_not_null() | pl.col("__is_stop"))
+            .group_by(*keys, _TIME)
+            .agg(
+                pl.col("__value").filter(~pl.col("__is_stop")).max().fill_null(0),
+                pl.col("__is_stop").all(),
+            )
+            .sort(*keys, _TIME)
+            .with_columns(
+                __next=pl.col(_TIME).shift(-1).over(keys),
+                __stop=pl.when(pl.col("__is_stop")).then(pl.col(_TIME)).otherwise(None).backward_fill().over(keys),
+            )
+            .with_columns(
+                __expires=pl.when(
+                    ~pl.col("__is_stop") & pl.col("__state").is_not_null() & pl.col("__stop").is_not_null()
+                )
+                .then(pl.col("__stop"))
+                .otherwise(
+                    pl.col(_TIME).dt.offset_by(self._window)
+                    if self._window is not None
+                    else pl.lit(None, dtype=pl.Datetime("us"))
+                )
+            )
+            .rename({_SUBJECT: "__subject", _TIME: "__start", "__stay": "__state_stay"})
+        )
+        current = (
+            lf.select(_SUBJECT, _TIME, _context(self._stay_column))
+            .join_where(
+                states,
+                pl.col(_SUBJECT) == pl.col("__subject"),
+                pl.col(_context(self._stay_column)).eq_missing(pl.col("__state_stay"))
+                | pl.col("__state_stay").is_null(),
+                pl.col(_TIME) >= pl.col("__start"),
+                pl.col("__expires").is_null() | (pl.col(_TIME) <= pl.col("__expires")),
+                pl.col("__next").is_null() | (pl.col(_TIME) < pl.col("__next")),
+            )
+            .group_by(_SUBJECT, _TIME)
+            .agg(
+                pl.when((~pl.col("__is_stop")).any())
+                .then(self._aggregate(pl.col("__value").filter(~pl.col("__is_stop"))))
+                .otherwise(0)
+                .alias(col)
+            )
+        )
+        return lf.drop(col).join(current, on=[_SUBJECT, _TIME], how="left").sort(_SUBJECT, _TIME)
 
 
 class _Rolling(Aggregation):
@@ -246,14 +378,22 @@ class SegmentedRollingSum(_Rolling):
 
 
 class RollingMax(_Rolling):
-    """Maximum (worst-high) over the trailing window ``(t - window, t]``."""
+    """Maximum (worst-high) over a trailing window.
+
+    ``closed`` defaults to ``right`` for ``(t - window, t]``. SOFA uses
+    ``both`` to include an observation exactly 24h old, as in ricu.
+    """
+
+    def __init__(self, window: str, *, closed: Literal["left", "right", "both", "none"] = "right") -> None:
+        super().__init__(window)
+        self._closed = closed
 
     def collapse(self, col: str) -> pl.Expr:
         return pl.col(col).max()
 
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         return lf.with_columns(
-            pl.col(col).rolling_max_by(_TIME, self._window, closed="right").over(_SUBJECT).alias(col)
+            pl.col(col).rolling_max_by(_TIME, self._window, closed=self._closed).over(_SUBJECT).alias(col)
         )
 
 
@@ -449,27 +589,21 @@ class WindowedConceptTransformer(BaseConceptTransformer):
                 sorted(dependencies),
             )
 
+        context = sorted({column for aggregation in self.inputs.values() for column in aggregation.context_columns})
         frames = []
         for name in names:
             lf = dependencies.get(sources[name])
             if lf is None:
-                frames.append(
-                    pl.LazyFrame(
-                        schema={
-                            _SUBJECT: pl.Int64,
-                            _TIME: pl.Datetime(time_unit="us"),
-                            name: pl.Float32,
-                            _event(name): pl.Int32,
-                        }
-                    )
+                lf = pl.LazyFrame(
+                    schema={_SUBJECT: pl.Int64, _TIME: pl.Datetime("us"), "numeric_value": pl.Float32}
                 )
-                continue
             frames.append(
                 lf.select(
                     pl.col(_SUBJECT).cast(pl.Int64),
                     pl.col(_TIME).cast(pl.Datetime(time_unit="us")),
                     pl.col("numeric_value").cast(pl.Float32).alias(name),
                     pl.lit(1, dtype=pl.Int32).alias(_event(name)),
+                    *[_optional_string(column).alias(_context(column)) for column in context],
                 )
             )
 
@@ -481,13 +615,16 @@ class WindowedConceptTransformer(BaseConceptTransformer):
                 # presence = an event row of this input exists at this timestamp,
                 # independent of numeric_value (so marker concepts count)
                 *[pl.col(_event(name)).is_not_null().any().alias(_present(name)) for name in names],
+                *[pl.col(_context(column)).max() for column in context],
             )
             .sort(_SUBJECT, _TIME)
         )
+        if context:
+            grid = grid.with_columns(*[pl.col(_context(column)).forward_fill().over(_SUBJECT) for column in context])
 
         aligned = grid
         for name in names:
-            aligned = self.inputs[name].align(aligned, name)
+            aligned = self.inputs[name].align_events(aligned, name, dependencies.get(sources[name]))
 
         triggers = self.triggers if self.triggers is not None else set(names)
         return (
@@ -535,9 +672,10 @@ class WindowedSumTransformer(WindowedConceptTransformer):
     Fully declarative: the summed concepts are the declared ``concepts`` of the
     mapping, or the (unversioned) names listed in ``kwargs.terms``; ``window``
     controls how long a term's last value stays current (default 24h). A term
-    with no value inside the window contributes 0, so the sum is defined as
-    soon as any one term is. Used for aggregate concepts such as a GCS total
-    (eye + motor + verbal) or the total SOFA over its sub-scores.
+    with no value inside the window contributes 0 unless ``kwargs.missing_values``
+    supplies a per-term default. Set ``kwargs.numeric_only`` to ignore null-valued
+    source events, so only numeric measurements trigger assessment.
+    SOFA overrides the input aggregation to use maxima.
     """
 
     default_window = "24h"
@@ -550,10 +688,15 @@ class WindowedSumTransformer(WindowedConceptTransformer):
         if not self.inputs:
             terms = self._kwargs.get("terms") or list(dependencies)
             self.inputs = {name: WindowedLocf(self.window) for name in terms}
+        if self._kwargs.get("numeric_only", False):
+            dependencies = {
+                name: frame.filter(pl.col("numeric_value").is_not_null()) for name, frame in dependencies.items()
+            }
         return super().transform(dependencies)
 
     def compute(self) -> pl.Expr:
-        return pl.sum_horizontal(*[pl.col(name).fill_null(0) for name in self.inputs]).cast(pl.Float32)
+        defaults = self._kwargs.get("missing_values", {})
+        return pl.sum_horizontal(*[pl.col(name).fill_null(defaults.get(name, 0)) for name in self.inputs]).cast(pl.Float32)
 
 
 class WindowedMaxTransformer(WindowedSumTransformer):

@@ -179,3 +179,20 @@ events:
       numeric_value: col(dischargeweight)
       extension:
         available_time: col(discharge_timestamp)
+
+  # One death per MEDS subject (hospital admission): earliest recorded death
+  # across unit/hospital "Expired" records. Equal times use the lowest stay ID.
+  - name: MEDS_DEATH
+    pre_callbacks:
+      - replace(unitdischargestatus == "Expired", discharge_timestamp, None, output=icu_death_timestamp)
+      - replace(hospitaldischargestatus == "Expired", hospital_discharge_timestamp, None, output=hospital_death_timestamp)
+      - min(icu_death_timestamp, hospital_death_timestamp, output=death_timestamp)
+    columns:
+      time: col(death_timestamp)
+      code:
+        - const("MEDS_DEATH")
+      extension:
+        available_time: col(death_timestamp)
+    filters:
+      - drop_na(time)
+      - first_distinct(subject_id, order_by=[time, stay_id])
