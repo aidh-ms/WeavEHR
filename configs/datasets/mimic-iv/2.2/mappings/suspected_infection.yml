@@ -1,5 +1,5 @@
 type: complex
-concept_transformer: weavehr.steps.concept.transformer.sepsis.SuspectedInfectionTransformer
+concept_transformer: weavehr.steps.concept.transformer.sepsis.AntibioticsWithCultureTransformer
 concepts:
   - antibiotics.1.0.0
   - body_fluid_sampling.1.0.0

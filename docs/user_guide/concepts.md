@@ -324,7 +324,11 @@ validation and assessment on representative data.
 
 ### Suspected infection and Sepsis-3
 
-`suspected_infection` pairs antibiotic treatment with body-fluid sampling:
+`suspected_infection` is the shared output concept. Each dataset's
+`suspected_infection.yml` selects its evidence rule: antibiotic/culture pairing
+for MIMIC-IV, or sustained antibiotic treatment for eICU.
+
+`AntibioticsWithCultureTransformer` pairs antibiotic treatment with body-fluid sampling:
 sampling follows antibiotics within 24 hours, or antibiotics follow sampling
 within 72 hours. The earlier event dates the suspicion. Both boundaries are
 inclusive; neither positive culture results nor a sustained antibiotic course
@@ -358,8 +362,65 @@ the original prescription code. Prescription markers use the prescribed treatmen
 start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo 2.2 inherit
 these mappings.
 
-These are retrospective labels: the culture or antibiotic confirming a pair
-can occur after the reported onset. Calculations use continuous timestamps
+The eICU antibiotic inputs follow the drug selection and binary markers in
+[YAIB-cohorts at 74ac699](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/configs/medications/concept-dict.json).
+Medication markers use `prescribed_start`; infusion observations use their
+recorded timestamps. Prescription starts and ends are native datetimes from
+extraction and are used directly. Medication rows with missing starts are
+excluded from antibiotic output; the original orders remain in extraction.
+Both emit `numeric_value: 1`, including zero-rate infusion
+observations as in the reference. Neither retains `stay_id`. Both mappings supply a
+common `coverage_end` extension: the prescribed stop for medication, or one minute
+after an infusion observation. Infusion rates are not used to infer longer
+coverage. eICU demo 2.0 inherits these mappings.
+
+For eICU, `suspected_infection` selects `SustainedAntibioticsTransformer`, following
+[YAIB's continuity callback at 74ac699](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/callbacks/callback-sepsis.R).
+Each antibiotic start is assessed over the following `kwargs.antibiotic_window`
+(default: 72h). Every gap, including the final gap to the horizon, must be at most
+`kwargs.max_gap` (default: 24h). Thus a single prescription covering exactly 48h
+can qualify. Duplicate starts use the latest prescribed end unless any end is
+missing; in that case the collapsed end is missing. Overlapping prescriptions
+use the cumulative latest end. Recorded ends, including ends before the start,
+are used without clamping. A missing end invalidates every window containing
+that row, even if another interval covers the entire window. This preserves
+YAIB's conservative handling of missing durations. Treatment is grouped by
+`subject_id`, which identifies a hospital
+admission in eICU. All available antibiotic records can contribute, including
+across ICU stays or outside ICU admission/discharge times. This intentionally
+extends YAIB's ICU-stay scope; complete ward treatment records may be unavailable.
+
+The transformer requires a `coverage_end` extension column, independently
+of the original source tables or fields. Coverage ends are naive ISO datetime
+strings. Invalid non-null ends fail rather than silently removing
+suspected-infection events. The dataset mapping defines each source's coverage.
+The antibiotic window must be a positive Polars temporal duration string and
+the maximum gap must be non-negative. Index-count units (`i`) are not supported;
+invalid values fail at construction. All three sepsis-related transformers
+reject unknown parameters at construction.
+The `death` input is a thin mapping of extracted `MEDS_DEATH` events. Any recorded
+death shortens the horizon and excludes antibiotics starting after death. This
+intentionally extends YAIB's ICU-death exception to deaths after ICU discharge.
+Death applies across the subject's hospital admission. Missing death events leave the full horizon.
+Live discharge does not shorten it. No culture pairing is required
+by this transformer. Every qualifying start feeds the existing `sepsis3` SOFA-rise rule;
+YAIB's additional cohort and prediction-label rules are not applied. eICU demo
+inherits both mappings. Calculations retain continuous timestamps rather than
+reproducing ricu's time-grid rounding.
+
+For the missing eICU death events described in
+[issue #84](https://github.com/aidh-ms/WeavEHR/issues/84), we use the earliest
+recorded death timestamp. ICU discharge is eligible when `unitdischargestatus`
+is `Expired`; hospital discharge is eligible when `hospitaldischargestatus` is
+`Expired`. `min` selects the earliest non-null death timestamp within each row,
+then `first_distinct(subject_id, order_by=[time, stay_id])` retains exactly one event per MEDS
+subject, using the lowest ICU stay ID to break equal-time ties. In eICU the MEDS
+subject is a hospital admission (`patienthealthsystemstayid`), so several ICU
+stays share one death event. Death events have no numeric measurement value.
+eICU demo inherits this extraction. Existing extractions need rerunning to expose it.
+
+These are retrospective labels: the culture, antibiotic or sustained treatment
+confirming suspicion can occur after the reported onset. Calculations use continuous timestamps
 and patient timelines. Partial SOFA scores and changes in measurement coverage
 can affect the apparent rise; no additional SOFA completeness or washout rule
 is applied here.
