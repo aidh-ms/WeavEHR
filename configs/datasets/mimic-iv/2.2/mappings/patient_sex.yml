@@ -1,9 +1,15 @@
+# Female, Male or Other; no event when sex is unknown.
 type: simple
 mappings:
   - pattern:
       table: patients
       event: GENDER
-      code: (F|M)
+      code: ^F$
     columns:
-      numeric_value: col(numeric_value)
-      text_value: col(code)
+      text_value: const("Female")
+  - pattern:
+      table: patients
+      event: GENDER
+      code: ^M$
+    columns:
+      text_value: const("Male")
