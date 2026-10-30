@@ -36,7 +36,7 @@ filters:
   - replace(col(temp_unit) == "F", (col(temp) - 32) / 1.8, col(temp), output=temp_c)
 ```
 
-Some parameters take a column *name* rather than a value: the argument of `col(...)` and the columns of `drop_na`, `first_distinct`, `first_not_null`, `max`, and `split_explode`. These accept a bare name or a quoted name, and the column must exist either way. The quoted form is for names that are not valid identifiers, e.g. `col("Variable Name")`.
+Some parameters take a column *name* rather than a value: the argument of `col(...)` and the columns of `drop_na`, `first_distinct`, `first_not_null`, `min`, `max`, and `split_explode`. These accept a bare name or a quoted name, and the column must exist either way. The quoted form is for names that are not valid identifiers, e.g. `col("Variable Name")`.
 
 Some parameters are always plain text: `output=`, `dtype`, `offset_unit`, `separator`, `format`, and the value of `const(...)`. A bare word there is just text, so `const(kg)` and `const("kg")` both produce the text `kg`, and `output=event_time` names the new column `event_time`.
 
