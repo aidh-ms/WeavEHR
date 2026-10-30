@@ -23,7 +23,7 @@ classifiers = [
 requires-python = ">=3.13"
 dependencies = [
     "meds>=0.4.0",
-    "polars>=1.41.2",
+    "polars>=2.1.0",
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "pyyaml>=6.0.2",
