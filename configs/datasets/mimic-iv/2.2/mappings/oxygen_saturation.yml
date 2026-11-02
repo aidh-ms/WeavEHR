@@ -9,4 +9,3 @@ mappings:
       text_value: col(text_value)
     filters:
       - drop_na(numeric_value)
-      - drop_if(col(numeric_value) < 0 or col(numeric_value) > 100)

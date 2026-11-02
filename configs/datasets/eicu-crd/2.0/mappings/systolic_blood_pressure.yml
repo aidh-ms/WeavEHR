@@ -7,5 +7,3 @@ mappings:
   columns:
     numeric_value: col(numeric_value)
     text_value: col(text_value)
-  filters:
-    - drop_if(col(numeric_value) < 0 or col(numeric_value) > 300)
