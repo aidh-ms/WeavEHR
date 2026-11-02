@@ -4,8 +4,8 @@
 # SICdb is fully de-identified: only the admission *year* is known and all times
 # are integer second-offsets. The MEDS subject is the PATIENT (PatientID); a
 # patient's stays are placed on one timeline anchored at the patient's FIRST
-# admission year (the OffsetAfterFirstAdmission == 0 row), with the per-case
-# OffsetAfterFirstAdmission spacing subsequent stays.
+# admission year (the OffsetAfterFirstAdmission == 0 row, or the earliest case if
+# none is at 0), with the per-case OffsetAfterFirstAdmission spacing subsequent stays.
 path: cases.csv.gz
 
 columns:
@@ -30,7 +30,7 @@ columns:
     type: float32
 
 join:
-  # Self-join to fetch each patient's FIRST admission year (one row per patient).
+  # Self-join to fetch each patient's anchor case (one row per patient).
   - name: cases
     path: cases.csv.gz
     columns:
@@ -40,18 +40,20 @@ join:
         type: int64
       - name: OffsetAfterFirstAdmission
         type: int64
-    pre_filters:
-      - drop_if(OffsetAfterFirstAdmission != 0)
     callbacks:
       - col(AdmissionYear, output=first_admission_year)
+      - col(OffsetAfterFirstAdmission, output=anchor_offset)
+    filters:
+      # One anchor per patient: the case at offset 0, or the earliest case if none is at 0.
+      - first_distinct(PatientID, order_by=[OffsetAfterFirstAdmission])
     both_on:
       - PatientID
 
 post_join_callbacks:
-  # Anchor the patient timeline at Jan 1 of the first admission year, then shift
-  # this case's admission by OffsetAfterFirstAdmission seconds.
+  # Anchor the patient timeline at Jan 1 of the anchor case's admission year, then
+  # shift this case's admission by its offset relative to the anchor case.
   - to_datetime(first_admission_year, 1, 1, "00:00:00", output=year_base)
-  - add_offset(year_base, OffsetAfterFirstAdmission, offset_unit="seconds", output=admission_base)
+  - add_offset(year_base, OffsetAfterFirstAdmission - anchor_offset, offset_unit="seconds", output=admission_base)
   # Harmonise sex codes (ricu apply_map 735 -> Male, 736 -> Female).
   - replace(Sex == 735, "Male", "Unknown", output=sex_label)
   - replace(Sex == 736, "Female", sex_label, output=sex_label)
