@@ -4,6 +4,9 @@
 # reference_data.tar.gz. Columns: patientid, admissiontime, sex, age,
 # discharge_status. HiRID has no recorded date of birth, so MEDS_BIRTH is
 # derived from admissiontime minus age years (cf. eicu patient.yml).
+# HiRID has no death time either, so MEDS_DEATH is placed at the end of
+# monitoring: the patient's last heart rate (variableid 200) or invasive mean
+# arterial pressure (110) observation, like ricu's hirid_death.
 path: reference_data/general_table.csv
 
 columns:
@@ -24,12 +27,37 @@ columns:
   - name: discharge_status
     type: str
 
+join:
+  # End of monitoring: each patient's last heart rate or invasive MAP observation.
+  - name: observations
+    path: raw_stage/observation_tables/parquet/*.parquet
+    columns:
+      - name: patientid
+        type: int64
+      - name: datetime
+        type: datetime
+        params:
+          format: "%Y-%m-%d %H:%M:%S"
+          strict: false
+      - name: variableid
+        type: int64
+    pre_filters:
+      - (variableid == 200) | (variableid == 110)
+    callbacks:
+      - col(datetime, output=monitoring_end)
+    filters:
+      - first_distinct(patientid, order_by=[monitoring_end], descending=True)
+    both_on:
+      - patientid
+
 post_join_callbacks:
   # Harmonise sex to Male/Female (mirrors ricu's apply_map(M->Male, F->Female)).
   - replace(sex == "M", "Male", sex, output=sex_label)
   - replace(sex_label == "F", "Female", sex_label, output=sex_label)
   # Pseudo date of birth = admission time shifted back by age years.
   - add_offset(admissiontime, age * -365.25, offset_unit="days", output=birth_timestamp)
+  # Time of death = end of monitoring, for patients who died.
+  - replace(discharge_status == "dead", monitoring_end, None, output=death_timestamp)
 
 event_defaults:
   subject_id: col(patientid)
@@ -48,12 +76,6 @@ events:
         - const(age)
       numeric_value: col(age)
 
-  - name: MORTALITY
-    columns:
-      code:
-        - const(mortality)
-      text_value: col(discharge_status)
-
   - name: ICU_ADMISSION
     columns:
       code:
@@ -69,3 +91,13 @@ events:
     filters:
       - drop_na(time)
       - first_distinct(subject_id, time)
+
+  - name: MEDS_DEATH
+    columns:
+      code:
+        - const("MEDS_DEATH")
+      time: col(death_timestamp)
+      extension:
+        available_time: col(death_timestamp)
+    filters:
+      - drop_na(time)
