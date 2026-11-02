@@ -1,4 +1,5 @@
-path: procedure_occurrence.parquet
+# OMOP CDM 5.4 adds procedure_end_date and procedure_end_datetime to procedure_occurrence.
+# Lists replace rather than merge, so the changed lists are restated in full.
 
 columns:
   # subject_id and extensions
@@ -48,13 +49,6 @@ columns:
 post_join_callbacks:
   - first_not_null(procedure_datetime, procedure_date, output=procedure_time)
   - first_not_null(procedure_end_datetime, procedure_end_date, output=procedure_end)
-
-event_defaults:
-  subject_id: col(person_id)
-  extension:
-    procedure_occurrence_id: col(procedure_occurrence_id)
-    visit_occurrence_id: col(visit_occurrence_id)
-    provider_id: col(provider_id)
 
 events:
   - name: PROCEDURE

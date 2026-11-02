@@ -1,4 +1,6 @@
-path: visit_occurrence.parquet
+# OMOP CDM 5.4 renames admitting_source_* to admitted_from_* and discharge_to_* to
+# discharged_to_* in visit_occurrence.
+# Lists replace rather than merge, so the changed lists are restated in full.
 
 columns:
   # subject_id and extensions
@@ -46,18 +48,6 @@ columns:
     type: int64
   - name: discharged_to_source_value
     type: string
-
-post_join_callbacks:
-  - first_not_null(visit_start_datetime, visit_start_date, output=visit_start)
-  - first_not_null(visit_end_datetime, visit_end_date, output=visit_end)
-
-event_defaults:
-  subject_id: col(person_id)
-  extension:
-    visit_occurrence_id: col(visit_occurrence_id)
-    visit_type_concept_id: col(visit_type_concept_id)
-    provider_id: col(provider_id)
-    care_site_id: col(care_site_id)
 
 events:
   - name: VISIT_START

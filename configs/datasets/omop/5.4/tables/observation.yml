@@ -1,4 +1,5 @@
-path: observation.parquet
+# OMOP CDM 5.4 adds value_source_value to observation.
+# Lists replace rather than merge, so the changed lists are restated in full.
 
 columns:
   # subject_id and extensions
@@ -44,16 +45,6 @@ columns:
     type: int64
   - name: unit_source_value
     type: string
-
-post_join_callbacks:
-  - first_not_null(observation_datetime, observation_date, output=observation_time)
-
-event_defaults:
-  subject_id: col(person_id)
-  extension:
-    observation_id: col(observation_id)
-    visit_occurrence_id: col(visit_occurrence_id)
-    provider_id: col(provider_id)
 
 events:
   - name: OBSERVATION
