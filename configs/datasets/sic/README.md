@@ -24,7 +24,7 @@ leading numeric id.
 | --------------- | -------------------------------- | ---------------------------------------------------- |
 | `laboratory`    | `laboratory.csv` (`LaboratoryID`)| `LAB`                                                |
 | `data_float_h`  | `data_float_h.csv` (`DataID`)    | `OBSERVATION`                                        |
-| `cases`         | `cases.csv`                      | `SEX`, `AGE`, `HEIGHT`, `WEIGHT`, `ICU_ADMISSION`, `MEDS_BIRTH` |
+| `cases`         | `cases.csv`                      | `SEX`, `AGE`, `HEIGHT`, `WEIGHT`, `ICU_ADMISSION`, `MEDS_BIRTH`, `MEDS_DEATH` |
 | `medication`    | `medication.csv` (`DrugID`)      | `MEDICATION`                                         |
 
 ## Concept mappings
@@ -65,8 +65,9 @@ and the demographics from `cases` (`patient_sex`, `patient_age`, `patient_height
 Not yet mapped / not cleanly mappable as `simple`:
 - **Drug rates / durations** (vasopressors, antibiotics): live in `medication` and need
   `derived`/`complex` handling of SICdb's per-record dosing.
-- **in_hospital_mortality / outcomes**: from `cases.DischargeState`/`OffsetOfDeath`,
-  whose code semantics still need decoding.
+- **in_hospital_mortality / outcomes**: `cases.OffsetOfDeath` is extracted as
+  `MEDS_DEATH` (one per patient), but `DischargeState`'s code semantics still need
+  decoding.
 - Concepts with **no SICdb source** in ricu are simply absent (e.g. `tri`/triglycerides
   has a SICdb id but no WeavEHR concept, so it is skipped).
 

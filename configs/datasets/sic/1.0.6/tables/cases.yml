@@ -19,6 +19,8 @@ columns:
     type: int64
   - name: OffsetAfterFirstAdmission
     type: int64
+  - name: OffsetOfDeath
+    type: int64
   # db fields - values
   - name: Sex
     type: int64
@@ -52,6 +54,8 @@ post_join_callbacks:
   # this case's admission by OffsetAfterFirstAdmission seconds.
   - to_datetime(first_admission_year, 1, 1, "00:00:00", output=year_base)
   - add_offset(year_base, OffsetAfterFirstAdmission, offset_unit="seconds", output=admission_base)
+  # Time of death: OffsetOfDeath is seconds from this case's admission (null if alive).
+  - add_offset(admission_base, OffsetOfDeath, offset_unit="seconds", output=death_time)
   # Harmonise sex codes (ricu apply_map 735 -> Male, 736 -> Female).
   - replace(Sex == 735, "Male", "Unknown", output=sex_label)
   - replace(Sex == 736, "Female", sex_label, output=sex_label)
@@ -103,3 +107,15 @@ events:
       - drop_na(time)
       # One birth per patient; keep the row with the earliest birth timestamp.
       - first_distinct(subject_id, order_by=[time])
+
+  - name: MEDS_DEATH
+    columns:
+      code:
+        - const("MEDS_DEATH")
+      time: col(death_time)
+      extension:
+        available_time: col(death_time)
+    filters:
+      - drop_na(time)
+      # One death per patient, even if several of their cases record it.
+      - first_distinct(subject_id, order_by=[time, case_id])
