@@ -1,0 +1,8 @@
+# Unit explicitly documented in the pinned mimic-code treatment/crrt.sql.
+name: crrt_blood_flow
+version: 1.0.0
+unit: mL/min
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")
+  source_code: col("code")

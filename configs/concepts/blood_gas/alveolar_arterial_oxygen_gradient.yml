@@ -1,0 +1,6 @@
+name: alveolar_arterial_oxygen_gradient
+version: 1.0.0
+unit: mmHg
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")
