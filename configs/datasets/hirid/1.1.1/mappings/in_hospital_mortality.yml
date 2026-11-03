@@ -3,7 +3,6 @@ type: simple
 mappings:
   - pattern:
       table: general
-      event: MORTALITY
-      code: "^(mortality)(//.*)?$"
-    columns:
-      text_value: col(text_value)
+      event: MEDS_DEATH
+      code: "^(MEDS_DEATH)(//.*)?$"
+    
