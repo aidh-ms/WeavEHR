@@ -1,11 +1,21 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3002030 = Lymphocytes/100 leukocytes in Blood
-type: simple
-mappings:
-  - pattern:
-      table: measurement
-      event: MEASUREMENT
-      code: "^3002030(//.*)?$"
-    columns:
-      numeric_value: col(numeric_value)
-      text_value: col(text_value)
+# AUMCdb exposes two clinically distinct lymphocyte measurements:
+#
+#   3002030 = direct lymphocyte percentage
+#   3019198 = absolute lymphocyte count
+#
+# The canonical `lymphocytes` concept remains a percentage. Direct percentages
+# are retained as measured, while absolute counts are converted to percentages
+# using the white blood cell count measured at the exact same MEDS timestamp.
+#
+# Direct and derived percentage events are intentionally not coalesced when they
+# occur simultaneously.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.hematology.BloodCellPercentageTransformer
+concepts:
+  - lymphocyte_percentage.1.0.0
+  - absolute_lymphocyte_count.1.0.0
+  - white_blood_cell_count.1.0.0
+kwargs:
+  direct_concept: lymphocyte_percentage
+  count_concept: absolute_lymphocyte_count
+  reference_count_concept: white_blood_cell_count

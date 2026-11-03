@@ -86,14 +86,25 @@ be assumed to represent true urine production without accounting for the
 corresponding input. Source-level handling of this case remains a separate
 follow-up rather than being removed through a blanket OMOP-concept filter.
 
-Neutrophils and lymphocytes are intentionally not considered fully reproduced
-by the current `simple` mappings. The corresponding `ricu` concepts can use
-the cross-concept `blood_cell_ratio` calculation with white blood cell count.
-Medical review confirmed that lymphocyte percentages and absolute lymphocyte
-counts are distinct measurements and should not be merged as interchangeable
-raw values merely to reproduce `ricu` coverage. Implementing any derived
-cross-concept conversion therefore requires explicit derived/complex concept
-logic and is deferred rather than approximated in a simple mapping.
+Neutrophils are not yet considered fully reproduced by the current `simple`
+mapping because the corresponding `ricu` concept can use the cross-concept
+`blood_cell_ratio` calculation.
+
+Lymphocytes now implement that distinction explicitly. OMOP concept `3002030`
+is retained as the directly measured lymphocyte percentage, while `3019198`
+is represented separately as an absolute lymphocyte count (`K/uL`). The
+canonical `lymphocytes` percentage concept additionally derives
+`100 * absolute_lymphocyte_count / white_blood_cell_count` when OMOP concept
+`3010813` is available at the exact same MEDS timestamp. Multiple WBC records
+at one exact timestamp use their median as the denominator, while distinct
+absolute-count events and simultaneous direct/derived percentage events remain
+separate events.
+
+This deliberately preserves the clinical distinction identified by medical
+review instead of treating absolute counts as raw percentages. It also keeps
+`ricu`'s analysis-specific one-hour ICU-relative discretisation out of the
+harmonised MEDS concept layer; that representation is reproduced downstream
+when comparing against the `ricu`/YAIB reference.
 
 ### Medical review of validation discrepancies
 
@@ -114,7 +125,7 @@ The review decisions were:
 | `chloride` | include | retain OMOP concepts `3014576` and `3018572`, including Astrup/ISE chloride |
 | `temperature` | include | retain blood, esophageal, bladder, rectal, axillary, oral and tympanic measurement sites |
 | `fraction_of_inspired_oxygen` | include | retain OMOP concepts `3025408` and `3020716`, including the reviewed O2 Volume source |
-| `lymphocytes` | partial / conditional | percentage and absolute-count measurements must retain distinct semantics; derived handling requires separate implementation |
+| `lymphocytes` | partial / conditional → implemented | percentage and absolute-count measurements retain distinct semantics; absolute counts are explicitly converted with same-time WBC and appended to direct percentages |
 | `urine_output` | partial / conditional | retain genuine additional urine sources, but handle bladder-irrigation (`Spoelblaas`) output separately |
 | `creatine_kinase_MB` | uncertain | keep the current CK-MB mass mapping unchanged pending unit/value-distribution and source-semantic follow-up |
 | `prothrombin_time_international_normalized_ratio` | uncertain | keep the current mapping unchanged until INR versus PT/Quick semantics are verified |
@@ -127,7 +138,7 @@ not evidence of an incorrect mapping.
 The two `partial / conditional` decisions require concept-specific follow-up
 instead of a blanket adjustment:
 
-- `lymphocytes`: percentages and absolute counts are clinically distinct;
+- `lymphocytes`: percentages and absolute counts are clinically distinct; this is now implemented through separate source concepts plus an explicit same-time blood-cell-ratio derivation;
 - `urine_output`: bladder-irrigation output may contain instilled fluid and
   therefore cannot automatically be interpreted as urine production.
 
