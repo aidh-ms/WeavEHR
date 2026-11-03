@@ -7,6 +7,7 @@ import pytest
 from weavehr.config.inheritance import (
     deep_merge,
     has_extends,
+    resolve_effective_config,
     resolve_effective_configs,
     resolve_version_chain,
 )
@@ -126,6 +127,32 @@ class TestEffectiveConfigs:
     def test_without_marker_returns_own_files(self, tmp_path: Path) -> None:
         version_dir = make_version(tmp_path, "db", "1.0", {"t": "path: t.csv\n"})
         assert resolve_effective_configs(version_dir / "tables") == {"t": {"path": "t.csv"}}
+
+
+class TestEffectiveConfig:
+    def test_matches_resolving_the_whole_directory(self, tmp_path: Path) -> None:
+        make_version(tmp_path, "db", "1.0", {"t": "path: a.csv\ntype: csv\n", "t.v2": "path: v2.csv\n"})
+        make_version(tmp_path, "db", "1.1", {"t": "path: b.csv\n"}, extends=("db", "1.0"))
+        version_dir = make_version(tmp_path, "db", "2.0", {"other": "path: o.csv\n"}, extends=("db", "1.1"))
+
+        effective = resolve_effective_configs(version_dir / "tables")
+        for name in effective:
+            assert resolve_effective_config(version_dir / "tables", name) == effective[name]
+
+    def test_nested_name(self, tmp_path: Path) -> None:
+        version_dir = make_version(tmp_path, "db", "1.0", {})
+        (version_dir / "tables" / "sub").mkdir()
+        (version_dir / "tables" / "sub" / "t.yml").write_text("path: t.csv\n")
+
+        assert resolve_effective_config(version_dir / "tables", "sub/t") == {"path": "t.csv"}
+        assert resolve_effective_config(version_dir / "tables", "t") is None
+
+    def test_missing_or_deleted_is_none(self, tmp_path: Path) -> None:
+        make_version(tmp_path, "db", "1.0", {"notes": "path: notes.csv\n"})
+        version_dir = make_version(tmp_path, "db-demo", "1.0", {"notes": "deleted: true\n"}, extends=("db", "1.0"))
+
+        assert resolve_effective_config(version_dir / "tables", "notes") is None
+        assert resolve_effective_config(version_dir / "tables", "missing") is None
 
 
 class TestLoadConfigsWithInheritance:

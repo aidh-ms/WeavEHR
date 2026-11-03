@@ -34,7 +34,9 @@ class JoinConceptTable(BaseConceptTable, JoinConfig):
         "full",
         description="Type of join to be performed (inner, left, right, full, semi, anti).",
     )
-    suffix: str = Field("_right", description="Suffix to be added to overlapping column names during the join operation.")
+    suffix: str = Field(
+        "_right", description="Suffix to be added to overlapping column names during the join operation."
+    )
 
 
 class ConceptTable(BaseConceptTable):

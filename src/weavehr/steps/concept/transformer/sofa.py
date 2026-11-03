@@ -62,9 +62,7 @@ class SofaRenalTransformer(SofaComponent):
     def build_inputs(self) -> dict[str, Aggregation]:
         return {
             "creatinine": WindowedLocf(self.window),
-            "urine_output": SegmentedRollingSum(
-                self.window, gap=self._kwargs.get("urine_output_gap", self.window)
-            ),
+            "urine_output": SegmentedRollingSum(self.window, gap=self._kwargs.get("urine_output_gap", self.window)),
         }
 
     def score(self) -> pl.Expr:
@@ -82,13 +80,7 @@ class SofaRenalTransformer(SofaComponent):
             .when(creatinine.is_not_null())
             .then(0)
             .otherwise(None),
-            pl.when(urine < 200)
-            .then(4)
-            .when(urine < 500)
-            .then(3)
-            .when(urine.is_not_null())
-            .then(0)
-            .otherwise(None),
+            pl.when(urine < 200).then(4).when(urine < 500).then(3).when(urine.is_not_null()).then(0).otherwise(None),
         )
 
 
@@ -210,9 +202,7 @@ class SofaRespiratoryTransformer(SofaComponent):
         return {
             "O2_partial_pressure": WindowedLocf(self.window),
             "fraction_of_inspired_oxygen": WindowedLocf(self.window),
-            "mechanical_ventilation_windows": (
-                WindowedLocf(ventilation_window) if ventilation_window else Locf()
-            ),
+            "mechanical_ventilation_windows": (WindowedLocf(ventilation_window) if ventilation_window else Locf()),
         }
 
     def _pafi(self) -> pl.Expr:

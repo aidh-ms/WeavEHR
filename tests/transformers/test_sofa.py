@@ -54,9 +54,7 @@ def make(cls: type[WindowedConceptTransformer], **kwargs) -> WindowedConceptTran
     ``transform`` is pure and never touches the step, so none is needed.
     """
     concept = ConceptConfig(name="component", version="1.0.0", unit="points")
-    config = ComplexDatasetConceptConfig(
-        name="component", version="1.0", dataset=DATASET, concept_transformer="unused"
-    )
+    config = ComplexDatasetConceptConfig(name="component", version="1.0", dataset=DATASET, concept_transformer="unused")
     return cls(concept, config, cast(ConceptStep, None), **kwargs)
 
 
@@ -135,9 +133,7 @@ def test_cns(gcs: float, expected: float) -> None:
 def test_a_component_with_no_current_input_emits_nothing() -> None:
     """The zero that a total sums must come from a measurement, not from silence."""
     transformer = make(SofaCoagulationTransformer, window="24h")
-    out = transformer.transform(
-        {"platelet_count": frame((1, T0, 300.0)), "unused": frame((1, at(48), 1.0))}
-    ).collect()
+    out = transformer.transform({"platelet_count": frame((1, T0, 300.0)), "unused": frame((1, at(48), 1.0))}).collect()
     # the platelet count has expired by the second event, and the component
     # declares no other input, so only its own measurement is emitted
     assert out.height == 1
@@ -541,9 +537,7 @@ def test_end_to_end_total_sofa_chain(tmp_path: Path) -> None:
             "GCS_motor": _simple_mapping_yml("MOTOR"),
             "GCS_verbal": _simple_mapping_yml("VERBAL"),
             "platelet_count": _simple_mapping_yml("PLT"),
-            "gcs_total": _complex_mapping_yml(
-                win_sum, ["GCS_eye", "GCS_motor", "GCS_verbal"], as_terms=True
-            ),
+            "gcs_total": _complex_mapping_yml(win_sum, ["GCS_eye", "GCS_motor", "GCS_verbal"], as_terms=True),
             "sofa_cns": _complex_mapping_yml(sofa_cns, ["gcs_total"]),
             "sofa_coagulation": _complex_mapping_yml(sofa_coag, ["platelet_count"]),
             "sofa": _complex_mapping_yml(sofa_total, ["sofa_cns", "sofa_coagulation"], as_terms=True),
