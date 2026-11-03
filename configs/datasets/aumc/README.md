@@ -8,7 +8,7 @@ OMOP CDM 5.4 by the [AMSTEL ETL](https://github.com/AmsterdamUMC/AMSTEL).
 
 - `1.5.0/` — **extends `omop` 5.4** (see `1.5.0/extends.yml`). AUMCdb is read
   through its OMOP CDM 5.4 export, so all table configs are inherited unchanged
-  from the [`omop` reference](../omop/); this directory adds only the
+  from [`omop` 5.4](../omop/); this directory adds only the
   AUMCdb-specific concept `mappings/`.
 
 ## Concept mappings
