@@ -1,5 +1,6 @@
 """End-to-end tests for the extraction step on synthetic fixture data."""
 
+import shutil
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -10,7 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from weavehr import ExtractionStep, WeavEHRProject
+from weavehr import ExtractionStep, WeavEHRProject, dataset_config_registry
 from tests.steps.conftest import load_extracation_config
 
 
@@ -174,9 +175,52 @@ class TestExtractionStep:
 
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
 
+        assert (project.datasets_path / "extraction" / ".complete").exists()
         step = ExtractionStep.load(project, extraction_config)
         step.run()
         assert output.stat().st_mtime_ns == first_mtime
+
+    def test_rerun_after_interrupted_run_starts_from_scratch(
+        self, tmp_path: Path, extraction_config: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        step = ExtractionStep.load(project, extraction_config)
+
+        def crash() -> None:
+            raise RuntimeError("simulated crash after extraction, before collect")
+
+        # Both step directories exist after the crash, but the run never completed.
+        monkeypatch.setattr(step, "hooks", crash)
+        with pytest.raises(RuntimeError):
+            step.run()
+        marker = project.datasets_path / "extraction" / ".complete"
+        assert (project.workspace_path / "extraction").exists()
+        assert (project.datasets_path / "extraction").exists()
+        assert not marker.exists()
+
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        ExtractionStep.load(project, extraction_config).run()
+
+        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        assert dataset_output.exists(), "interrupted run was treated as complete and skipped"
+        assert pl.read_parquet(workspace_output).height == 4
+        assert pl.read_parquet(dataset_output).height == 4
+        assert (project.datasets_path / "extraction" / "metadata" / "codes.parquet").exists()
+        assert marker.exists()
+
+    def test_rerun_after_dataset_removed_does_not_duplicate_rows(self, tmp_path: Path, extraction_config: Path) -> None:
+        project = run_extraction(tmp_path, extraction_config)
+        shutil.rmtree(project.datasets_path / "extraction")
+
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        ExtractionStep.load(project, extraction_config).run()
+
+        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        assert pl.read_parquet(workspace_output).height == 4
+        assert pl.read_parquet(dataset_output).height == 4
 
     def test_missing_dataset_path_is_skipped(self, tmp_path: Path, table_config_dir: Path) -> None:
         config_file = tmp_path / "extraction.yml"
@@ -218,6 +262,23 @@ config:
         project = run_extraction(tmp_path, extraction_config)
         snapshot = project.configs_path / "table" / "testdb" / "1.0" / "vitals.yml"
         assert snapshot.exists()
+
+    def test_skipped_step_keeps_config_snapshot(self, tmp_path: Path, extraction_config: Path) -> None:
+        project = run_extraction(tmp_path, extraction_config)
+        snapshot = project.configs_path / "table" / "testdb" / "1.0" / "vitals.yml"
+        original = snapshot.read_text()
+
+        # Change a table config after the completed run, then re-run without overwrite.
+        table_dir = tmp_path / "config" / "testdb" / "1.0" / "tables"
+        vitals = table_dir / "vitals.yml"
+        vitals.write_text(
+            vitals.read_text().replace("numeric_value: col(valuenum)", "numeric_value: col(valuenum) * 2")
+        )
+        dataset_config_registry.clear()
+        load_extracation_config(table_dir)
+        ExtractionStep.load(project, extraction_config).run()
+
+        assert snapshot.read_text() == original
 
     def test_reads_parquet_source_with_native_types(self, tmp_path: Path) -> None:
         """A parquet source (the default format) with native timestamp/int/float types."""
@@ -424,3 +485,81 @@ config:
         # both part files are read and concatenated
         assert df.height == 2
         assert df["numeric_value"].to_list() == [80.0, 120.0]
+
+    def test_first_distinct_after_join_keeps_file_order(self, tmp_path: Path) -> None:
+        """The streaming lookup join must not reorder rows ahead of order-dependent filters."""
+        data_dir = tmp_path / "data" / "joindb"
+        data_dir.mkdir(parents=True)
+        n = 200_000
+        events = pl.select(i=pl.int_range(n)).select(
+            subject_id=(pl.col("i") % 500).cast(pl.Int64),
+            itemid=(pl.col("i").hash(2) % 50).cast(pl.Int64),
+            value=pl.col("i").cast(pl.Float32),
+            charttime=pl.lit(datetime(2024, 1, 1)),
+        )
+        events.write_parquet(data_dir / "events.parquet")
+        pl.DataFrame({"itemid": list(range(50)), "label": [f"item{i}" for i in range(50)]}).write_parquet(
+            data_dir / "items.parquet"
+        )
+
+        config_dir = tmp_path / "config" / "joindb" / "1.0" / "tables"
+        config_dir.mkdir(parents=True)
+        (config_dir / "events.yml").write_text(
+            """\
+path: events.parquet
+columns:
+  - name: subject_id
+    type: int64
+  - name: itemid
+    type: int64
+  - name: value
+    type: float32
+  - name: charttime
+    type: datetime
+join:
+  - name: items
+    path: items.parquet
+    columns:
+      - name: itemid
+        type: int64
+      - name: label
+        type: str
+    both_on:
+      - itemid
+event_defaults:
+  subject_id: col(subject_id)
+  time: col(charttime)
+events:
+  - name: EVENT
+    columns:
+      code:
+        - col(label)
+      numeric_value: col(value)
+    filters:
+      - first_distinct(subject_id)
+"""
+        )
+
+        config_file = tmp_path / "extraction.yml"
+        config_file.write_text(
+            f"""\
+name: Extraction
+version: 1.0.0
+config_files:
+  - path: {config_dir}
+config:
+  data:
+    - name: joindb
+      version: "1.0"
+      path: {data_dir}
+"""
+        )
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(config_dir)
+        ExtractionStep.load(project, config_file).run()
+
+        output = project.datasets_path / "extraction" / "data" / "joindb" / "1.0" / "events" / "EVENT.parquet"
+        df = pl.read_parquet(output).sort("subject_id")
+        expected = events.filter(pl.col("subject_id").is_first_distinct()).sort("subject_id")
+        assert df["numeric_value"].to_list() == expected["value"].to_list()

@@ -3,12 +3,12 @@ from typing import Optional
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_expr, with_output
 from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
-class Replace(CallbackProtocol):
+class Replace(OutputCallbackProtocol):
     def __init__(
         self,
         condition: AstValue,
@@ -28,7 +28,4 @@ class Replace(CallbackProtocol):
             .otherwise(to_expr(lf, self.else_value))
         )
 
-        if self.output is None:
-            return expr
-
-        return expr.alias(self.output)
+        return with_output(expr, self.output)

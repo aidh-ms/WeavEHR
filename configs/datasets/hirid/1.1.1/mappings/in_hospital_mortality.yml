@@ -4,6 +4,6 @@ mappings:
   - pattern:
       table: general
       event: MORTALITY
-      code: "(mortality)(//.*)?$"
+      code: "^(mortality)(//.*)?$"
     columns:
       text_value: col(text_value)

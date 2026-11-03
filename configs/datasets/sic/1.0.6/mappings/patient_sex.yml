@@ -4,6 +4,6 @@ mappings:
   - pattern:
       table: cases
       event: SEX
-      code: "(sex)(//.*)?$"
+      code: "^(sex)(//.*)?$"
     columns:
       text_value: col(text_value)

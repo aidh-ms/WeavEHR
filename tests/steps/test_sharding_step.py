@@ -70,12 +70,12 @@ config:
     with WeavEHRProject(project_path) as project:
         concept_dataset = project.add_dataset("concept")
         write_concept_file(
-            concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb.parquet",
+            concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb" / "1.0.parquet",
             [1, 2, 3],
             "heart_rate//bpm",
         )
         write_concept_file(
-            concept_dataset.data_path / "lactate" / "1.0.0" / "otherdb.parquet",
+            concept_dataset.data_path / "lactate" / "1.0.0" / "otherdb" / "1.0.parquet",
             [1, 2, 3],
             "lactate//mmol/l",
         )
@@ -114,7 +114,7 @@ config:
     with WeavEHRProject(project_path) as project:
         concept_dataset = project.add_dataset("concept")
         write_concept_file(
-            concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb.parquet",
+            concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb" / "1.0.parquet",
             [1, 2, 3],
             "heart_rate//bpm",
         )
@@ -150,12 +150,12 @@ config:
         concept_dataset = project.add_dataset("concept")
 
         write_concept_file(
-            concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb.parquet",
+            concept_dataset.data_path / "heart_rate" / "1.0.0" / "testdb" / "1.0.parquet",
             [1, 2],
             "heart_rate//bpm",
         )
         write_concept_file(
-            concept_dataset.data_path / "lactate" / "1.0.0" / "testdb.parquet",
+            concept_dataset.data_path / "lactate" / "1.0.0" / "testdb" / "1.0.parquet",
             [1, 2],
             "lactate//mmol/l",
         )

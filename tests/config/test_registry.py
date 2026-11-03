@@ -3,7 +3,9 @@
 from pathlib import Path
 from typing import ClassVar
 
-from weavehr.config.base import BaseConfig
+from pydantic import computed_field
+
+from weavehr.config.base import BaseConfig, BaseDatasetConfig
 from weavehr.config.registry import BaseConfigRegistry, load_configs
 
 
@@ -12,6 +14,19 @@ class RegConfig(BaseConfig):
 
 
 class RegConfigRegistry(BaseConfigRegistry[RegConfig]):
+    pass
+
+
+class RegDatasetConfig(BaseDatasetConfig):
+    __weavehr_config_type__: ClassVar[str] = "regdataset"
+
+    @computed_field
+    @property
+    def identifier_tuple(self) -> tuple[str, ...]:
+        return self.__weavehr_config_type__, self.dataset, self.version, self.name
+
+
+class RegDatasetConfigRegistry(BaseConfigRegistry[RegDatasetConfig]):
     pass
 
 
@@ -88,6 +103,65 @@ class TestRegistry:
         reloaded = RegConfigRegistry()
         reloaded.load(tmp_path / "out")
         assert sorted(reloaded.keys()) == sorted(registry.keys())
+
+
+class TestRegistryFilter:
+    @staticmethod
+    def make_registry(*entries: tuple[str, str, str]) -> RegDatasetConfigRegistry:
+        registry = RegDatasetConfigRegistry()
+        for dataset, version, name in entries:
+            registry.register(RegDatasetConfig(dataset=dataset, version=version, name=name))
+        return registry
+
+    @staticmethod
+    def ids(configs: list[RegDatasetConfig]) -> list[tuple[str, ...]]:
+        return sorted(c.identifier_tuple for c in configs)
+
+    def test_version_does_not_match_longer_version(self) -> None:
+        registry = self.make_registry(("mimic-iv", "2", "admissions"), ("mimic-iv", "2.2", "admissions"))
+
+        assert self.ids(registry.filter("mimic-iv", "2")) == [("regdataset", "mimic-iv", "2", "admissions")]
+        assert self.ids(registry.filter("mimic-iv", "2.2")) == [("regdataset", "mimic-iv", "2.2", "admissions")]
+
+    def test_dotted_version_does_not_match_longer_minor(self) -> None:
+        registry = self.make_registry(("mimic-iv", "3.1", "icustays"), ("mimic-iv", "3.10", "icustays"))
+
+        assert self.ids(registry.filter("mimic-iv", "3.1")) == [("regdataset", "mimic-iv", "3.1", "icustays")]
+        assert self.ids(registry.filter("mimic-iv", "3.10")) == [("regdataset", "mimic-iv", "3.10", "icustays")]
+
+    def test_dataset_matches_exactly(self) -> None:
+        registry = self.make_registry(
+            ("mimic-iv", "2.2", "admissions"),
+            ("mimic-iv-demo", "2.2", "admissions"),
+            ("eicu", "2.0", "patient"),
+        )
+
+        assert self.ids(registry.filter("mimic-iv")) == [("regdataset", "mimic-iv", "2.2", "admissions")]
+        assert self.ids(registry.filter("mimic-iv", "2.2")) == [("regdataset", "mimic-iv", "2.2", "admissions")]
+        assert self.ids(registry.filter("mimic")) == []
+
+    def test_matching_is_case_insensitive(self) -> None:
+        registry = self.make_registry(("MIMIC-IV", "2.2", "admissions"))
+
+        assert len(registry.filter("mimic-iv", "2.2")) == 1
+
+    def test_no_args_returns_all(self) -> None:
+        registry = self.make_registry(("mimic-iv", "2.2", "admissions"), ("eicu", "2.0", "patient"))
+
+        assert len(registry.filter()) == 2
+
+    def test_includes_and_excludes_still_apply(self) -> None:
+        registry = self.make_registry(
+            ("mimic-iv", "2.2", "admissions"),
+            ("mimic-iv", "2.2", "patients"),
+            ("mimic-iv", "2.20", "admissions"),
+        )
+
+        included = registry.filter("mimic-iv", "2.2", includes=["mimic-iv.2.2.admissions"])
+        assert self.ids(included) == [("regdataset", "mimic-iv", "2.2", "admissions")]
+
+        excluded = registry.filter("mimic-iv", "2.2", excludes=["mimic-iv.2.2.admissions"])
+        assert self.ids(excluded) == [("regdataset", "mimic-iv", "2.2", "patients")]
 
 
 class TestLoadConfigs:

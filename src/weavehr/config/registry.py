@@ -77,7 +77,7 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
             overwrite: If True, replace existing configuration with same identifier
         """
         if overwrite or value.identifier not in self._registry:
-            logger.info("Loaded configuration: %s", value.identifier)
+            logger.debug("Registered configuration: %s", value.identifier)
             self._registry[value.identifier] = value
 
     def unregister(self, identifiers: tuple[str, ...] | str) -> bool:
@@ -162,11 +162,6 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
             overwrite,
         )
         for config in load_configs(file_path, self._config_type, includes=includes, excludes=excludes):
-            logger.debug(
-                "Registering config '%s' (overwrite=%s)",
-                config.identifier,
-                overwrite,
-            )
             self.register(config, overwrite=overwrite)
 
     def save(self, path: Path) -> None:
@@ -192,21 +187,26 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
     ) -> list[T]:
         """Filter configurations by identifier components.
 
+        Each positional component is compared exactly (case-insensitive) against the
+        corresponding entry of ``identifier_tuple`` following the config type, so
+        ``filter("mimic-iv", "2")`` matches neither ``mimic-iv-demo`` nor version ``2.2``.
+
         Args:
-            *args: Identifier components to filter by (e.g., class_name, version, name)
+            *args: Leading identifier components to filter by (e.g., dataset, version, name)
             includes: If specified, only include configurations with these identifiers
             excludes: If specified, skip configurations with these identifiers
 
         Returns:
             List of configuration objects matching the filter criteria
         """
-        term = self.get_identifier(".".join(args))
+        components = tuple(arg.lower() for arg in args)
         _excludes = [self.get_identifier(id) for id in excludes or []]
         _includes = [self.get_identifier(id) for id in includes or []]
 
         filtered_configs = []
         for config in self._registry.values():
-            if term not in config.identifier:
+            config_components = tuple(part.lower() for part in config.identifier_tuple[1 : 1 + len(components)])
+            if config_components != components:
                 continue
 
             if (_excludes and config.identifier in _excludes) or (_includes and config.identifier not in _includes):

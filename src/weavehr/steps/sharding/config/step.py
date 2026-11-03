@@ -15,8 +15,9 @@ class CustomConfig(BaseModel):
     Attributes:
         concept_step: Name of the preceding concept step whose output should be
             sharded.
-        datasets: Dataset names to include. An empty list includes all
-            available datasets.
+        datasets: Dataset names to include, optionally qualified with a
+            version (``mimic-iv/3.1``). An empty list includes all available
+            datasets.
         concepts: Concept names or relative concept paths to include. An empty
             list includes all available concepts.
         subjects: Subject IDs to include. An empty list includes all available
@@ -31,7 +32,10 @@ class CustomConfig(BaseModel):
     )
     datasets: list[str] = Field(
         default_factory=list,
-        description="Dataset names to include, e.g. mimic-iv. Empty means all datasets.",
+        description=(
+            "Dataset names to include, e.g. mimic-iv, or dataset/version pairs, e.g. mimic-iv/3.1. "
+            "Empty means all datasets."
+        ),
     )
     concepts: list[str] = Field(
         default_factory=list,

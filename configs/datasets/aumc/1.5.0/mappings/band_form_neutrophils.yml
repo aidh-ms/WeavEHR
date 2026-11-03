@@ -5,7 +5,7 @@ mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: "3004809(//.*)?$"
+      code: "^3004809(//.*)?$"
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)

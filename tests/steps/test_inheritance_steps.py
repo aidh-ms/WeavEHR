@@ -105,7 +105,7 @@ class TestInheritedExtraction:
 
 class TestInheritedConcepts:
     def test_concept_mapping_is_inherited_by_demo(self, project: WeavEHRProject) -> None:
-        output = project.datasets_path / "concept" / "data" / "heart_rate" / "1.0.0" / "testdb-demo.parquet"
+        output = project.datasets_path / "concept" / "data" / "heart_rate" / "1.0.0" / "testdb-demo" / "1.0.parquet"
         assert output.exists()
 
         df = pl.read_parquet(output)
@@ -114,5 +114,5 @@ class TestInheritedConcepts:
         assert df["dataset"].unique().to_list() == ["testdb-demo"]
 
     def test_base_concept_still_extracted(self, project: WeavEHRProject) -> None:
-        output = project.datasets_path / "concept" / "data" / "heart_rate" / "1.0.0" / "testdb.parquet"
+        output = project.datasets_path / "concept" / "data" / "heart_rate" / "1.0.0" / "testdb" / "1.0.parquet"
         assert output.exists()

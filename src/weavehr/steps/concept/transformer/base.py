@@ -18,6 +18,7 @@ keeps the plan lazy all the way to a single streaming ``sink_parquet``.
 """
 
 from abc import ABCMeta, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import polars as pl
@@ -90,7 +91,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
         whatever that order is. The transformed frame is completed with the
         MEDS columns (``code``, ``numeric_value``, ``text_value``) and any
         configured extension columns, then sunk to
-        ``<concept output dir>/<dataset>.parquet``.
+        ``<concept output dir>/<dataset>/<dataset version>.parquet``.
 
         Returns without writing when no dependency could be resolved, which
         under :attr:`strict_dependencies` = False means the concept is simply
@@ -153,9 +154,8 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
             + [pl.col(col).cast(pl.String) for col in self._concept.extension_columns]
         ).sort("subject_id", "time")
 
-        output_dir = self._step.concept_output_dir(self._concept)
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_file = output_dir / f"{self._complex_config.dataset}.parquet"
+        output_file = self._output_file(self._concept)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         logger.info("Writing complex concept %s to %s", self._concept.identifier, output_file)
         lf.sink_parquet(output_file)
 
@@ -185,7 +185,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
             logger.warning("Concept %s not found in registry; treating as unavailable.", concept_id)
             return None
 
-        concept_path = self._step.concept_output_dir(concept) / f"{self._complex_config.dataset}.parquet"
+        concept_path = self._output_file(concept)
         if not concept_path.exists():
             if self.strict_dependencies:
                 logger.error("Concept file %s for concept %s does not exist.", concept_path, concept.identifier)
@@ -199,6 +199,10 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
             return None
 
         return concept.name, pl.scan_parquet(concept_path)
+
+    def _output_file(self, concept: "ConceptConfig") -> Path:
+        """Return the parquet file holding ``concept``'s output for this mapping's dataset version."""
+        return self._step.concept_output_file(concept, self._complex_config.dataset, self._complex_config.version)
 
     @abstractmethod
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:

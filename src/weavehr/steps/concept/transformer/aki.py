@@ -100,14 +100,16 @@ class AkiCreatinineTransformer(AkiComponent):
         ratio = creatinine / pl.col("creatinine_baseline")
         rise = creatinine - pl.col("creatinine_acute_minimum")
         acute = (ratio >= 1.5) | (rise >= 0.3)
-        if not self._kwargs.get("require_acute_rise", True):
-            acute = pl.lit(True)
+        # the ungated reading drops the gate on the absolute threshold only; stage 1 still needs a rise
+        absolute = creatinine >= 4.0
+        if self._kwargs.get("require_acute_rise", True):
+            absolute = absolute & acute
         return (
             pl.when(pl.col("renal_replacement_therapy"))
             .then(3)
             .when(ratio >= 3.0)
             .then(3)
-            .when((creatinine >= 4.0) & acute)
+            .when(absolute)
             .then(3)
             .when(ratio >= 2.0)
             .then(2)

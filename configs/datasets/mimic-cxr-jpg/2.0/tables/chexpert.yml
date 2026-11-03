@@ -53,7 +53,7 @@ join:
       - subject_id
       - study_id
     pre_callbacks:
-      - parse_date_time("StudyDate", zero_pad_int("StudyTime", width=6, round_ndigits=3), format="%Y%m%d%H%M%S%.f", output="time")
+      - parse_date_time(StudyDate, zero_pad_int(StudyTime, width=6, round_ndigits=3), format="%Y%m%d%H%M%S%.f", output="time")
     pre_filters:
       - first_distinct(subject_id, study_id)
 

@@ -51,6 +51,11 @@ class Equal(CallbackProtocol):
         self.right = right
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
+        # `x == None` would compare against a null literal and yield null; treat it as a null check.
+        if self.right is None:
+            return to_expr(lf, self.left).is_null()
+        if self.left is None:
+            return to_expr(lf, self.right).is_null()
         return to_expr(lf, self.left) == to_expr(lf, self.right)
 
 
@@ -61,4 +66,8 @@ class NotEqual(CallbackProtocol):
         self.right = right
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
+        if self.right is None:
+            return to_expr(lf, self.left).is_not_null()
+        if self.left is None:
+            return to_expr(lf, self.right).is_not_null()
         return to_expr(lf, self.left) != to_expr(lf, self.right)

@@ -21,6 +21,7 @@ from weavehr.steps.concept.transformer.base import BaseConceptTransformer
 
 T0 = datetime(2024, 1, 1, 0, 0)
 DATASET = "testdb"
+DATASET_VERSION = "1.0"
 
 
 class Step:
@@ -30,8 +31,8 @@ class Step:
         self._registry = {concept.identifier: concept for concept in concepts}
         self._root = root
 
-    def concept_output_dir(self, concept: ConceptConfig) -> Path:
-        return self._root / concept.name / concept.version
+    def concept_output_file(self, concept: ConceptConfig, dataset: str, version: str) -> Path:
+        return self._root / concept.name / concept.version / dataset / f"{version}.parquet"
 
 
 class Recording(BaseConceptTransformer):
@@ -72,8 +73,8 @@ def source(name: str, version: str = "1.0.0", unit: str = "u") -> ConceptConfig:
 
 
 def write_output(step: Step, concept: ConceptConfig, *values: float) -> None:
-    directory = step.concept_output_dir(concept)
-    directory.mkdir(parents=True, exist_ok=True)
+    output_file = step.concept_output_file(concept, DATASET, DATASET_VERSION)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame(
         {
             "subject_id": [1] * len(values),
@@ -81,13 +82,13 @@ def write_output(step: Step, concept: ConceptConfig, *values: float) -> None:
             "numeric_value": list(values),
         },
         schema={"subject_id": pl.Int64, "time": pl.Datetime(time_unit="us"), "numeric_value": pl.Float32},
-    ).write_parquet(directory / f"{DATASET}.parquet")
+    ).write_parquet(output_file)
 
 
 def config(*identifiers: str) -> ComplexDatasetConceptConfig:
     return ComplexDatasetConceptConfig(
         name="derived",
-        version="1.0",
+        version=DATASET_VERSION,
         dataset=DATASET,
         concept_transformer="unused",
         concepts=list(identifiers),
@@ -95,7 +96,7 @@ def config(*identifiers: str) -> ComplexDatasetConceptConfig:
 
 
 def output_of(step: Step, concept: ConceptConfig) -> pl.DataFrame:
-    return pl.read_parquet(step.concept_output_dir(concept) / f"{DATASET}.parquet")
+    return pl.read_parquet(step.concept_output_file(concept, DATASET, DATASET_VERSION))
 
 
 def test_dependencies_are_resolved_and_keyed_by_name(tmp_path: Path, concept: ConceptConfig) -> None:
@@ -176,7 +177,7 @@ class TestTolerantDependencies:
         TolerantRecording(concept, config(urine.identifier), cast(ConceptStep, step))()
 
         # the concept is simply not computable for this dataset; no empty parquet is left behind
-        assert not (step.concept_output_dir(concept) / f"{DATASET}.parquet").exists()
+        assert not step.concept_output_file(concept, DATASET, DATASET_VERSION).exists()
 
 
 def test_duplicate_dependency_names_are_rejected(tmp_path: Path, concept: ConceptConfig) -> None:

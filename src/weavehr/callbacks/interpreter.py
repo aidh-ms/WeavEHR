@@ -6,7 +6,7 @@ from polars import LazyFrame
 from weavehr.callbacks._callbacks.algebra import Add, Divide, Multiply, Subtract
 from weavehr.callbacks._callbacks.comparison import Equal, GreaterEqual, GreaterThan, LessEqual, LessThan, NotEqual
 from weavehr.callbacks._callbacks.logical import And, Not, Or
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult
+from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, ColumnRef
 from weavehr.callbacks.registry import registry
 
 
@@ -25,8 +25,8 @@ class ExprInterpreter(ast.NodeVisitor):
         return tuple(self.visit(e) for e in node.elts)
 
     def visit_Name(self, node) -> AstValue:
-        # DSL: bare names are column references
-        return node.id
+        # DSL: bare names are column references, quoted strings (visit_Constant) are literals
+        return ColumnRef(node.id)
 
     def visit_Keyword(self, node) -> Tuple[str, AstValue]:
         if node.arg is None:
@@ -36,14 +36,12 @@ class ExprInterpreter(ast.NodeVisitor):
     def visit_Call(self, node) -> AstValue:
         name = self._get_name(node.func)
 
-        if name not in registry:
+        cls = registry.get(name)
+        if cls is None:
             raise ValueError(f"Unknown callback: {name}")
 
-        cls = registry.get(name)
-        assert cls is not None
-
         args = [self.visit(a) for a in node.args]
-        kwargs = dict(self.visit_Keyword(k) for k in node.keywords if k.arg is not None)
+        kwargs = dict(self.visit_Keyword(k) for k in node.keywords)
 
         try:
             return cls(*args, **kwargs)
@@ -137,7 +135,10 @@ def parse_expr(lf: LazyFrame, expr: str) -> CallbackResult:
     interpreter = ExprInterpreter()
     callback = interpreter.eval(expr)
 
-    assert isinstance(callback, CallbackProtocol)
-    pl_expr = callback(lf)
+    if not isinstance(callback, CallbackProtocol):
+        raise TypeError(
+            f"Expression {expr!r} must be a callback call or operator expression (e.g. 'col(x)' or 'col(x) > 1'), "
+            f"got {type(callback).__name__} {callback!r}; wrap bare names in col(...)"
+        )
 
-    return pl_expr
+    return callback(lf)

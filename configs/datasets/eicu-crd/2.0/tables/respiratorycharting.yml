@@ -58,4 +58,4 @@ events:
       numeric_value: col(respchartvalue)
       text_value: col(respchartvalue)
       extension:
-        available_time: col(enter_timestamp)
+        available_time: col(entered_timestamp)

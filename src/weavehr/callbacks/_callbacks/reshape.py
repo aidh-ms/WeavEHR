@@ -3,7 +3,7 @@ from typing import Any
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, to_col_name
+from weavehr.callbacks.proto import AstValue, CallbackProtocol, resolve_column, to_col_name
 from weavehr.callbacks.registry import register_callback_cls
 
 
@@ -20,6 +20,7 @@ class SplitExplode(CallbackProtocol):
         self.strip = strip
 
     def __call__(self, lf: LazyFrame) -> Any:
+        resolve_column(lf, self.column)
         lf = lf.with_columns(pl.col(self.column).str.split(self.separator).alias(self.column)).explode(self.column)
 
         if self.strip:
