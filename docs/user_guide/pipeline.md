@@ -55,6 +55,8 @@ Every step's `run()` follows the same lifecycle:
 
 A step that finishes successfully writes a marker file, `datasets/<step>/.complete`. If that marker and the step's workspace exist and the step config has `overwrite: false` (the default), the step is skipped entirely. Otherwise, including after an interrupted run, the step empties its own workspace and dataset directories and runs from scratch, so partial output is never reused or appended to. A skipped step also leaves the config snapshot in `configs/` untouched, so it keeps describing the data on disk. Set `overwrite: true` in the step YAML to force re-computation. This makes pipeline scripts safely re-runnable.
 
+A run that is not skipped removes the step's marker before it changes anything else. An interrupted run therefore never looks complete, wherever the interruption happens: right after the config snapshot, while the old output is deleted, during extraction, or while results are collected.
+
 ### Common step configuration
 
 All step YAML files share this structure:

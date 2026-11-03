@@ -136,6 +136,10 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
 
         logger.info("Running step '%s'", self._step_name)
         if not skip:
+            # Invalidate the earlier run before changing anything, so a crash at any
+            # later point (config snapshot, reset, extraction, collection) makes the
+            # next run start over instead of reusing the half-changed output.
+            self.completion_marker.unlink(missing_ok=True)
             # The snapshot must describe the configs that produced the step's data,
             # so a skipped step keeps the snapshot of its completed run.
             logger.debug("Step '%s': setting up config", self._step_name)
