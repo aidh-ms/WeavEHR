@@ -59,6 +59,9 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
         concept: "ConceptConfig",
         complex_config: ComplexDatasetConceptConfig,
         step: "ConceptStep",
+        *,
+        dataset_extension_columns: dict[str, str] | None = None,
+        grouping_columns: list[str] | None = None,
         **kwargs,
     ) -> None:
         """Bind the transformer to one concept, one dataset mapping and the step.
@@ -76,6 +79,8 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
         self._concept = concept
         self._complex_config = complex_config
         self._step: "ConceptStep" = step
+        self._dataset_extension_columns = dataset_extension_columns or {}
+        self._grouping_columns = grouping_columns or []
         self._kwargs = kwargs
 
     def __call__(self) -> None:
@@ -140,7 +145,10 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
             numeric_value=pl.coalesce(pl.col("^numeric_value$"), pl.lit(None, dtype=pl.Float32)),
         )
 
-        for col_name, col_expr in self._concept.extension_columns.items():
+        extension_columns = self._concept.extension_columns.copy()
+        extension_columns.update(self._dataset_extension_columns)
+
+        for col_name, col_expr in extension_columns.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
         lf = lf.select(
@@ -151,7 +159,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                 pl.col("numeric_value").cast(pl.Float32),
                 pl.col("text_value").cast(pl.String),
             ]
-            + [pl.col(col).cast(pl.String) for col in self._concept.extension_columns]
+            + [pl.col(col).cast(pl.String) for col in extension_columns]
         ).sort("subject_id", "time")
 
         output_file = self._output_file(self._concept)

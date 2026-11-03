@@ -94,15 +94,15 @@ class Aggregation:
     def collapse(self, col: str) -> pl.Expr:
         return pl.col(col).drop_nulls().last()
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         raise NotImplementedError
 
 
 class Locf(Aggregation):
     """Last observation carried forward, without expiry."""
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
-        return lf.with_columns(pl.col(col).forward_fill().over(_SUBJECT).alias(col))
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
+        return lf.with_columns(pl.col(col).forward_fill().over(partition_by).alias(col))
 
 
 class WindowedLocf(Aggregation):
@@ -118,17 +118,17 @@ class WindowedLocf(Aggregation):
     def __init__(self, window: str) -> None:
         self._window = window
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         return lf.with_columns(
             pl.when(
                 pl.when(pl.col(col).is_not_null())
                 .then(pl.col(_TIME))
                 .otherwise(None)
                 .forward_fill()
-                .over(_SUBJECT)
+                .over(partition_by)
                 >= _ago(self._window)
             )
-            .then(pl.col(col).forward_fill().over(_SUBJECT))
+            .then(pl.col(col).forward_fill().over(partition_by))
             .otherwise(None)
             .alias(col)
         )
@@ -155,8 +155,8 @@ class RollingSum(_Rolling):
         # sum coincident records, but keep null when none carry a value
         return pl.when(pl.col(col).is_not_null().any()).then(pl.col(col).sum()).otherwise(None)
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
-        total = pl.col(col).rolling_sum_by(_TIME, self._window, closed="right").over(_SUBJECT)
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
+        total = pl.col(col).rolling_sum_by(_TIME, self._window, closed="right").over(partition_by)
         if self._missing_is_zero:
             return lf.with_columns(total.fill_null(0).alias(col))
         count = (
@@ -164,7 +164,7 @@ class RollingSum(_Rolling):
             .is_not_null()
             .cast(pl.Int32)
             .rolling_sum_by(_TIME, self._window, closed="right")
-            .over(_SUBJECT)
+            .over(partition_by)
         )
         return lf.with_columns(pl.when(count > 0).then(total).otherwise(None).alias(col))
 
@@ -200,7 +200,7 @@ class SegmentedRollingSum(_Rolling):
     def collapse(self, col: str) -> pl.Expr:
         return pl.when(pl.col(col).is_not_null().any()).then(pl.col(col).sum()).otherwise(None)
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         last, start = f"__last_{col}", f"__segment_start_{col}"
 
         # time of the most recent record of this input at or before t; the grid
@@ -211,7 +211,7 @@ class SegmentedRollingSum(_Rolling):
             .then(pl.col(_TIME))
             .otherwise(None)
             .forward_fill()
-            .over(_SUBJECT)
+            .over(partition_by)
             .alias(last)
         )
 
@@ -221,14 +221,14 @@ class SegmentedRollingSum(_Rolling):
             pl.when(
                 pl.col(_present(col))
                 & (
-                    pl.col(last).shift(1).over(_SUBJECT).is_null()
-                    | (pl.col(last).shift(1).over(_SUBJECT) < _ago(self._gap))
+                    pl.col(last).shift(1).over(partition_by).is_null()
+                    | (pl.col(last).shift(1).over(partition_by) < _ago(self._gap))
                 )
             )
             .then(pl.col(_TIME))
             .otherwise(None)
             .forward_fill()
-            .over(_SUBJECT)
+            .over(partition_by)
             .alias(start)
         )
 
@@ -237,7 +237,7 @@ class SegmentedRollingSum(_Rolling):
             .then(
                 pl.col(col)
                 .rolling_sum_by(_TIME, self._window, closed="right")
-                .over(_SUBJECT)
+                .over(partition_by)
                 .fill_null(0)
             )
             .otherwise(None)
@@ -251,9 +251,9 @@ class RollingMax(_Rolling):
     def collapse(self, col: str) -> pl.Expr:
         return pl.col(col).max()
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         return lf.with_columns(
-            pl.col(col).rolling_max_by(_TIME, self._window, closed="right").over(_SUBJECT).alias(col)
+            pl.col(col).rolling_max_by(_TIME, self._window, closed="right").over(partition_by).alias(col)
         )
 
 
@@ -263,9 +263,9 @@ class RollingMin(_Rolling):
     def collapse(self, col: str) -> pl.Expr:
         return pl.col(col).min()
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         return lf.with_columns(
-            pl.col(col).rolling_min_by(_TIME, self._window, closed="right").over(_SUBJECT).alias(col)
+            pl.col(col).rolling_min_by(_TIME, self._window, closed="right").over(partition_by).alias(col)
         )
 
 
@@ -275,9 +275,9 @@ class RollingMean(_Rolling):
     def collapse(self, col: str) -> pl.Expr:
         return pl.col(col).mean()
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         return lf.with_columns(
-            pl.col(col).rolling_mean_by(_TIME, self._window, closed="right").over(_SUBJECT).alias(col)
+            pl.col(col).rolling_mean_by(_TIME, self._window, closed="right").over(partition_by).alias(col)
         )
 
 
@@ -288,13 +288,13 @@ class Exists(_Rolling):
     (antibiotics, cultures) that carry no value are detected.
     """
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         return lf.with_columns(
             (
                 pl.col(_present(col))
                 .cast(pl.Int32)
                 .rolling_sum_by(_TIME, self._window, closed="both")
-                .over(_SUBJECT)
+                .over(partition_by)
                 > 0
             ).alias(col)
         )
@@ -308,13 +308,13 @@ class LastEventTime(_Rolling):
     partner's time (see :meth:`WindowedConceptTransformer.event_time`).
     """
 
-    def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
+    def align(self, lf: pl.LazyFrame, col: str, partition_by: list[str]) -> pl.LazyFrame:
         return lf.with_columns(
             pl.when(pl.col(_present(col)))
             .then(pl.col(_TIME))
             .otherwise(None)
             .rolling_max_by(_TIME, self._window, closed="both")
-            .over(_SUBJECT)
+            .over(partition_by)
             .alias(col)
         )
 
@@ -449,6 +449,8 @@ class WindowedConceptTransformer(BaseConceptTransformer):
                 sorted(dependencies),
             )
 
+        partition_by = list(dict.fromkeys([_SUBJECT, *self._grouping_columns]))
+
         frames = []
         for name in names:
             lf = dependencies.get(sources[name])
@@ -457,6 +459,7 @@ class WindowedConceptTransformer(BaseConceptTransformer):
                     pl.LazyFrame(
                         schema={
                             _SUBJECT: pl.Int64,
+                            **{col: pl.String for col in self._grouping_columns},
                             _TIME: pl.Datetime(time_unit="us"),
                             name: pl.Float32,
                             _event(name): pl.Int32,
@@ -467,6 +470,7 @@ class WindowedConceptTransformer(BaseConceptTransformer):
             frames.append(
                 lf.select(
                     pl.col(_SUBJECT).cast(pl.Int64),
+                    *[pl.col(col).cast(pl.String) for col in self._grouping_columns],
                     pl.col(_TIME).cast(pl.Datetime(time_unit="us")),
                     pl.col("numeric_value").cast(pl.Float32).alias(name),
                     pl.lit(1, dtype=pl.Int32).alias(_event(name)),
@@ -475,30 +479,34 @@ class WindowedConceptTransformer(BaseConceptTransformer):
 
         grid = (
             pl.concat(frames, how="diagonal")
-            .group_by(_SUBJECT, _TIME)
+            .group_by(*partition_by, _TIME)
             .agg(
                 *[self.inputs[name].collapse(name).alias(name) for name in names],
                 # presence = an event row of this input exists at this timestamp,
                 # independent of numeric_value (so marker concepts count)
                 *[pl.col(_event(name)).is_not_null().any().alias(_present(name)) for name in names],
             )
-            .sort(_SUBJECT, _TIME)
+            .sort(*partition_by, _TIME)
         )
 
         aligned = grid
         for name in names:
-            aligned = self.inputs[name].align(aligned, name)
+            aligned = self.inputs[name].align(aligned, name, partition_by)
 
         triggers = self.triggers if self.triggers is not None else set(names)
         return (
             aligned.with_columns(numeric_value=self.compute(), __out_time=self.event_time())
             .filter(pl.any_horizontal(*[pl.col(_present(name)) for name in triggers]))
             .filter(pl.col("numeric_value").is_not_null())
-            .select(pl.col(_SUBJECT), pl.col("__out_time").alias(_TIME), pl.col("numeric_value"))
+            .select(
+                *[pl.col(col) for col in partition_by],
+                pl.col("__out_time").alias(_TIME),
+                pl.col("numeric_value"),
+            )
             # collapse rows that resolve to the same output timestamp (only
             # reachable via an event_time override)
-            .unique(subset=[_SUBJECT, _TIME], keep="first")
-            .sort(_SUBJECT, _TIME)
+            .unique(subset=[*partition_by, _TIME], keep="first")
+            .sort(*partition_by, _TIME)
         )
 
 

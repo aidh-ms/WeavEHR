@@ -25,6 +25,13 @@ class DatasetConfig(BaseModel):
         default_factory=dict,
         description="Dataset-wide extraction columns to preserve in concept outputs.",
     )
+    grouping_columns: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Dataset-wide extension columns that identify independent groups "
+            "for complex concept computations."
+        ),
+    )
 
 
 class CustomConfig(BaseModel):

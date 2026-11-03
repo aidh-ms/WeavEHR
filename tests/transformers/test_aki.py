@@ -47,6 +47,24 @@ def frame(*rows: tuple[int, datetime, float | None]) -> pl.LazyFrame:
     )
 
 
+def frame_with_stay(*rows: tuple[int, str, datetime, float | None]) -> pl.LazyFrame:
+    """Synthetic concept frame with an additional ICU-stay identity."""
+    return pl.LazyFrame(
+        {
+            "subject_id": [r[0] for r in rows],
+            "stay_id": [r[1] for r in rows],
+            "time": [r[2] for r in rows],
+            "numeric_value": [r[3] for r in rows],
+        },
+        schema={
+            "subject_id": pl.Int64,
+            "stay_id": pl.String,
+            "time": pl.Datetime(time_unit="us"),
+            "numeric_value": pl.Float32,
+        },
+    )
+
+
 def series(*rows: tuple[float, float]) -> pl.LazyFrame:
     return frame(*[(1, at(hours), value) for hours, value in rows])
 
@@ -119,6 +137,27 @@ class TestCreatinineCriterion:
         creatinine = {"creatinine": series((0, 0.4), (48, 0.5), (60, 0.6))}
         assert stages(make(AkiCreatinineTransformer), creatinine)[60.0] == 1.0
         assert stages(make(AkiCreatinineTransformer, baseline_window="24h"), creatinine)[60.0] == 0.0
+
+
+    def test_stays_of_same_subject_are_independent(self) -> None:
+        """Rolling AKI state must not cross ICU-stay boundaries."""
+        creatinine = frame_with_stay(
+            (1, "A", at(0), 1.0),
+            (1, "B", at(24), 2.0),
+        )
+
+        out = (
+            make(AkiCreatinineTransformer, grouping_columns=["stay_id"])
+            .transform({"creatinine": creatinine})
+            .collect()
+            .sort("time")
+        )
+
+        # Each stay has only its own baseline measurement, so neither is AKI.
+        # Without stay-level partitioning, stay A's 1.0 leaks into stay B and
+        # incorrectly makes the 2.0 measurement stage 2.
+        assert out["numeric_value"].to_list() == [0.0, 0.0]
+        assert out["stay_id"].to_list() == ["A", "B"]
 
 
 class TestUrineOutputCriterion:
