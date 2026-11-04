@@ -56,7 +56,7 @@ concept's declared `unit` before being applied.
 Currently mapped (all `simple`): the laboratory panels (blood gas, chemistry,
 haematology) from `observations`, vital signs, GCS components (eye/motor/verbal)
 and RASS, height/weight, and the demographics from `general` (`patient_sex`,
-`patient_age`, `in_hospital_mortality`).
+`patient_age`).
 
 Not yet mapped / not cleanly mappable as `simple`:
 - **Drug rates / durations** (vasopressors, antibiotics, corticosteroids,
