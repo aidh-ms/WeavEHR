@@ -55,9 +55,7 @@ def make[T: BaseConceptTransformer](cls: type[T], **kwargs) -> T:
     ``transform`` is pure and never touches the step, so none is needed.
     """
     concept = ConceptConfig(name="component", version="1.0.0", unit="points")
-    config = ComplexDatasetConceptConfig(
-        name="component", version="1.0", dataset=DATASET, concept_transformer="unused"
-    )
+    config = ComplexDatasetConceptConfig(name="component", version="1.0", dataset=DATASET, concept_transformer="unused")
     return cls(concept, config, cast(ConceptStep, None), **kwargs)
 
 
@@ -141,32 +139,62 @@ def test_cns(gcs: float, expected: float) -> None:
         (SofaLiverTransformer, "total_bilirubin", (13.0, 0.5), {}, 4.0),
         (SofaCnsTransformer, "gcs", (3.0, 15.0), {}, 4.0),
         (SofaCardiovascularTransformer, "mean_arterial_pressure", (60.0, 80.0), {}, 1.0),
-        (SofaRespiratoryTransformer, "O2_partial_pressure", (60.0, 450.0),
-         {"fraction_of_inspired_oxygen": 100.0, "ventilation_start": 1.0}, 4.0),
-        (SofaRespiratoryTransformer, "fraction_of_inspired_oxygen", (100.0, 21.0),
-         {"O2_partial_pressure": 90.0, "ventilation_start": 1.0}, 4.0),
+        (
+            SofaRespiratoryTransformer,
+            "O2_partial_pressure",
+            (60.0, 450.0),
+            {"fraction_of_inspired_oxygen": 100.0, "ventilation_start": 1.0},
+            4.0,
+        ),
+        (
+            SofaRespiratoryTransformer,
+            "fraction_of_inspired_oxygen",
+            (100.0, 21.0),
+            {"O2_partial_pressure": 90.0, "ventilation_start": 1.0},
+            4.0,
+        ),
     ],
     ids=["creatinine", "platelets", "bilirubin", "gcs", "map", "pao2", "fio2"],
 )
 @pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
 def test_exact_timestamp_ties_use_worst_values_but_later_measurements_replace_them(
-    cls: type[WindowedConceptTransformer], field: str, values: tuple[float, float],
-    other: dict[str, float], expected: float, reverse: bool, invalid: float
+    cls: type[WindowedConceptTransformer],
+    field: str,
+    values: tuple[float, float],
+    other: dict[str, float],
+    expected: float,
+    reverse: bool,
+    invalid: float,
 ) -> None:
     later, carried = T0 + timedelta(minutes=5), T0 + timedelta(minutes=10)
-    source = frame((1, T0, values[0]), (1, T0, values[1]), (1, T0, None),
-                   (1, T0, invalid), (1, later, values[1]),
-                   (1, later + timedelta(minutes=1), invalid), (1, carried, None))
+    source = frame(
+        (1, T0, values[0]),
+        (1, T0, values[1]),
+        (1, T0, None),
+        (1, T0, invalid),
+        (1, later, values[1]),
+        (1, later + timedelta(minutes=1), invalid),
+        (1, carried, None),
+    )
     inputs = {name: frame((1, T0, value)) for name, value in other.items()}
     inputs[field] = source.reverse() if reverse else source
     result = make(cls).transform(inputs).collect()
     assert result.rows() == [(1, T0, expected), (1, later, 0.0), (1, carried, 0.0)]
 
 
-@pytest.mark.parametrize("cls", [SofaRenalTransformer, SofaCoagulationTransformer, SofaLiverTransformer,
-                                 SofaCnsTransformer, SofaCardiovascularTransformer, SofaRespiratoryTransformer,
-                                 SofaTransformer])
+@pytest.mark.parametrize(
+    "cls",
+    [
+        SofaRenalTransformer,
+        SofaCoagulationTransformer,
+        SofaLiverTransformer,
+        SofaCnsTransformer,
+        SofaCardiovascularTransformer,
+        SofaRespiratoryTransformer,
+        SofaTransformer,
+    ],
+)
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
 def test_nonfinite_inputs_alone_produce_no_sofa_assessment(
     cls: type[WindowedConceptTransformer], invalid: float
@@ -179,38 +207,55 @@ def test_nonfinite_inputs_alone_produce_no_sofa_assessment(
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
 def test_nonfinite_creatinine_does_not_refresh_its_alignment_window(invalid: float) -> None:
     after = at(1) + timedelta(microseconds=1)
-    result = make(SofaRenalTransformer).transform({
-        "creatinine": frame((1, T0, 2.5), (1, at(0.5), invalid)),
-        "urine_output": frame((1, at(0.75), 10.0), (1, after, 10.0)),
-    }).collect()
+    result = (
+        make(SofaRenalTransformer)
+        .transform(
+            {
+                "creatinine": frame((1, T0, 2.5), (1, at(0.5), invalid)),
+                "urine_output": frame((1, at(0.75), 10.0), (1, after, 10.0)),
+            }
+        )
+        .collect()
+    )
     assert result.rows() == [(1, T0, 2.0), (1, at(0.75), 2.0)]
 
 
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
 def test_nonfinite_pressor_rate_neither_stops_nor_refreshes_an_infusion(invalid: float) -> None:
     after = at(1) + timedelta(microseconds=1)
-    result = make(SofaCardiovascularTransformer, pressor_window="1h").transform({
-        "norepinephrine_rate": frame((1, T0, 0.2), (1, at(0.5), invalid)),
-        "mean_arterial_pressure": frame((1, at(0.75), 80.0), (1, after, 80.0)),
-    }).collect()
+    result = (
+        make(SofaCardiovascularTransformer, pressor_window="1h")
+        .transform(
+            {
+                "norepinephrine_rate": frame((1, T0, 0.2), (1, at(0.5), invalid)),
+                "mean_arterial_pressure": frame((1, at(0.75), 80.0), (1, after, 80.0)),
+            }
+        )
+        .collect()
+    )
     assert result.rows() == [(1, T0, 4.0), (1, at(0.75), 4.0), (1, after, 0.0)]
 
 
 @pytest.mark.parametrize("invalid", [float("nan"), float("inf"), -float("inf")])
 def test_nonfinite_urine_does_not_bridge_a_recording_gap(invalid: float) -> None:
     urine = frame(*[(1, at(hour), invalid if hour == 12 else 0.0) for hour in range(25)])
-    result = make(SofaRenalTransformer, urine_output_gap="1h").transform({
-        "urine_output": urine, "creatinine": frame((1, at(24), 2.5)),
-    }).collect()
+    result = (
+        make(SofaRenalTransformer, urine_output_gap="1h")
+        .transform(
+            {
+                "urine_output": urine,
+                "creatinine": frame((1, at(24), 2.5)),
+            }
+        )
+        .collect()
+    )
     assert result.rows() == [(1, at(24), 2.0)]
 
 
 def test_a_component_with_no_current_input_emits_nothing() -> None:
     """The zero that a total sums must come from a measurement, not from silence."""
     transformer = make(SofaCoagulationTransformer, window="24h")
-    out = transformer.transform(
-        {"platelet_count": frame((1, T0, 300.0)), "unused": frame((1, at(48), 1.0))}
-    ).collect()
+    out = transformer.transform({"platelet_count": frame((1, T0, 300.0)), "unused": frame((1, at(48), 1.0))}).collect()
     # the platelet count has expired by the second event, and the component
     # declares no other input, so only its own measurement is emitted
     assert out.height == 1
@@ -229,8 +274,12 @@ def test_a_component_with_no_current_input_emits_nothing() -> None:
 )
 @pytest.mark.parametrize(("window", "hours"), [(None, None), ("3h", 3)], ids=["default", "mapping-override"])
 def test_component_measurement_alignment_includes_its_boundary(
-    cls: type[WindowedConceptTransformer], values: dict[str, float], expected: float,
-    default_hours: int, window: str | None, hours: int | None
+    cls: type[WindowedConceptTransformer],
+    values: dict[str, float],
+    expected: float,
+    default_hours: int,
+    window: str | None,
+    hours: int | None,
 ) -> None:
     boundary = at(default_hours if hours is None else hours)
     after = boundary + timedelta(microseconds=1)
@@ -492,9 +541,7 @@ class TestRespiration:
             pl.Series("orderid", [row[3] for row in rows], dtype=pl.String),
         )
 
-    @pytest.mark.parametrize(
-        "vent", [pytest.param(1.0, id="ventilation-on"), pytest.param(0.0, id="ventilation-off")]
-    )
+    @pytest.mark.parametrize("vent", [pytest.param(1.0, id="ventilation-on"), pytest.param(0.0, id="ventilation-off")])
     @pytest.mark.parametrize(
         ("pao2", "fio2", "expected_on", "expected_off"),
         [
@@ -625,7 +672,8 @@ class TestRespiration:
                 id="recent-gases-reassessed-at-stop",
             ),
             pytest.param(
-                1.0, [(1, at(1), 3.0), (1, at(2) + timedelta(minutes=5), 2.0)],
+                1.0,
+                [(1, at(1), 3.0), (1, at(2) + timedelta(minutes=5), 2.0)],
                 id="gases-over-one-hour-old-reassessed-at-stop",
             ),
             pytest.param(0.0, [(1, T0, 3.0)], id="stale-gases-cannot-be-scored-at-stop"),
@@ -677,52 +725,66 @@ class TestRespiration:
         ]
 
     def test_overlapping_episodes_close_independently(self) -> None:
-        result = make(SofaRespiratoryTransformer).transform(
-            {
-                "ventilation_start": self.markers((1, 0, "100", "A"), (1, 0.25, "100", "B")),
-                "ventilation_end": self.markers((1, 0.5, "100", "A"), (1, 0.75, "100", "B")),
-                "O2_partial_pressure": frame((1, T0, 60.0)),
-                "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
-            }
-        ).collect()
+        result = (
+            make(SofaRespiratoryTransformer)
+            .transform(
+                {
+                    "ventilation_start": self.markers((1, 0, "100", "A"), (1, 0.25, "100", "B")),
+                    "ventilation_end": self.markers((1, 0.5, "100", "A"), (1, 0.75, "100", "B")),
+                    "O2_partial_pressure": frame((1, T0, 60.0)),
+                    "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
+                }
+            )
+            .collect()
+        )
         assert result.rows() == [(1, T0, 4.0), (1, at(0.25), 4.0), (1, at(0.5), 4.0), (1, at(0.75), 2.0)]
 
     @pytest.mark.parametrize(("order", "expected"), [("A", 4.0), (None, 2.0)])
-    def test_only_an_identified_matching_end_confirms_a_long_episode(
-        self, order: str | None, expected: float
-    ) -> None:
-        result = make(SofaRespiratoryTransformer, ventilation_window="2h").transform(
-            {
-                "ventilation_start": self.markers((1, 0, "100", order)),
-                "ventilation_end": self.markers((1, 4, "100", order)),
-                "O2_partial_pressure": frame((1, at(3), 60.0)),
-                "fraction_of_inspired_oxygen": frame((1, at(3), 100.0)),
-            }
-        ).collect()
+    def test_only_an_identified_matching_end_confirms_a_long_episode(self, order: str | None, expected: float) -> None:
+        result = (
+            make(SofaRespiratoryTransformer, ventilation_window="2h")
+            .transform(
+                {
+                    "ventilation_start": self.markers((1, 0, "100", order)),
+                    "ventilation_end": self.markers((1, 4, "100", order)),
+                    "O2_partial_pressure": frame((1, at(3), 60.0)),
+                    "fraction_of_inspired_oxygen": frame((1, at(3), 100.0)),
+                }
+            )
+            .collect()
+        )
         assert result.rows() == [(1, at(3), expected), (1, at(4), 2.0)]
 
     @pytest.mark.parametrize("end_order", ["B", None])
     def test_an_unmatched_end_does_not_stop_an_identified_episode(self, end_order: str | None) -> None:
-        result = make(SofaRespiratoryTransformer).transform(
-            {
-                "ventilation_start": self.markers((1, 0, "100", "A")),
-                "ventilation_end": self.markers((1, 1, "100", end_order)),
-                "O2_partial_pressure": frame((1, T0, 60.0)),
-                "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
-            }
-        ).collect()
+        result = (
+            make(SofaRespiratoryTransformer)
+            .transform(
+                {
+                    "ventilation_start": self.markers((1, 0, "100", "A")),
+                    "ventilation_end": self.markers((1, 1, "100", end_order)),
+                    "O2_partial_pressure": frame((1, T0, 60.0)),
+                    "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
+                }
+            )
+            .collect()
+        )
         assert result.rows() == [(1, T0, 4.0), (1, at(1), 4.0)]
 
     def test_new_stay_context_does_not_inherit_old_ventilation(self) -> None:
-        result = make(SofaRespiratoryTransformer).transform(
-            {
-                "ventilation_start": self.markers((1, 0, "100", "A")),
-                "O2_partial_pressure": frame((1, T0, 60.0), (1, at(0.5), 60.0)).with_columns(
-                    pl.Series("stay_id", ["100", "200"])
-                ),
-                "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
-            }
-        ).collect()
+        result = (
+            make(SofaRespiratoryTransformer)
+            .transform(
+                {
+                    "ventilation_start": self.markers((1, 0, "100", "A")),
+                    "O2_partial_pressure": frame((1, T0, 60.0), (1, at(0.5), 60.0)).with_columns(
+                        pl.Series("stay_id", ["100", "200"])
+                    ),
+                    "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
+                }
+            )
+            .collect()
+        )
         assert result.rows() == [(1, T0, 4.0), (1, at(0.5), 2.0)]
 
 
@@ -929,12 +991,16 @@ class TestTotal:
 
     def test_score_is_included_at_24_hours_and_expires_one_microsecond_later(self) -> None:
         after_boundary = at(24) + timedelta(microseconds=1)
-        out = make(SofaTransformer).transform(
-            {
-                "sofa_renal": frame((1, T0, 4.0)),
-                "sofa_cns": frame((1, at(24), 1.0), (1, after_boundary, 1.0)),
-            }
-        ).collect()
+        out = (
+            make(SofaTransformer)
+            .transform(
+                {
+                    "sofa_renal": frame((1, T0, 4.0)),
+                    "sofa_cns": frame((1, at(24), 1.0), (1, after_boundary, 1.0)),
+                }
+            )
+            .collect()
+        )
         assert out.rows() == [(1, T0, 4.0), (1, at(24), 5.0), (1, after_boundary, 1.0)]
 
     def test_custom_window_retains_its_own_boundary(self) -> None:
@@ -951,12 +1017,16 @@ class TestTotal:
 
     @pytest.mark.parametrize("values", [(1.0, 4.0, 2.0, None), (None, 2.0, 4.0, 1.0)])
     def test_duplicate_component_scores_use_the_worst_regardless_of_order(self, values: tuple) -> None:
-        out = make(SofaTransformer).transform(
-            {
-                "sofa_renal": frame(*[(1, T0, value) for value in values], (1, at(1), 0.0)),
-                "sofa_cns": frame((1, T0, 1.0)),
-            }
-        ).collect()
+        out = (
+            make(SofaTransformer)
+            .transform(
+                {
+                    "sofa_renal": frame(*[(1, T0, value) for value in values], (1, at(1), 0.0)),
+                    "sofa_cns": frame((1, T0, 1.0)),
+                }
+            )
+            .collect()
+        )
         assert out.rows() == [(1, T0, 5.0), (1, at(1), 5.0)]
 
     def test_missing_and_null_components_do_not_mix_subjects(self) -> None:

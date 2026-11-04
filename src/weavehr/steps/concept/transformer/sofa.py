@@ -80,9 +80,7 @@ class SofaRenalTransformer(SofaComponent):
         urine_window = "24h"
         return {
             "creatinine": WindowedLocf(self.window, aggregate=pl.Expr.max),
-            "urine_output": SegmentedRollingSum(
-                urine_window, gap=self._kwargs.get("urine_output_gap", urine_window)
-            ),
+            "urine_output": SegmentedRollingSum(urine_window, gap=self._kwargs.get("urine_output_gap", urine_window)),
         }
 
     def score(self) -> pl.Expr:
@@ -100,13 +98,7 @@ class SofaRenalTransformer(SofaComponent):
             .when(creatinine.is_not_null())
             .then(0)
             .otherwise(None),
-            pl.when(urine < 200)
-            .then(4)
-            .when(urine < 500)
-            .then(3)
-            .when(urine.is_not_null())
-            .then(0)
-            .otherwise(None),
+            pl.when(urine < 200).then(4).when(urine < 500).then(3).when(urine.is_not_null()).then(0).otherwise(None),
         )
 
 

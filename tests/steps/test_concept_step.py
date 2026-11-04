@@ -476,15 +476,7 @@ mappings:
 
         ExtractionStep.load(project, extraction_config).run()
 
-        event_path = (
-            project.datasets_path
-            / "extraction"
-            / "data"
-            / "testdb"
-            / "1.0"
-            / "vitals"
-            / "CHART.parquet"
-        )
+        event_path = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         df = pl.read_parquet(event_path).with_columns(
             pl.concat_str(
                 pl.lit("PREFIX"),
@@ -506,9 +498,7 @@ mappings:
         mapping_dir = tmp_path / "config" / "testdb" / "1.0" / "mappings"
         concept_dir = tmp_path / "config" / "concepts"
 
-        load_extracation_config(
-            tmp_path / "config" / "testdb" / "1.0" / "tables"
-        )
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         # Add a second concept using exactly the same source rows as heart_rate.
         (concept_dir / "heart_rate_copy.yml").write_text(
             """name: heart_rate_copy
@@ -538,12 +528,8 @@ mappings:
         ExtractionStep.load(project, extraction_config).run()
         ConceptStep.load(project, concept_config).run()
 
-        heart_rate = pl.read_parquet(
-            concept_path(project, "heart_rate")
-        ).sort("time")
-        heart_rate_copy = pl.read_parquet(
-            concept_path(project, "heart_rate_copy")
-        ).sort("time")
+        heart_rate = pl.read_parquet(concept_path(project, "heart_rate")).sort("time")
+        heart_rate_copy = pl.read_parquet(concept_path(project, "heart_rate_copy")).sort("time")
 
         assert heart_rate_copy.height == heart_rate.height == 2
         assert heart_rate_copy["numeric_value"].to_list() == [
@@ -551,10 +537,7 @@ mappings:
             82.0,
         ]
 
-        routed_cache = (
-            project.workspace_path
-            / "_concept_routed_sources"
-        )
+        routed_cache = project.workspace_path / "_concept_routed_sources"
         assert not routed_cache.exists()
 
     def test_concept_without_dataset_mapping_is_skipped(

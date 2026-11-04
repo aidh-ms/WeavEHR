@@ -20,7 +20,7 @@ import yaml
 
 from weavehr.callbacks.interpreter import ExprInterpreter
 from weavehr.callbacks.proto import UnknownColumnError
-from weavehr.config.inheritance import resolve_effective_configs
+from weavehr.config.inheritance import resolve_effective_config, resolve_effective_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
@@ -57,7 +57,8 @@ def effective_table_cases() -> list[Any]:
 
 def load_effective_table(subdir: Path, name: str) -> TableConfig:
     """Build a TableConfig from effective data, raising on validation errors."""
-    data = resolve_effective_configs(subdir)[name]
+    data = resolve_effective_config(subdir, name)
+    assert data is not None, f"{relative_id(subdir)}/{name} does not resolve"
     data.setdefault("dataset", subdir.parent.parent.name)
     data.setdefault("version", subdir.parent.name)
     data.setdefault("name", Path(name).name)

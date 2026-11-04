@@ -49,11 +49,13 @@ Every step's `run()` follows the same lifecycle:
 1. **Load configurations** — each entry in the step's `config_files` list is read recursively from disk into the step's configuration registry, honouring `includes`/`excludes` and `overwrite`. The merged registry is saved to `<project>/configs/`.
 2. **Set up directories** — a workspace directory (`workspace/<step name>`) and a MEDS dataset (`datasets/<step name>`) are created.
 3. **Extract** — the step's core logic writes Parquet files into its workspace.
-4. **Collect** — the workspace's Parquet files are copied into `datasets/<step name>/data/`, and MEDS metadata is generated: `metadata/dataset.json` (dataset metadata plus ETL/MEDS version info) and `metadata/codes.parquet` (the vocabulary of all distinct codes in the output).
+4. **Collect** — the workspace's Parquet files are moved into `datasets/<step name>/data/`, so the data is not stored twice, and MEDS metadata is generated: `metadata/dataset.json` (dataset metadata plus ETL/MEDS version info) and `metadata/codes.parquet` (the vocabulary of all distinct codes in the output).
 
 ### Skipping and overwriting
 
-A step that finishes successfully writes a marker file, `datasets/<step>/.complete`. If that marker and the step's workspace exist and the step config has `overwrite: false` (the default), the step is skipped entirely. Otherwise, including after an interrupted run, the step empties its own workspace and dataset directories and runs from scratch, so partial output is never reused or appended to. A skipped step also leaves the config snapshot in `configs/` untouched, so it keeps describing the data on disk. Set `overwrite: true` in the step YAML to force re-computation. This makes pipeline scripts safely re-runnable.
+A step that finishes successfully writes a marker file, `datasets/<step>/.complete`. If that marker exists and the step config has `overwrite: false` (the default), the step is skipped entirely. Deleting a step's workspace, which is empty after a successful run, does not change that; deleting its dataset does make it run again. The persistence step is the exception: its output stays in its workspace, so it runs again if the workspace is gone. Otherwise, including after an interrupted run, the step empties its own workspace and dataset directories and runs from scratch, so partial output is never reused or appended to. A skipped step also leaves the config snapshot in `configs/` untouched, so it keeps describing the data on disk. Set `overwrite: true` in the step YAML to force re-computation. This makes pipeline scripts safely re-runnable.
+
+A run that is not skipped removes the step's marker before it changes anything else. An interrupted run therefore never looks complete, wherever the interruption happens: right after the config snapshot, while the old output is deleted, during extraction, or while results are collected.
 
 ### Common step configuration
 
@@ -104,8 +106,8 @@ from weavehr import auto_load_configs, dataset_config_registry
 # registered under the same identifier.
 dataset_config_registry.load(Path("my_configs/datasets/my-icu/1.0/tables"))
 
-auto_load_configs()                      # load the bundled configs now
-auto_load_configs(Path("my_configs"))    # or load a directory with the same layout as configs/
+auto_load_configs()  # load the bundled configs now
+auto_load_configs(Path("my_configs"))  # or load a directory with the same layout as configs/
 ```
 
 Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call always loads.
@@ -125,8 +127,8 @@ WeavEHR uses standard Python logging under the `weavehr` logger. Like any librar
 ```python
 from weavehr.logging import configure_logging, set_log_level
 
-configure_logging(level="INFO")   # console logging to stdout (stops propagation to the root logger)
-set_log_level("DEBUG")            # change verbosity later
+configure_logging(level="INFO")  # console logging to stdout (stops propagation to the root logger)
+set_log_level("DEBUG")  # change verbosity later
 ```
 
 `INFO` reports step progress; registering individual configurations is logged at `DEBUG`.

@@ -5,7 +5,7 @@ import yaml
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, model_validator
 
 from weavehr.config.base import BaseConfig
-from weavehr.config.inheritance import has_extends, resolve_effective_configs
+from weavehr.config.inheritance import has_extends, resolve_effective_config
 from weavehr.logging import logger
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
@@ -91,7 +91,7 @@ class ConceptConfig(BaseConfig):
             if has_extends(path):
                 # Resolve the dataset's inheritance chain; the mapping may be
                 # inherited from (or merged with) a base version's config.
-                sub_data = resolve_effective_configs(path).get(str(name))
+                sub_data = resolve_effective_config(path, str(name))
                 if sub_data is None:
                     continue
             else:
