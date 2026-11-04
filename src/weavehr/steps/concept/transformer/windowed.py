@@ -573,9 +573,7 @@ class WindowedConceptTransformer(BaseConceptTransformer):
         for name in names:
             lf = dependencies.get(sources[name])
             if lf is None:
-                lf = pl.LazyFrame(
-                    schema={_SUBJECT: pl.Int64, _TIME: pl.Datetime("us"), "numeric_value": pl.Float32}
-                )
+                lf = pl.LazyFrame(schema={_SUBJECT: pl.Int64, _TIME: pl.Datetime("us"), "numeric_value": pl.Float32})
             frames.append(
                 lf.select(
                     pl.col(_SUBJECT).cast(pl.Int64),
@@ -675,7 +673,9 @@ class WindowedSumTransformer(WindowedConceptTransformer):
 
     def compute(self) -> pl.Expr:
         defaults = self._kwargs.get("missing_values", {})
-        return pl.sum_horizontal(*[pl.col(name).fill_null(defaults.get(name, 0)) for name in self.inputs]).cast(pl.Float32)
+        return pl.sum_horizontal(*[pl.col(name).fill_null(defaults.get(name, 0)) for name in self.inputs]).cast(
+            pl.Float32
+        )
 
 
 class WindowedMaxTransformer(WindowedSumTransformer):

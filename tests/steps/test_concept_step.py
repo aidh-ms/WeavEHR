@@ -120,7 +120,12 @@ def test_gcs_unable_correction_reaches_cns_sofa(
     ):
         result = pl.read_parquet(concept_path(project, name)).sort("subject_id", "time")
         assert result.select("subject_id", "time").rows() == [
-            (1, start), (1, later), (2, start), (3, start), (4, start), (5, later)
+            (1, start),
+            (1, later),
+            (2, start),
+            (3, start),
+            (4, start),
+            (5, later),
         ]
         assert result["numeric_value"].to_list() == expected
 
@@ -188,7 +193,9 @@ def test_respiratory_sofa_consumes_mapped_start_and_end_markers(
             assert markers["orderid"].to_list() == ["101"]
     result = pl.read_parquet(concept_path(project, "sofa_respiratory")).sort("time")
     assert result.select("subject_id", "time", "numeric_value").rows() == [
-        (1, start, 4.0), (1, end, 2.0), (1, datetime(2024, 1, 1, 9), 2.0)
+        (1, start, 4.0),
+        (1, end, 2.0),
+        (1, datetime(2024, 1, 1, 9), 2.0),
     ]
 
 
@@ -437,8 +444,10 @@ mappings:
         load_concept_config(tmp_path / "config" / "concepts", [mapping_dir])
         ExtractionStep.load(project, extraction_config).run()
         source_path = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
-        source = pl.read_parquet(source_path).sort("subject_id", "time").with_columns(
-            pl.Series("prescribed_start", ["2024-01-01 10:00:00.123456", invalid_start, None, None])
+        source = (
+            pl.read_parquet(source_path)
+            .sort("subject_id", "time")
+            .with_columns(pl.Series("prescribed_start", ["2024-01-01 10:00:00.123456", invalid_start, None, None]))
         )
         source.write_parquet(source_path)
         ConceptStep.load(project, concept_config).run()
