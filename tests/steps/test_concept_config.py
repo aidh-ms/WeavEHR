@@ -16,6 +16,80 @@ class TestConceptConfig:
         concept = ConceptConfig(name="heart_rate", version="1.0.0", unit="bpm")
         assert concept.code == "heart_rate//bpm"
 
+    def test_unitless_code_is_the_name(self) -> None:
+        concept = ConceptConfig(name="patient_sex", version="1.0.0")
+        assert concept.unit is None
+        assert concept.code == "patient_sex"
+
+    def test_yaml_unit_none_is_rejected(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "patient_sex.yml"
+        concept_file.write_text("name: patient_sex\nversion: 1.0.0\nunit: None\n")
+
+        with pytest.raises(ValidationError, match="unit must be omitted for unitless concepts"):
+            ConceptConfig.load(concept_file)
+
+    def test_levels_require_a_unitless_concept(self) -> None:
+        with pytest.raises(ValidationError, match="levels are only supported for unitless concepts"):
+            ConceptConfig(name="systolic_blood_pressure", version="1.0.0", unit="mmHg", levels=["invasive"])
+
+    @pytest.mark.parametrize(
+        "mapping",
+        [
+            pytest.param(
+                {
+                    "type": "simple",
+                    "mappings": [{"pattern": {"table": "t", "code": "x"}, "level": "invasiv", "columns": {}}],
+                },
+                id="simple",
+            ),
+            pytest.param(
+                {"type": "derived", "table": {"concept": "source.1.0.0"}, "event": {}, "level": "invasiv"},
+                id="derived",
+            ),
+        ],
+    )
+    def test_inline_dataset_concept_with_an_undeclared_level_is_rejected(self, mapping: dict) -> None:
+        # e.g. a reloaded config snapshot, which carries its dataset concepts inline instead of loading them
+        dataset_concept = {"name": "ventilation_start", "version": "2.2", "dataset": "mimic-iv", **mapping}
+        with pytest.raises(ValidationError, match=r"mimic-iv 2.2: undeclared levels \['invasiv'\]"):
+            ConceptConfig(
+                name="ventilation_start",
+                version="1.0.0",
+                levels=["invasive", "noninvasive"],
+                dataset_concepts=[dataset_concept],
+            )
+
+    @pytest.mark.parametrize(
+        ("concept_levels", "defaults"),
+        [
+            pytest.param("levels: [invasive, noninvasive]\n", {}, id="declared-in-yaml"),
+            pytest.param("", {"levels": ["invasive", "noninvasive"]}, id="keyword-default"),
+        ],
+    )
+    def test_load_skips_only_the_mapping_with_an_undeclared_level(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, concept_levels: str, defaults: dict
+    ) -> None:
+        concept_file = tmp_path / "ventilation_start.yml"
+        concept_file.write_text(f"name: ventilation_start\nversion: 1.0.0\n{concept_levels}")
+        mapping_dirs = []
+        for dataset, level in (("mimic-iv", "invasiv"), ("eicu-crd", "invasive")):
+            mapping_dir = tmp_path / dataset / "1.0" / "mappings"
+            mapping_dir.mkdir(parents=True)
+            (mapping_dir / "ventilation_start.yml").write_text(
+                "type: simple\nmappings:\n  - pattern:\n      table: t\n      code: x\n"
+                f"    level: {level}\n    columns: {{}}\n"
+            )
+            mapping_dirs.append(mapping_dir)
+
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            concept = ConceptConfig.load(concept_file, dataset_paths=mapping_dirs, **defaults)
+
+        assert concept.get_dataset_concept("mimic-iv", "1.0") is None
+        kept = concept.get_dataset_concept("eicu-crd", "1.0")
+        assert isinstance(kept, SimpleDatasetConceptConfig)
+        assert kept.mappings[0].level == "invasive"
+        assert "undeclared levels ['invasiv']" in caplog.text
+
     def test_load_discovers_dataset_concepts_by_filename(self, tmp_path: Path) -> None:
         concept_file = tmp_path / "heart_rate.yml"
         concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")
