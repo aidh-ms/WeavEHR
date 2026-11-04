@@ -39,7 +39,7 @@ extension_columns:           # optional extra output columns
   table: col("table")
 ```
 
-The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). For binary concepts like `antibiotics`, the bundled configs use `unit: boolean` with values mapped to `1`/`"true"`.
+The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex` and dimensionless values such as pH. `unit: None` is rejected, because YAML reads it as the string `"None"`. For binary concepts like `antibiotics`, the bundled configs use `unit: boolean` with values mapped to `1`/`"true"`.
 
 During processing, each row is annotated with `dataset`, `version`, `table`, and `event` columns describing where it came from; `extension_columns` chooses which of these (or any other [expression](expressions.md)) to keep in the output.
 
@@ -93,7 +93,7 @@ event:                              # mapping to the output MEDS columns
 filters: []
 ```
 
-`event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is always the concept code (`name//unit`) and cannot be set here — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
+`event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is always the concept code (`name//unit`, or `name` without a unit) and cannot be set here — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
 
 Joins use the same keys, `how` and `maintain_order` options as [extraction joins](extraction.md#joins); cross joins are not supported.
 
@@ -134,6 +134,6 @@ with the standard MEDS columns (`subject_id`, `time`, `code`, `numeric_value`, `
 
 ## Adding a new concept
 
-1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, unit).
+1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, and unit if it has one).
 2. For each dataset, find the relevant source codes — `datasets/extraction/metadata/codes.parquet` is your friend — and write a mapping in `configs/datasets/<dataset>/<version>/mappings/<your_concept>.yml`.
 3. Re-run the concept step (with `overwrite: true`, or `includes` limited to your concept while iterating).

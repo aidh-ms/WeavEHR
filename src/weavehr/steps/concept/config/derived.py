@@ -44,7 +44,7 @@ class ConceptTable(BaseConceptTable):
 
 
 class MEDSConceptTable(BaseModel):
-    # The output code is always the concept code (``name//unit``), so it is not configurable here;
+    # The output code is always the concept code (``name//unit`` or ``name``), so it is not configurable here;
     # unknown keys (e.g. ``code``) are rejected instead of being silently ignored.
     model_config = ConfigDict(extra="forbid")
 

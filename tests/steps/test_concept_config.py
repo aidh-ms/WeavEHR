@@ -16,6 +16,18 @@ class TestConceptConfig:
         concept = ConceptConfig(name="heart_rate", version="1.0.0", unit="bpm")
         assert concept.code == "heart_rate//bpm"
 
+    def test_unitless_code_is_the_name(self) -> None:
+        concept = ConceptConfig(name="patient_sex", version="1.0.0")
+        assert concept.unit is None
+        assert concept.code == "patient_sex"
+
+    def test_yaml_unit_none_is_rejected(self, tmp_path: Path) -> None:
+        concept_file = tmp_path / "patient_sex.yml"
+        concept_file.write_text("name: patient_sex\nversion: 1.0.0\nunit: None\n")
+
+        with pytest.raises(ValidationError, match="unit must be omitted for unitless concepts"):
+            ConceptConfig.load(concept_file)
+
     def test_load_discovers_dataset_concepts_by_filename(self, tmp_path: Path) -> None:
         concept_file = tmp_path / "heart_rate.yml"
         concept_file.write_text("name: heart_rate\nversion: 1.0.0\nunit: bpm\n")

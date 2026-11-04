@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Annotated, Self
 
 import yaml
-from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, model_validator
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, field_validator, model_validator
 
 from weavehr.config.base import BaseConfig
 from weavehr.config.inheritance import has_extends, resolve_effective_config
@@ -37,7 +37,7 @@ class ConceptConfig(BaseConfig):
         identifier: Computed hierarchical identifier (e.g., "WeavEHR.config.classname.version.name")
         identifier_tuple: Tuple of (class_name, version, name)
         uuid: UUID generated from the identifier
-        unit: Unit of measurement for the concept values
+        unit: Unit of measurement for the concept values; omitted for unitless concepts
         extension_columns: Dictionary of extension columns to include in the concept table
         limits: Configuration for concept limits
         dataset_concepts: List of DatasetConceptConfig objects defining how to extract concept data per dataset
@@ -45,7 +45,7 @@ class ConceptConfig(BaseConfig):
 
     __weavehr_config_type__ = "concept"
 
-    unit: str = Field(..., description="Unit of measurement for the concept values.")
+    unit: str | None = Field(None, description="Unit of measurement for the concept values; omitted if unitless.")
     limits: ConceptLimits = Field(default_factory=ConceptLimits)
     extension_columns: dict[str, str] = Field(
         default_factory=dict,
@@ -57,10 +57,18 @@ class ConceptConfig(BaseConfig):
         description="List of dataset-specific concepts that this concept depends on (for dependent concepts).",
     )
 
+    @field_validator("unit")
+    @classmethod
+    def _reject_none_string(cls, value: str | None) -> str | None:
+        # YAML reads `unit: None` as the string "None", which would yield a `name//None` code.
+        if value == "None":
+            raise ValueError("unit must be omitted for unitless concepts, not set to 'None'")
+        return value
+
     @computed_field
     @property
     def code(self) -> str:
-        """Return the code column name based on concept type."""
+        """Return ``name//unit``, or ``name`` for a unitless concept."""
         if self.unit is None:
             return self.name
         return f"{self.name}//{self.unit}"
