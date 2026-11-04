@@ -39,7 +39,7 @@ extension_columns:           # optional extra output columns
   table: col("table")
 ```
 
-The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex` and dimensionless values such as pH. `unit: None` is rejected, because YAML reads it as the string `"None"`. For binary concepts like `antibiotics`, the bundled configs use `unit: boolean` with values mapped to `1`/`"true"`.
+The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex`, binary markers such as `antibiotics` (values mapped to `1`/`"true"`), dimensionless values such as pH, file paths and free text. `unit: None` is rejected, because YAML reads it as the string `"None"`.
 
 During processing, each row is annotated with `dataset`, `version`, `table`, and `event` columns describing where it came from; `extension_columns` chooses which of these (or any other [expression](expressions.md)) to keep in the output.
 
