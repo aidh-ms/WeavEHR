@@ -649,9 +649,7 @@ class WindowedSumTransformer(WindowedConceptTransformer):
     Fully declarative: the summed concepts are the declared ``concepts`` of the
     mapping, or the (unversioned) names listed in ``kwargs.terms``; ``window``
     controls how long a term's last value stays current (default 24h). A term
-    with no value inside the window contributes 0 unless ``kwargs.missing_values``
-    supplies a per-term default. Set ``kwargs.numeric_only`` to ignore null-valued
-    source events, so only numeric measurements trigger assessment.
+    with no value inside the window contributes 0.
     SOFA overrides the input aggregation to use maxima.
     """
 
@@ -665,17 +663,10 @@ class WindowedSumTransformer(WindowedConceptTransformer):
         if not self.inputs:
             terms = self._kwargs.get("terms") or list(dependencies)
             self.inputs = {name: WindowedLocf(self.window) for name in terms}
-        if self._kwargs.get("numeric_only", False):
-            dependencies = {
-                name: frame.filter(pl.col("numeric_value").is_not_null()) for name, frame in dependencies.items()
-            }
         return super().transform(dependencies)
 
     def compute(self) -> pl.Expr:
-        defaults = self._kwargs.get("missing_values", {})
-        return pl.sum_horizontal(*[pl.col(name).fill_null(defaults.get(name, 0)) for name in self.inputs]).cast(
-            pl.Float32
-        )
+        return pl.sum_horizontal(*[pl.col(name).fill_null(0) for name in self.inputs]).cast(pl.Float32)
 
 
 class WindowedMaxTransformer(WindowedSumTransformer):
