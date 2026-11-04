@@ -1,0 +1,14 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- absolute lymphocyte count:
+#   3019198 = Lymphocytes [#/volume] in Blood
+#
+# AUMC stores these measurements as 10^9/L, which is numerically equivalent
+# to the canonical K/uL unit.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^3019198(//.*)?$"
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
