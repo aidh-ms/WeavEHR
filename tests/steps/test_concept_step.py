@@ -1,11 +1,15 @@
 """End-to-end tests for the concept step on synthetic fixture data."""
 
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
 import pytest
 
 from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
+from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
+from weavehr.steps.concept.config.simple import MappingConfig
 from weavehr.steps.sharding.step import ShardingStep
 from tests.steps.conftest import load_concept_config, load_extracation_config
 
@@ -59,6 +63,43 @@ class TestSimpleConcepts:
         weight = pl.read_parquet(concept_path(project, "patient_weight"))
         assert weight["code"].unique().to_list() == ["patient_weight//kg"]
         assert sorted(weight["numeric_value"].to_list()) == [60.0, 80.0]
+
+    @pytest.mark.parametrize(
+        ("level", "code"),
+        [("invasive", "ventilation_start//invasive"), (None, "ventilation_start")],
+    )
+    def test_mapping_level_extends_the_code(self, level: str | None, code: str) -> None:
+        concept = ConceptConfig(name="ventilation_start", version="1.0.0", levels=["invasive", "noninvasive"])
+        mapping = MappingConfig.model_validate({"pattern": {"table": "t", "code": "x"}, "level": level, "columns": {}})
+        events = pl.LazyFrame({"subject_id": [1], "time": [datetime(2024, 1, 1)], "code": ["x"]})
+
+        df = ConceptStep.build_mapping_frame(
+            events, concept, mapping, dataset="testdb", version="1.0", table="t", event_name="E"
+        ).collect()
+
+        assert df["code"].to_list() == [code]
+
+    @pytest.mark.parametrize(
+        ("level", "code"),
+        [("invasive", "ventilation_start//invasive"), (None, "ventilation_start")],
+    )
+    def test_derived_level_extends_the_code(self, level: str | None, code: str) -> None:
+        concept = ConceptConfig(name="ventilation_start", version="1.0.0", levels=["invasive", "noninvasive"])
+        derived = DerivedDatasetConceptConfig.model_validate(
+            {
+                "name": "ventilation_start",
+                "version": "1.0",
+                "dataset": "testdb",
+                "table": {"concept": "source.1.0.0", "columns": ["subject_id", "time"]},
+                "event": {},
+                "level": level,
+            }
+        )
+        source = pl.LazyFrame({"subject_id": [1], "time": [datetime(2024, 1, 1)]})
+
+        df = ConceptStep.build_derived_frame(concept, derived, lambda _: source).collect()
+
+        assert df["code"].to_list() == [code]
 
 
 class TestDerivedConcepts:

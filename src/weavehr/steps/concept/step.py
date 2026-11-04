@@ -571,7 +571,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             lf = lf.with_columns(expr.cast(pl.Float64, strict=False).alias("numeric_value"))
 
         # code column
-        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
+        lf = lf.with_columns(pl.lit(concept.level_code(mapping.level)).alias("code"))
 
         for expr in mapping.filters:
             lf = lf.filter(parse_expr(lf, expr))
@@ -657,7 +657,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
         # code column
-        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
+        lf = lf.with_columns(pl.lit(concept.level_code(dataset_concept.level)).alias("code"))
 
         for expr in dataset_concept.filters:
             lf = lf.filter(parse_expr(lf, expr))

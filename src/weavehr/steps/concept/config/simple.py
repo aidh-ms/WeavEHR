@@ -40,11 +40,13 @@ class MappingConfig(BaseModel):
 
     Attributes:
         pattern: Pattern configuration for concept mapping.
+        level: One of the concept's declared levels, appended to the code of every row.
         columns: Column configuration for concept mapping.
         filters: The list of filter configurations for the mapping.
     """
 
     pattern: MappingPatternConfig = Field(..., description="Pattern configuration for concept mapping.")
+    level: str | None = Field(None, description="Concept level for all rows of this mapping; part of the code.")
     columns: MappingColumnConfig = Field(..., description="Column configuration for concept mapping.")
     filters: list[str] = Field(default_factory=list, description="The list of filter configurations for the mapping.")
 
