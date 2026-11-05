@@ -6,5 +6,7 @@ mappings:
       code: ^respFlowCareData//RT Vent On/Off$
     columns:
       text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
     filters:
       - text_value == "Start"
