@@ -259,6 +259,9 @@ The eICU mappings treat each recorded sign of ventilation as a start marker:
   same start within a stay become one marker;
 - `RT Vent On/Off` charted as `Start` or `Continued`;
 - `O2 Device` charted as `Ventilator`, `Bi-PAP` or `CPAP`;
+- the nurse-charted `O2 Admin Device` (free text) naming a ventilator (`ventilator`,
+  `vent`, or a tracheostomy on a ventilator such as `trach to vent`) or BiPAP,
+  CPAP or NIV; `venturi mask` does not count;
 - positive ventilator settings (`PEEP`, `PEEP/CPAP`, `CPAP`, `Pressure Control`,
   `Pressure Support`, `Tidal Volume (set)`, `Vent Rate`) and measurements
   (`Exhaled MV`, `Exhaled TV (patient)`, `Exhaled TV (machine)`,
@@ -300,8 +303,8 @@ six hours within which
 [ricu's `vent_ind`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L280)
 matches a start to the next end; ricu's additional minimum duration of 30 minutes
 is not applied. In eICU demo 2.0 the median gap between charted ventilation
-markers within a stay is 1.1 hours, the 95th percentile is 6.0 hours, and 4.9% of
-15,370 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
+markers within a stay is 1.0 hours, the 95th percentile is 4.9 hours, and 3.5% of
+20,240 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
 their procedure episodes are linked by `orderid`.
 
 ### Cardiovascular SOFA

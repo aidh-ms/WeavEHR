@@ -27,6 +27,13 @@ mappings:
     filters:
       - str_contains(text_value, "(?i)^(ventilator|bi-pap|cpap)$")
   - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    columns: *chart_columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^(ventilator|vent|mechanical ventilator)$|trach.*vent|vent.*trach|bi?-?pap|cpap|(^|[^a-z])niv([^a-z]|$)")
+  - pattern:
       table: respiratorycharting
       event: RESPIRATORY_CHART
       code: ^respFlowSettings//(PEEP|PEEP/CPAP|CPAP|Pressure Control|Pressure Support|Tidal Volume \(set\)|Vent Rate)$
