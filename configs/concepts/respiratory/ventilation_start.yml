@@ -1,5 +1,6 @@
 name: ventilation_start
 version: 1.0.0
+levels: [invasive, noninvasive]
 extension_columns:
   dataset: col("dataset")
   table: col("table")
