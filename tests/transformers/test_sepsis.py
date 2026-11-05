@@ -41,7 +41,7 @@ def events(*rows: tuple[int, float | None, float | None]) -> pl.LazyFrame:
 def make[T: Sepsis3Transformer | AntibioticsWithCultureTransformer | SustainedAntibioticsTransformer](
     cls: type[T], **kwargs: Any
 ) -> T:
-    concept = ConceptConfig(name="sepsis", version="1.0.0", unit="boolean")
+    concept = ConceptConfig(name="sepsis", version="1.0.0")
     config = ComplexDatasetConceptConfig(
         name="sepsis", version="1.0", dataset="synthetic", concept_transformer="unused"
     )
@@ -408,10 +408,10 @@ def test_shipped_sepsis_mappings_run_through_the_concept_pipeline(tmp_path: Path
 """,
         concepts=[
             ("sofa", "points"),
-            ("antibiotics", "boolean"),
-            ("body_fluid_sampling", "boolean"),
-            ("suspected_infection", "boolean"),
-            ("sepsis3", "boolean"),
+            ("antibiotics", None),
+            ("body_fluid_sampling", None),
+            ("suspected_infection", None),
+            ("sepsis3", None),
         ],
         mappings={
             "sofa": _simple_mapping_yml("SOFA"),
@@ -428,5 +428,5 @@ def test_shipped_sepsis_mappings_run_through_the_concept_pipeline(tmp_path: Path
         (1, datetime(2024, 1, 1, 1), 1.0),
         (1, datetime(2024, 1, 10, 1), 1.0),
     ]
-    assert result["code"].to_list() == ["sepsis3//boolean"] * 2
+    assert result["code"].to_list() == ["sepsis3"] * 2
     assert result.schema["numeric_value"] == pl.Float32

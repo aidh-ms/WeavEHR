@@ -1091,9 +1091,10 @@ events:
 """
 
 
-def _concept_yml(name: str, unit: str, extensions: tuple[str, ...] = ("dataset",)) -> str:
+def _concept_yml(name: str, unit: str | None, extensions: tuple[str, ...] = ("dataset",)) -> str:
     columns = "".join(f'  {extension}: col("{extension}")\n' for extension in extensions)
-    return f"name: {name}\nversion: 1.0.0\nunit: {unit}\nextension_columns:\n{columns}"
+    unit_line = "" if unit is None else f"unit: {unit}\n"
+    return f"name: {name}\nversion: 1.0.0\n{unit_line}extension_columns:\n{columns}"
 
 
 def _simple_mapping_yml(code: str) -> str:
@@ -1121,7 +1122,7 @@ def _complex_mapping_yml(transformer: str, inputs: list[str], *, as_terms: bool 
 def _run_pipeline(
     tmp_path: Path,
     labs_csv: str,
-    concepts: list[tuple[str, str]] | list[tuple[str, str, tuple[str, ...]]],
+    concepts: list[tuple[str, str | None]] | list[tuple[str, str | None, tuple[str, ...]]],
     mappings: dict[str, str],
 ) -> WeavEHRProject:
     """Write a minimal project around one labs table and run both steps."""
