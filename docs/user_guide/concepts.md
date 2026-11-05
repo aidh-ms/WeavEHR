@@ -250,10 +250,36 @@ The MIMIC-IV mappings select procedure items 225792 and 225794, preserving nativ
 the ventilation level in the code: `ventilation_start//invasive` (225792) or
 `ventilation_start//noninvasive` (225794), and likewise for `ventilation_end`.
 Respiratory SOFA does not use the level, so noninvasive ventilation counts as
-ventilated. The eICU mappings use the existing respiratory-charting `Start` and
-`Off`/`off` markers and preserve `stay_id`; those observations have no shared
-episode identifier and no level, so their codes stay `ventilation_start` and
-`ventilation_end`.
+ventilated.
+
+The eICU mappings treat each recorded sign of ventilation as a start marker:
+
+- the episode start in `respiratoryCare` (`ventstartoffset`); a zero offset means
+  "not recorded" and is dropped during extraction, and repeated reports of the
+  same start within a stay become one marker;
+- `RT Vent On/Off` charted as `Start` or `Continued`;
+- `O2 Device` charted as `Ventilator`, `Bi-PAP` or `CPAP`;
+- positive ventilator settings (`PEEP`, `PEEP/CPAP`, `CPAP`, `Pressure Control`,
+  `Pressure Support`, `Tidal Volume (set)`, `Vent Rate`) and measurements
+  (`Exhaled MV`, `Exhaled TV (patient)`, `Exhaled TV (machine)`,
+  `Mean Airway Pressure`, `Peak Insp. Pressure`, `Plateau Pressure`, `B1: IPAP`,
+  `B2: EPAP`).
+
+End markers are `RT Vent On/Off` charted as `Off` or `Suspended` and the episode
+end in `respiratoryCare` (`ventendoffset`, zero dropped). Text values match
+regardless of case. Prior episodes recorded in `respiratoryCare`
+(`priorventstartoffset`, `priorventendoffset`) are not used. The markers preserve
+`stay_id`; they have no shared episode identifier and no level, so their codes
+stay `ventilation_start` and `ventilation_end`.
+
+ricu at c0efac7
+([`vent_start`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6498),
+[`vent_end`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6411))
+also uses the prior episodes, every row in the `respFlowPtVentData` category and
+any value `off` or `Suspended`. The WeavEHR selection is deliberately narrower:
+patient observations such as `RR (patient)` and `SaO2`, FiO2 and oxygen flow
+settings, and oxygen devices other than ventilators, BiPAP and CPAP (including
+high-flow nasal cannula) are not evidence of ventilation.
 
 An end stops its matching episode; overlapping identified episodes keep ventilation
 on until all have ended. Identifiers are scoped to patient and stay. A new stay
@@ -267,6 +293,16 @@ inclusive. Expiry is evaluated at the next input event; it creates no timestamp.
 The default is `null` (no forced expiry), preserving the previous default until a
 ventilation-specific timeout is agreed. `kwargs.ventilation_id_column` can select
 a native linking field other than the default `orderid`.
+
+The eICU mapping sets `ventilation_window: 6h`, so each start marker keeps
+ventilation on for six hours unless an end stops it first. This matches the
+six hours within which
+[ricu's `vent_ind`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L280)
+matches a start to the next end; ricu's additional minimum duration of 30 minutes
+is not applied. In eICU demo 2.0 the median gap between charted ventilation
+markers within a stay is 1.1 hours, the 95th percentile is 6.0 hours, and 4.9% of
+15,370 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
+their procedure episodes are linked by `orderid`.
 
 ### Cardiovascular SOFA
 

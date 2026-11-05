@@ -68,6 +68,8 @@ events:
         airwaysize: col(airwaysize)
         airwayposition: col(airwayposition)
         cuffpressure: col(cuffpressure)
+    filters:
+      - drop_if(ventstartoffset == 0)
 
   - name: VENTILATION_END
     columns:
