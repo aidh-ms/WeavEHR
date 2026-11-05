@@ -579,7 +579,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             lf = lf.filter(parse_expr(lf, expr))
 
         # Preserve source codes through filtering, then assign the concept code.
-        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
+        lf = lf.with_columns(pl.lit(concept.level_code(mapping.level)).alias("code"))
 
         lf = lf.select(
             [
@@ -662,7 +662,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
         # code column
-        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
+        lf = lf.with_columns(pl.lit(concept.level_code(dataset_concept.level)).alias("code"))
 
         for expr in dataset_concept.filters:
             lf = lf.filter(parse_expr(lf, expr))

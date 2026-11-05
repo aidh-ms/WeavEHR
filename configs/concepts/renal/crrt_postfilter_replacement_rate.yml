@@ -1,8 +1,6 @@
-# Unit normalisation is unresolved: no local item dictionary confirms the unit.
-# None means unspecified; source_code retains the original item, label and unit.
 name: crrt_postfilter_replacement_rate
 version: 1.0.0
-unit: None
+unit: mL/hr
 extension_columns:
   dataset: col("dataset")
   table: col("table")

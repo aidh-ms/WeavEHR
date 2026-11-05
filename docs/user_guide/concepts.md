@@ -39,7 +39,9 @@ extension_columns:           # optional extra output columns
   table: col("table")
 ```
 
-The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). For binary concepts like `antibiotics`, the bundled configs use `unit: boolean` with values mapped to `1`/`"true"`.
+The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex`, binary markers such as `antibiotics` (values mapped to `1`/`"true"`), dimensionless values such as pH, file paths and free text. `unit: None` is rejected, because YAML reads it as the string `"None"`.
+
+A unitless concept can declare `levels`, the allowed sub-types of its events, e.g. `levels: [invasive, noninvasive]` for `ventilation_start`. A simple or derived mapping sets one with `level`, and its events get the code `<name>//<level>` (e.g. `ventilation_start//invasive`). Events without a level keep the code `<name>`, so matching the prefix `<name>` finds every level. Levels are not supported for concepts with a unit.
 
 During processing, each row is annotated with `dataset`, `version`, `table`, and `event` columns describing where it came from; `extension_columns` chooses which of these (or any other [expression](expressions.md)) to keep in the output.
 
@@ -69,7 +71,8 @@ mappings:
 - `pattern.code` is a regular expression fragment matched against the full code, so alternations select multiple items at once: `(225792//Invasive Ventilation|225794//Non-invasive Ventilation)`. A fully custom regex can be given as `pattern.regex` instead.
 - `columns.numeric_value` / `columns.text_value` are expressions evaluated on the matched rows; constants work too (`numeric_value: const(1)` for flag-style concepts).
 - `columns.extension` maps extra output column names to expressions evaluated on the source rows. Use it for dataset-specific metadata, such as an infusion identifier. These expressions override same-named concept and dataset-wide extension expressions. Extension values are written as strings; mappings without a particular extension produce null for that column when their outputs are combined.
-- `filters` see the mapped timestamps, values and extensions while `code` still contains the source extraction code. After filtering, `code` is replaced with the harmonised concept code (`<name>//<unit>`).
+- `level` (optional) is one of the concept's `levels`, written as a literal, not an expression. It applies to every row of the mapping; source values with different levels need separate mappings, each selecting its rows with `pattern.code` or `filters`. A level that the concept doesn't declare skips that dataset's mapping with a warning; the other datasets keep the concept.
+- `filters` see the mapped timestamps, values and extensions while `code` still contains the source extraction code. After filtering, `code` is replaced with the harmonised concept code (`<name>//<unit>`, `<name>`, or `<name>//<level>`).
 
 A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions.
 
@@ -116,7 +119,7 @@ event:                              # mapping to the output MEDS columns
 filters: []
 ```
 
-`event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is always the concept code (`name//unit`) and cannot be set here — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
+`event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is the concept code (`name//unit`, or `name` without a unit) and cannot be set here; an optional top-level `level` (one of the concept's `levels`, as for simple mappings) extends it to `name//level` — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
 
 Joins use the same keys, `how` and `maintain_order` options as [extraction joins](extraction.md#joins); cross joins are not supported.
 
@@ -142,6 +145,8 @@ class VentilationWindows:
     def __init__(self, concept, complex_config, **kwargs): ...
     def __call__(self, project: WeavEHRProject) -> None: ...
 ```
+
+Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
 
 ### GCS
 
@@ -439,6 +444,6 @@ with the standard MEDS columns (`subject_id`, `time`, `code`, `numeric_value`, `
 
 ## Adding a new concept
 
-1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, unit).
+1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, and unit if it has one).
 2. For each dataset, find the relevant source codes — `datasets/extraction/metadata/codes.parquet` is your friend — and write a mapping in `configs/datasets/<dataset>/<version>/mappings/<your_concept>.yml`.
 3. Re-run the concept step (with `overwrite: true`, or `includes` limited to your concept while iterating).

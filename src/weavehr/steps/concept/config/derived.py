@@ -44,8 +44,8 @@ class ConceptTable(BaseConceptTable):
 
 
 class MEDSConceptTable(BaseModel):
-    # The output code is always the concept code (``name//unit``), so it is not configurable here;
-    # unknown keys (e.g. ``code``) are rejected instead of being silently ignored.
+    # The output code is the concept code (``name//unit`` or ``name``, plus the mapping's ``level``), so it is
+    # not configurable here; unknown keys (e.g. ``code``) are rejected instead of being silently ignored.
     model_config = ConfigDict(extra="forbid")
 
     # None means the column is passed through unchanged from the input concept table.
@@ -72,6 +72,7 @@ class DerivedDatasetConceptConfig(BaseDatasetConfig):
     event: MEDSConceptTable = Field(
         ..., description="The configuration for the MEDS event concept table to be derived (if applicable)."
     )
+    level: str | None = Field(None, description="Concept level for all rows of this mapping; part of the code.")
     filters: list[str] = Field(
         default_factory=list, description="The list of filter configurations for the derived concept."
     )
