@@ -246,9 +246,14 @@ the input event timestamps rather than ricu's hourly grid. Scoring thresholds
 and ventilation-state rules are unchanged.
 
 The MIMIC-IV mappings select procedure items 225792 and 225794, preserving native
-`orderid` and `stay_id` to pair each procedure's start and end. The eICU mappings
-use the existing respiratory-charting `Start` and `Off`/`off` markers and preserve
-`stay_id`; those observations have no shared episode identifier.
+`orderid` and `stay_id` to pair each procedure's start and end. Both markers carry
+the ventilation level in the code: `ventilation_start//invasive` (225792) or
+`ventilation_start//noninvasive` (225794), and likewise for `ventilation_end`.
+Respiratory SOFA does not use the level, so noninvasive ventilation counts as
+ventilated. The eICU mappings use the existing respiratory-charting `Start` and
+`Off`/`off` markers and preserve `stay_id`; those observations have no shared
+episode identifier and no level, so their codes stay `ventilation_start` and
+`ventilation_end`.
 
 An end stops its matching episode; overlapping identified episodes keep ventilation
 on until all have ended. Identifiers are scoped to patient and stay. A new stay

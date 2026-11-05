@@ -5,7 +5,17 @@ mappings:
   - pattern:
       table: procedureevents
       event: PROCEDURE_START
-      code: (225792(//.*)?|225794(//.*)?)
+      code: (225792(//.*)?)
+    level: invasive
+    columns:
+      extension:
+        stay_id: col(stay_id)
+        orderid: col(orderid)
+  - pattern:
+      table: procedureevents
+      event: PROCEDURE_START
+      code: (225794(//.*)?)
+    level: noninvasive
     columns:
       extension:
         stay_id: col(stay_id)
