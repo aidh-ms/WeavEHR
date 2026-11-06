@@ -491,6 +491,17 @@ Some care entries record contradictory airway types at the same time, such as
 `currenthistoryseqnum`, the latest one, counts. The eICU extraction gains an
 `AIRWAY` event for this; existing extractions need rerunning to expose it.
 
+The AmsterdamUMCdb mappings read the OMOP export: ventilator modes from
+`procedure_occurrence`, and oxygen devices and airways from `device_exposure`.
+The ambiguous modes (PS/CPAP, BIPAP, CPAP, VC and PC) are `ventilator`, and any
+listed mode whose source value contains "NIV" is `noninvasive`. Tube and
+tracheostoma ends recorded in `device_exposure` become `airway_end`, and
+`device_exposure_id` links each end to its start. A Guedel airway and an Ambu
+bag are not supplemental oxygen, and a double-lumen tube records only the
+airway, like every other tube. No high-flow nasal cannula or room-air item is
+mapped yet. Rows keep the source code, concept ID and source value, in
+`text_value`.
+
 ## Output layout
 
 Each concept is written per dataset and dataset version:

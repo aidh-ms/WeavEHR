@@ -43,6 +43,11 @@ Currently mapped (all `simple`, all from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
 respiratory numerics (SpO2, respiratory rate, FiO2) and urine output.
 
+Respiratory support and the airway markers (`respiratory_support`,
+`airway_start`, `airway_end`) come from `procedure_occurrence` (ventilator
+modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). They
+have not yet been checked against AUMCdb output.
+
 ### Validation against ricu
 
 The AUMC mappings were validated against `ricu` over the first 168 hours of
