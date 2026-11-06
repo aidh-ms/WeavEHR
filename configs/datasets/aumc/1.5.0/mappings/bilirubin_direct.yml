@@ -1,11 +1,13 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps AUMC item 6812:
-#   Bilirubine geconjugeerd -> OMOP measurement_concept_id 3005772
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps AUMC item 18361:
+#   Gecon.Bili (bloed) -> OMOP measurement_concept_id 3005772
+# Stored in umol/l; converted to mg/dL (* 0.058467). Item 6812 (Bilirubine geconjugeerd), which ricu uses,
+# is left out: its values are mostly between 0 and 1, which does not fit umol/l.
 type: simple
 mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: "^3005772//Bilirubine geconjugeerd(//.*)?$"
+      code: "^3005772//Gecon\\.Bili +\\(bloed\\)(//.*)?$"
     columns:
       numeric_value: col(numeric_value) * 0.058467
       text_value: col(text_value)
