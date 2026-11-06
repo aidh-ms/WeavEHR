@@ -6,6 +6,8 @@ columns:
     type: int64
   - name: respcareid
     type: int64
+  - name: currenthistoryseqnum
+    type: int64
   # db fields - times
   - name: respcarestatusoffset
     type: int64
@@ -79,3 +81,21 @@ events:
     filters:
       - drop_if(ventendoffset == 0)
     # TODO: this currently does not consider cases where ventend_timestamp < enter_timestamp
+
+  - name: AIRWAY
+    columns:
+      time: col(entered_timestamp)
+      code:
+        - col(airwaytype)
+      extension:
+        airwaysize: col(airwaysize)
+        airwayposition: col(airwayposition)
+        cuffpressure: col(cuffpressure)
+    filters:
+      - drop_na(airwaytype)
+      - drop_if(airwaytype == "")
+      # One care entry can record contradictory airway types at the same time (e.g. Oral ETT and
+      # No Artificial Airway). Keep the row with the highest currenthistoryseqnum, assumed to be the
+      # latest (inferred from the eICU demo, not documented). This interprets the data rather than
+      # decoding it, so it could move to the airway concept mappings.
+      - first_distinct(patientunitstayid, respcarestatusoffset, order_by=currenthistoryseqnum, descending=True)
