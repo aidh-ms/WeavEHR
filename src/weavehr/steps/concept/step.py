@@ -546,7 +546,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         Returns:
             LazyFrame with the MEDS columns plus the concept's extension columns
         """
-        # extension columns
         lf = lf.with_columns(pl.lit(dataset).alias("dataset"))
         lf = lf.with_columns(pl.lit(version).alias("version"))
         lf = lf.with_columns(pl.lit(table).alias("table"))
@@ -562,7 +561,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         if mapping.columns.time is not None:
             lf = lf.with_columns(parse_expr(lf, mapping.columns.time).alias("time"))
 
-        # value columns
         if mapping.columns.text_value is None:
             lf = lf.with_columns(pl.lit(None).alias("text_value"))
         else:
@@ -661,13 +659,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         for col_name, col_expr in mapping.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
-        # code column
         lf = lf.with_columns(pl.lit(concept.level_code(dataset_concept.level)).alias("code"))
 
         for expr in dataset_concept.filters:
             lf = lf.filter(parse_expr(lf, expr))
 
-        # Reorder columns
         lf = lf.select(
             [
                 pl.col("subject_id").cast(pl.Int64),

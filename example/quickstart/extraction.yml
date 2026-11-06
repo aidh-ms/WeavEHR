@@ -1,0 +1,7 @@
+name: Extraction
+version: 1.0.0
+config:
+  data:
+    - name: tutorial
+      version: "1.0"
+      path: example/quickstart/data

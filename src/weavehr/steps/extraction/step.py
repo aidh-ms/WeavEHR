@@ -109,12 +109,10 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             event_identifier: tuple[str, ...] = table.identifier_tuple[1:] + (event.name,)
             event_lf = self.build_event_frame(lf, event, include_event_name)
 
-            # Ensure output directory exists
             assert self._workspace_dir is not None
             output_data_path = Path(self._workspace_dir.path, *event_identifier[:-1])
             output_data_path.mkdir(parents=True, exist_ok=True)
 
-            # Write to parquet with streaming
             output_file = output_data_path / f"{event.name}.parquet"
             logger.info(
                 "Writing event %s for table %s to %s",
@@ -285,7 +283,6 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             callback_type="Event transformation",
         )
 
-        # Reorder columns
         event_lf = event_lf.select(
             [
                 pl.col("subject_id").cast(pl.Int64),

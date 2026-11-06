@@ -1,12 +1,10 @@
-# Architecture Decisions
+---
+search:
+  exclude: true
+---
 
-For more information, please refer to the [arc42](https://docs.arc42.org/section-9/) documentation.
+# Architecture
 
-TODO: later
-
-We should use ADRs
-
-Ideas:
-* Parquet as file format
-* Python tabular libs: PyArrow, Pandas, Polars, Dask, ...
-*
+The architecture documentation has moved to
+[Architecture for contributors](../contributing/architecture.md).
+For pipeline behavior, see the [pipeline reference](../user_guide/pipeline.md).

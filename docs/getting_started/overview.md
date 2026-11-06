@@ -1,62 +1,56 @@
-# Package overview
+# How it fits together
 
-WeavEHR is an open-source Python framework for extracting, preprocessing, and harmonising intensive care unit (ICU) time series data from diverse sources. It converts heterogeneous ICU datasets — public ones such as [MIMIC-IV](https://physionet.org/content/mimiciv/) and [eICU-CRD](https://physionet.org/content/eicu-crd/), as well as custom institutional data — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format.
+WeavEHR separates **reading a source** from **deciding what its events mean**.
+That separation lets you change a clinical mapping without reading the original
+CSV files again.
 
-## The problem
+| Term | Job | Example |
+| --- | --- | --- |
+| Project | Holds the outputs and configuration snapshots of a run | `runs/study-01/` |
+| Step config | Selects datasets and connects pipeline stages | `extraction.yml`, `concept.yml` |
+| Table config | Reads one source table and emits events | `chartevents.yml` |
+| Concept definition | Names a shared variable and its target unit | `heart_rate`, `bpm` |
+| Dataset mapping | Finds or computes that concept in one dataset/version | MIMIC item `220045` → heart rate |
+| Registry | In-memory collection of loaded configs | Bundled configs plus your overrides |
 
-ICU research routinely needs the same clinical variables — heart rate, creatinine, norepinephrine doses, ventilation episodes — but every dataset stores them differently: different table layouts, item identifiers, units, and timestamp conventions. Studies therefore accumulate one-off, dataset-specific extraction scripts that are hard to validate, hard to reuse, and hard to reproduce. Tools like the R package [`ricu`](https://github.com/eth-mds/ricu) showed that a shared, dataset-agnostic concept dictionary solves this; WeavEHR brings that approach to the Python ecosystem and combines it with the MEDS output standard.
+## Two outputs, two uses
 
-## The approach
+**Extraction** reads CSV, compressed CSV, or Parquet, performs configured joins and
+conversions, and writes a common event schema. Codes still describe source events,
+such as `CHART//220045//Heart Rate//bpm`. Dataset, version, and table are encoded in
+the **file path**; they are not automatically prepended to every code.
 
-WeavEHR separates *what* to extract from *how* to extract it:
+**Harmonisation** selects or combines extracted events and writes shared concepts,
+such as `heart_rate//bpm`. A concept may be a direct mapping, a calculation from
+other concepts, or a Python transformer for time-dependent logic.
 
-- **Declarative YAML configurations** describe source tables, joins, events, and clinical concepts. They are versioned, carry stable identifiers, and are snapshotted into every output project for reproducibility.
-- **A processing pipeline** of steps executes those configurations:
-    1. The **extraction step** turns raw source tables into MEDS event streams, with codes that preserve full provenance (`mimic-iv//chartevents//220045//Heart Rate//bpm`).
-    2. The **concept step** maps those dataset-specific codes onto shared clinical concepts (`heart_rate//bpm`), so downstream code is identical for every dataset.
-- **MEDS-compliant output**: every step writes a self-contained MEDS dataset (Parquet data plus `dataset.json` and `codes.parquet` metadata).
+An optional **sharding** step groups concept events into files by subject. It
+keeps long-format events and selects only the five core columns. See
+[reading and sharding output](../guides/output.md) before combining datasets.
 
-See the [user guide](../user_guide/pipeline.md) for a detailed walk through the pipeline.
+## What happens to time and identity?
 
-## Key properties
+WeavEHR does not globally resample to hours. Source timestamps are preserved or
+reconstructed by the table config. Precision in the output type does not imply
+precision in the original data. Clinical scores use explicit alignment and
+lookback windows, described in the [method notes](../reference/clinical/index.md).
 
-| Property | How WeavEHR achieves it |
-| --- | --- |
-| Reproducibility | Versioned configs with deterministic identifiers; merged config snapshot stored in each project |
-| Privacy | Fully offline operation; no data ever leaves your machine |
-| Performance | Polars lazy/streaming execution; full MIMIC-IV is processable on a 16–32 GB laptop |
-| Extensibility | New datasets are pure YAML; custom transformation callbacks and complex concepts plug in via Python |
-| Interoperability | MEDS v0.4+ output consumable by the wider MEDS tool ecosystem |
+`subject_id` means what the dataset mapping defines. For example, MIMIC uses a
+patient identifier; eICU uses a hospital-admission identifier. IDs from different
+datasets are **not** globally unique. Keep dataset identity and distinguish patients,
+hospital admissions, and ICU stays when defining a study cohort.
 
-## Bundled configurations
+## What harmonisation does not decide
 
-The repository ships curated configurations under `configs/`:
+Coverage varies by dataset. A missing output can mean no mapping, no source file,
+no matching observations, or missing inputs to a calculation. It does not mean
+the patient had a normal value or no disease.
 
-- **Extraction configs** for MIMIC-IV 3.1, eICU-CRD 2.0 (full and demo), and NWICU 0.1.0.
-- **A concept dictionary** of ~90 concepts across vital signs, blood gas, clinical chemistry, hematology, medications, neurological scores, respiratory parameters, fluid output, and demographics, with per-dataset mappings (most complete for MIMIC-IV).
+Mappings can include unit conversions, filters, and plausibility limits.
+Inspect those choices for the variables your study needs. A common concept code
+does not establish that two hospitals measured or recorded the same thing in the
+same way. Cohort selection, prediction times, and train/test splits remain study decisions.
 
-# License
-
-```
-MIT License
-
-Copyright (c) 2023 AIDH MS
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
+**Next:** [run a dataset](../guides/run-dataset.md),
+[browse available concepts](../reference/concepts.md), or
+[inspect the pipeline lifecycle](../user_guide/pipeline.md).

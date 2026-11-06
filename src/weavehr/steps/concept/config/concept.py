@@ -100,7 +100,7 @@ class ConceptConfig(BaseConfig):
         Args:
             file_path: Path to the YAML configuration file
             dataset_paths: List of paths to dataset directories
-            **kwargs: Additional keyword arguments for configuration initialization
+            **kwargs (Any): Additional keyword arguments for configuration initialization
 
         Returns:
             Configuration instance populated from the YAML file

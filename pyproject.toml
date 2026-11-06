@@ -34,7 +34,7 @@ homepage = "https://github.com/aidh-ms/WeavEHR"
 repository = "https://github.com/aidh-ms/WeavEHR"
 changelog = "https://github.com/aidh-ms/WeavEHR/releases"
 issues = "https://github.com/aidh-ms/WeavEHR/issues"
-documentation = "https://github.com/aidh-ms/WeavEHR/wiki"
+documentation = "https://github.com/aidh-ms/WeavEHR/tree/main/docs"
 
 [build-system]
 requires = ["hatchling"]

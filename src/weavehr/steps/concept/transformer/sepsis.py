@@ -20,8 +20,8 @@ resampling. All calculations partition by subject_id;
 callers needing independent admission/stay episodes must supply episode-scoped
 subjects upstream.
 
-Reference: eth-mds/ricu, R/callback-sep3.R at
-c0efac720dbe72caaf63b361b6978a24383835bf (ricu 0.6.3).
+Sources: ricu/callback-sep3.R and YAIB-cohorts/callback-sepsis.R;
+pinned revisions and scope are recorded in configs/SOURCES.md.
 """
 
 import math
@@ -117,7 +117,7 @@ class SustainedAntibioticsTransformer(BaseConceptTransformer):
     YAIB's ICU-death exception. Continuity is grouped by subject, allowing
     treatment across ICU stays within eICU's hospital-admission subjects.
 
-    Reference: YAIB-cohorts, callback-sepsis.R at 74ac699f5d4117613f9c48bdc4e0852099c42e19.
+    Source: YAIB-cohorts/callback-sepsis.R; see configs/SOURCES.md.
     """
 
     strict_dependencies = False

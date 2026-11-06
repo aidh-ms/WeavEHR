@@ -1,296 +1,64 @@
 # WeavEHR
 
-[![CI](https://github.com/aidh-ms/WeavEHR/actions/workflows/continuous_integration.yml/badge.svg)](https://github.com/aidh-ms/WeavEHR/actions/workflows/continuous_integration.yml)
-[![Coverage Status](https://coveralls.io/repos/github/aidh-ms/WeavEHR/badge.svg?branch=main)](https://coveralls.io/github/aidh-ms/WeavEHR?branch=main)
-[![Python](https://img.shields.io/badge/python-3.13%2B-blue)](https://github.com/aidh-ms/WeavEHR/blob/main/pyproject.toml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+**Different ICU datasets. Shared clinical concepts.**
 
-**WeavEHR** is an open-source Python framework for extracting and harmonising intensive care unit (ICU) data from heterogeneous sources — such as [MIMIC-IV](https://physionet.org/content/mimiciv/), [eICU-CRD](https://physionet.org/content/eicu-crd/), [AmsterdamUMCdb](https://github.com/AmsterdamUMC/AmsterdamUMCdb) (via OMOP CDM), and your own institutional or [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) database exports — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format.
+WeavEHR is a Python package for turning local ICU data into harmonised
+[MEDS](https://github.com/Medical-Event-Data-Standard/meds) event streams.
+YAML configurations describe source tables, clinical variables, and dataset-specific
+mappings. Polars executes the pipeline and writes Parquet files you can inspect at
+every stage.
 
-Instead of writing one-off SQL or pandas scripts for every dataset and every study, you describe *what* to extract in declarative YAML configurations and let WeavEHR handle the *how*: typed reading, joins, timestamp reconstruction, unit-aware event codes, and cross-dataset concept harmonisation. WeavEHR ships with curated configurations for public ICU datasets and a growing dictionary of clinical concepts (vital signs, laboratory values, vasopressors, ventilation, and more), so the same study code can run against any supported dataset.
+## Try it without patient data
 
-WeavEHR is the spiritual successor to dataset-harmonisation tools like [`ricu`](https://github.com/eth-mds/ricu) (R), rebuilt in Python on a modern stack: [Polars](https://pola.rs) for fast, out-of-core streaming processing, [Pydantic](https://docs.pydantic.dev) for validated configuration, and MEDS for an interoperable output format that plugs directly into the wider MEDS ecosystem of modelling and evaluation tools.
-
----
-
-**Source code:** <https://github.com/aidh-ms/WeavEHR> · **Issues:** <https://github.com/aidh-ms/WeavEHR/issues>
-
----
-
-## Why WeavEHR?
-
-- **One concept, many datasets.** Define a clinical concept (e.g. *heart rate*, *norepinephrine rate*, *antibiotics*) once; map it per dataset with small YAML files. Extraction code stays identical across MIMIC-IV, eICU-CRD, NWICU, and custom sources.
-- **MEDS-native output.** All output is written as MEDS-compliant Parquet (`subject_id`, `time`, `code`, `numeric_value`, `text_value`, plus configurable extension columns) with full metadata (`dataset.json`, `codes.parquet`) — ready for MEDS-compatible downstream tooling.
-- **Declarative, versioned, reproducible.** Every table, event, and concept is a versioned YAML config with a stable identifier. The exact merged configuration used for a run is snapshotted into the output project, so results can be traced and reproduced.
-- **Versions and variants as diffs.** New dataset versions and variants (like the eICU demo) `extend` a reference version and state only their differences — no copied configs to keep in sync. The entire eICU demo configuration is two small files. The same mechanism works *across* datasets: the AmsterdamUMCdb config simply `extend`s the shared OMOP CDM model, inheriting all of its table configs.
-- **Fully offline.** Designed for sensitive medical data: no network access required, nothing leaves your secure perimeter.
-- **Scales down and up.** Polars lazy streaming lets you process full MIMIC-IV on a 16–32 GB laptop, without a database server or cluster.
-- **Extensible.** Add new datasets by writing YAML (no Python required); add new transformation callbacks or complex concept logic in Python where YAML isn't enough.
-
-## How it works
-
-WeavEHR organises processing as a pipeline of **steps** that operate inside a **project** directory:
-
-```mermaid
-flowchart LR
-    A[Raw source data<br>Parquet / CSV / CSV.GZ] -->|ExtractionStep| B[Dataset-level MEDS events<br>e.g. mimic-iv//chartevents//220045//Heart Rate//bpm]
-    B -->|ConceptStep| C[Harmonised concepts<br>e.g. heart_rate//bpm]
-    C --> D[Your analysis /<br>MEDS ecosystem tools]
-```
-
-1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
-2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts (*derived* concepts), or custom Python transformers (*complex* concepts). Concept dependencies are resolved automatically.
-3. **Sharding step** *(in development)* — re-partitions harmonised data into analysis-ready shards.
-
-Each step reads its inputs and writes its outputs as a self-contained MEDS dataset inside the project, so intermediate results are inspectable and individual steps can be re-run in isolation.
-
-## Supported datasets
-
-WeavEHR ships with ready-to-use extraction and concept configurations under [`configs/`](configs/):
-
-| Dataset | Version | Extraction configs | Concept mappings |
-| --- | --- | --- | --- |
-| [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/) | 3.1, 2.2 | 19 tables (ICU + hosp) | ~80 concepts |
-| [MIMIC-IV demo](https://physionet.org/content/mimic-iv-demo/2.2/) | 2.2 | inherited from MIMIC-IV via `extends` | inherited |
-| [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) | 2.0 | 14 tables | in progress |
-| [eICU-CRD demo](https://physionet.org/content/eicu-crd-demo/2.0/) | 2.0 | inherited from eICU-CRD via `extends` | inherited |
-| [NWICU](https://physionet.org/content/nwicu/0.1.0/) | 0.1.0 | 9 tables | in progress |
-| [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) | 5.3.1, 5.4 | 11 tables (reusable model reference, read from Parquet; 5.4 extends 5.3.1) | — *(added per OMOP dataset)* |
-| [AmsterdamUMCdb](https://github.com/AmsterdamUMC/AmsterdamUMCdb) (OMOP, via [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL)) | 1.5.0 | inherited from OMOP CDM via `extends` | ~60 concepts (in progress) |
-| [HiRID](https://physionet.org/content/hirid/1.1.1/) | 1.1.1 | 3 tables (native long format) | ~60 concepts (in progress) |
-| [SICdb](https://physionet.org/content/sicdb/1.0.6/) | 1.0.6 | 4 tables (native long format) | ~55 concepts (in progress) |
-
-The **OMOP CDM** entry (5.3.1 as the reference, 5.4 extending it) is a reusable *model* configuration rather than a single dataset: any data exported to the OMOP Common Data Model inherits its table configs via `extends` and adds only concept mappings. **AmsterdamUMCdb** is the first such dataset, read through its [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL) OMOP CDM 5.4 export, with concept mappings keyed on the OMOP `concept_id`s that AMSTEL assigns. **HiRID** is read in its native long format (`observations`/`pharma`/`general`), with concept mappings keyed on HiRID `variableid`s and unit conversions ported from [`ricu`](https://github.com/eth-mds/ricu).  **SICdb** is read in its native long format, with concept mappings keyed on SICdb `LaboratoryID`/`DataID`s and unit conversions ported from `ricu`.
-
-The shared concept dictionary in [`configs/concepts/`](configs/concepts/) currently covers ~90 concepts across vital signs, blood gas, clinical chemistry, hematology, medications (incl. vasopressors and antibiotics), neurological scores, respiratory parameters, fluid output, and demographics.
-
-> [!NOTE]
-> Access to the public datasets themselves requires the usual credentialing (e.g. [PhysioNet](https://physionet.org/) for MIMIC-IV/eICU/NWICU, a data-use agreement for AmsterdamUMCdb). WeavEHR works on the downloaded files directly — Parquet (e.g. OMOP exports), CSV, or gzipped CSV — with no database setup needed.
-
-## Installation
-
-WeavEHR requires **Python 3.13+**. You can install WeavEHR via PyPI or from source.
-
-### With PyPI
-```bash
-# with pip
-pip install weavehr
-
-# with uv
-uv add weavehr
-```
-
-### With GitHub
-```bash
-# with pip
-pip install git+https://github.com/aidh-ms/WeavEHR
-
-# with uv
-uv add git+https://github.com/aidh-ms/WeavEHR
-```
-
-For development, clone the repository and use the included dev container or [`uv`](https://docs.astral.sh/uv/):
+With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git installed:
 
 ```bash
 git clone https://github.com/aidh-ms/WeavEHR.git
 cd WeavEHR
-uv sync --all-groups
+uv sync --frozen --no-dev
+uv run --no-dev python example/quickstart/run.py
 ```
 
-## Quickstart
+The example turns four synthetic observations into three `heart_rate//bpm` events.
+Python 3.13+ is required; uv can provision it. Follow the
+[first-pipeline tutorial](docs/getting_started/basic_usage.md) to inspect and change the result.
 
-A pipeline is two small YAML files plus a few lines of Python.
+## Find your next step
 
-**1. Configure the extraction step** (`config/extraction.yml`) — point WeavEHR at the bundled dataset configs and your local data:
+| I want to… | Start here |
+| --- | --- |
+| Understand the package | [How it fits together](docs/getting_started/overview.md) |
+| Process a downloaded dataset | [Run a dataset](docs/guides/run-dataset.md) |
+| Change a mapping or select variables | [Select and override configs](docs/guides/configure.md) |
+| Explain missing or unexpected values | [Debug a mapping](docs/guides/debug.md) |
+| Add a hospital, concept, or calculation | [Extend WeavEHR](docs/guides/extend.md) |
+| Check score definitions | [Clinical methods](docs/reference/clinical/index.md) |
+| Contribute | [Development guide](docs/getting_started/contributing.md) |
 
-```yaml
-name: Extraction
-version: 1.0.0
-
-config:
-  data:
-    - name: mimic-iv
-      version: "3.1"
-      path: /path/to/physionet.org/files/mimiciv/3.1
-```
-
-**2. Configure the concept step** (`config/concept.yml`) — select the concept dictionary and per-dataset mappings:
-
-```yaml
-name: Concept
-version: 1.0.0
-
-config:
-  extraction_step: Extraction
-  mapping_configs:
-    - name: mimic-iv
-      version: "3.1"
-```
-
-**3. Run the pipeline:**
-
-```python
-from pathlib import Path
-
-from weavehr import WeavEHRProject, ExtractionStep, ConceptStep
-
-config_path = Path.cwd() / "config"
-project_path = Path.cwd() / "output" / "project"
-
-with WeavEHRProject(project_path) as project:
-    extraction_step = ExtractionStep.load(project, config_path / "extraction.yml")
-    extraction_step.run()
-
-    concept_step = ConceptStep.load(project, config_path / "concept.yml")
-    concept_step.run()
-```
-
-**4. Use the results.** The project directory now contains one MEDS dataset per step:
-
-```
-output/project/
-├── configs/        # snapshot of every config used (reproducibility)
-├── workspace/      # intermediate per-step files
-└── datasets/
-    ├── extraction/
-    │   ├── data/mimic-iv/3.1/<table>/<EVENT>.parquet
-    │   └── metadata/{dataset.json, codes.parquet}
-    └── concept/
-        ├── data/<concept>/<concept version>/<dataset>/<dataset version>.parquet
-        └── metadata/{dataset.json, codes.parquet}
-```
-
-Read it with any Parquet-capable tool, e.g.:
-
-```python
-import polars as pl
-
-heart_rate = pl.scan_parquet(
-    project_path / "datasets" / "concept" / "data" / "heart_rate" / "1.0.0" / "mimic-iv.parquet"
-).collect()
-```
-
-A complete runnable example lives in [`example/pipeline.ipynb`](example/pipeline.ipynb).
-
-## Configuration at a glance
-
-WeavEHR is configured at three levels — see the [documentation](#documentation) for the full reference.
-
-**Dataset/table configs** (`configs/datasets/<dataset>/<version>/tables/*.yml`) describe how to turn one raw table into MEDS events: typed columns, joins, and event definitions.
-
-```yaml
-path: icu/chartevents.csv.gz
-
-columns:
-  - name: subject_id
-    type: int64
-  - name: charttime
-    type: datetime
-    params: { format: "%Y-%m-%d %H:%M:%S" }
-  - name: itemid
-    type: int64
-  - name: value
-    type: string
-  - name: valuenum
-    type: float32
-  - name: valueuom
-    type: string
-
-join:
-  - path: icu/d_items.csv.gz
-    both_on: [itemid]
-    columns: [{ name: itemid, type: int64 }, { name: label, type: string }]
-
-events:
-  - name: CHART
-    columns:
-      subject_id: col(subject_id)
-      time: col(charttime)
-      code: [col(itemid), col(label), col(valueuom)]
-      numeric_value: col(valuenum)
-      text_value: col(value)
-```
-
-`name` is a technical event identifier used by the extraction step. By default it is included in the generated MEDS `code`; `include_event_name_in_code` can disable it globally, with an optional per-table override. The remaining code is built from the automatic dataset/table prefix, optional `code_prefix`, configured `columns.code` components, and optional `code_suffix`.
-
-**Concept configs** (`configs/concepts/<category>/*.yml`) define dataset-agnostic clinical concepts:
-
-```yaml
-name: heart_rate
-version: 1.0.0
-unit: bpm
-```
-
-**Concept mappings** (`configs/datasets/<dataset>/<version>/mappings/*.yml`) connect a concept to dataset-specific codes:
-
-```yaml
-type: simple
-mappings:
-  - pattern:
-      table: chartevents
-      event: CHART  # technical extraction event identifier; part of `code` by default
-      code: (220045//Heart Rate)
-    columns:
-      numeric_value: col(numeric_value)
-```
-
-Here, `event` selects the technical extraction event stream. It is part of the MEDS `code` by default, but can be omitted through `include_event_name_in_code`.
-
-Wherever values are computed, configs use a small **expression language** with composable callbacks — e.g. reconstructing absolute timestamps from eICU's relative offsets:
-
-```yaml
-callbacks:
-  - to_datetime(hospitaldischargeyear, 1, 1, hospitaladmittime24, hospitaladmitoffset, "minutes", output=admission_timestamp)
-post_join_callbacks:
-  - add_offset(admission_timestamp, labresultoffset, output=event_timestamp)
-```
-
-Arithmetic, comparisons, and boolean logic work as ordinary expressions (`col(weight) / (col(height) * col(height))`), and custom callbacks can be registered from Python.
-
-## Documentation
-
-- [Package overview](docs/getting_started/overview.md)
-- [Installation](docs/getting_started/installation.md)
-- [Basic usage](docs/getting_started/basic_usage.md)
-- User guide: [pipeline & projects](docs/user_guide/pipeline.md) · [extraction configs](docs/user_guide/extraction.md) · [dataset versions & variants](docs/user_guide/versioning.md) · [concept configs](docs/user_guide/concepts.md) · [expression language](docs/user_guide/expressions.md)
-- [Contributing](docs/getting_started/contributing.md)
-- Architecture documentation following [arc42](https://docs.arc42.org/home/) in [`docs/arc/`](docs/arc/)
-
-## Project status & roadmap
-
-WeavEHR is in active development (pre-1.0); configuration formats may still change between minor versions. Current focus areas:
-
-
-- Completing concept mappings for eICU-CRD, NWICU, AmsterdamUMCdb, HiRID, and SICdb
-
-- The sharding step for analysis-ready data partitioning
-- Additional datasets and broader OMOP CDM coverage
-
-Contributions of dataset configurations and concept definitions are especially welcome — they are pure YAML and require no changes to the framework itself.
-
-## Contributing
-
-We welcome contributions! Please use the dev container for a ready-to-go environment, follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, …), and make sure checks pass before opening a PR:
+Bundled configurations cover several ICU sources, including MIMIC-IV, eICU,
+AmsterdamUMCdb via OMOP, HiRID, and SICdb. Coverage varies by dataset and concept.
+The documentation site generates an exact inventory from the current configs:
 
 ```bash
-uv run ruff format && uv run ruff check    # format & lint
-uv run ty check .                          # type checking
-uv run pytest                              # tests
+uv sync --frozen --all-groups
+uv run mkdocs serve
 ```
 
-See the [contributing guide](docs/getting_started/contributing.md) for details, and our [Code of Conduct](.github/CODE_OF_CONDUCT.md).
+Open the local URL printed by MkDocs. Choose **Reference → Datasets** or
+**Concept catalogue** to inspect effective configurations, including inheritance.
+Source definitions are also available under [`configs/`](configs/).
 
-## Citation
+## Scope and credit
 
-If you use WeavEHR in your research, please cite it via the metadata in [`CITATION.cff`](CITATION.cff) (use the *"Cite this repository"* button on GitHub).
+WeavEHR preserves configured event timestamps rather than imposing a global hourly
+grid. Clinical calculations have explicit timing and missingness rules. Common
+names and units help reuse analysis code; they do not establish equivalent data
+quality or complete coverage across hospitals. Processing runs locally, and dataset
+access and downloads remain with their providers.
 
-## Related projects
+This work builds on the ICU data community, especially ricu's shared-concept
+approach and source definitions from mimic-code and other projects. See the
+[source index](configs/SOURCES.md) for specific provenance and differences.
 
-- [MEDS](https://github.com/Medical-Event-Data-Standard/meds) — the Medical Event Data Standard that WeavEHR targets
-- [ricu](https://github.com/eth-mds/ricu) — R package for ICU data harmonisation that inspired WeavEHR's concept dictionary
-- [YAIB](https://github.com/rvandewater/YAIB) — Yet Another ICU Benchmark, a complementary benchmarking framework
-
-## License
-
-WeavEHR is released under the [MIT License](LICENSE).
-Developed by the [AIDH MS](https://github.com/aidh-ms) team at the University of Münster and the Medical University of Innsbruck.
+WeavEHR is under active development. Pin a revision for reproducible studies.
+Licensed under [MIT](LICENSE); citation metadata is in [CITATION.cff](CITATION.cff).

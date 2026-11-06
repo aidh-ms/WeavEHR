@@ -1,65 +1,49 @@
-# Installing
+# Installation
 
-## Requirements
+WeavEHR requires **Python 3.13 or newer**. The first pipeline uses a repository
+checkout so the code, configs, example, and documentation come from the same revision.
 
-The supported Python versions for this Python library are the following:
-
-* 3.13 or newer
-
-## Installing
-
-You can install WeavEHR via PyPI or from source.
-
-### With PyPI
-```bash
-# with pip
-pip install weavehr
-
-# with uv
-uv add weavehr
-```
-
-### With GitHub
-```bash
-# with pip
-pip install git+https://github.com/aidh-ms/WeavEHR
-
-# with uv
-uv add git+https://github.com/aidh-ms/WeavEHR
-```
-
-## Installing for development
-
-Clone the repository and either open it in the included dev container (recommended, see [contributing](contributing.md)) or set up the environment with [uv](https://docs.astral.sh/uv/):
+## Recommended: a checkout with uv
 
 ```bash
 git clone https://github.com/aidh-ms/WeavEHR.git
 cd WeavEHR
-uv sync --all-groups
+uv sync --frozen --no-dev
 ```
 
-Cloning the repository is also currently the easiest way to get the bundled dataset and concept configurations in `configs/`, which you reference by path from your pipeline configuration.
+Use `uv run --no-dev python ...` for scripts in this environment. To reproduce a study,
+record `git rev-parse HEAD` and keep `uv.lock` with the run configuration.
+For development and documentation tools, use `uv sync --frozen --all-groups` instead.
 
-## Dependencies
+## Install into an existing Python environment
 
-WeavEHR builds on a small set of core libraries, installed automatically:
+From a checkout:
 
-| Package | Role |
-| --- | --- |
-| [polars](https://pola.rs) | Lazy, streaming dataframe engine used for all data processing |
-| [pydantic](https://docs.pydantic.dev) | Validation of all YAML configurations |
-| [meds](https://github.com/Medical-Event-Data-Standard/meds) | MEDS schema definitions and metadata validation |
-| [pyarrow](https://arrow.apache.org/docs/python/) | Parquet/columnar interchange |
-| [pandas](https://pandas.pydata.org) | Interoperability with pandas-based workflows |
-| [duckdb](https://duckdb.org) | SQL analytics engine |
-| [pyyaml](https://pyyaml.org) | YAML parsing |
+```bash
+python -m pip install .
+```
 
-## Getting the data
+Or install a specific Git revision, replacing `COMMIT_SHA` with the revision you want:
 
-WeavEHR operates on locally downloaded dataset files (CSV/CSV.GZ) — no database setup is required. The public ICU datasets are distributed via [PhysioNet](https://physionet.org/) and require credentialed access:
+```bash
+python -m pip install "weavehr @ git+https://github.com/aidh-ms/WeavEHR.git@COMMIT_SHA"
+```
 
-- [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/)
-- [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) (a freely accessible [demo subset](https://physionet.org/content/eicu-crd-demo/2.0/) is also available)
-- [NWICU](https://physionet.org/content/nwicu/0.1.0/)
+Bundled dataset and concept configs are included in the wheel and load when the
+first step is created. You do not need to copy them into a study folder.
+The quickstart's example files are in the checkout, not the installed package.
 
-Download the files and keep PhysioNet's directory layout (e.g. `physionet.org/files/mimiciv/3.1/hosp/labevents.csv.gz`); the bundled table configurations reference files relative to the dataset root.
+## Check the environment
+
+```bash
+uv run --no-dev python -c "from weavehr import WeavEHRProject, ExtractionStep, ConceptStep; print('WeavEHR is ready')"
+```
+
+The core dependencies are Polars, PyArrow, Pydantic, PyYAML, and MEDS.
+No database server is needed for the bundled file-based extraction pipelines.
+Installation may need internet access; processing uses local data and configs.
+On an offline compute system, prepare the environment and transfer the data through
+your usual approved workflow before running WeavEHR.
+
+**Next:** [run the synthetic tutorial](basic_usage.md) or
+[connect your dataset](../guides/run-dataset.md).

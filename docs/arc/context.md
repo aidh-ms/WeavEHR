@@ -1,11 +1,10 @@
-# Context and Scope
+---
+search:
+  exclude: true
+---
 
+# Architecture
 
-
-## Business context
-
-
-
-## Technical context
-
-For more information, please refer to the [arc42](https://docs.arc42.org/section-3/) documentation.
+The architecture documentation has moved to
+[Architecture for contributors](../contributing/architecture.md).
+For pipeline behavior, see the [pipeline reference](../user_guide/pipeline.md).

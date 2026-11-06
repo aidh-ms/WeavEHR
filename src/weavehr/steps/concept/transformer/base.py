@@ -70,7 +70,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                 dependency concepts to resolve.
             step: The owning concept step, used to resolve dependencies through
                 its registry and to locate concept output directories.
-            **kwargs: The mapping's ``kwargs`` block, passed through verbatim
+            **kwargs (Any): The mapping's ``kwargs`` block, passed through verbatim
                 for subclasses to interpret. Available as ``self._kwargs``.
         """
         self._concept = concept

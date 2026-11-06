@@ -1,3 +1,10 @@
-# Glossary
+---
+search:
+  exclude: true
+---
 
-For more information, please refer to the [arc42](https://docs.arc42.org/section-12/) documentation.
+# Architecture
+
+The architecture documentation has moved to
+[Architecture for contributors](../contributing/architecture.md).
+For pipeline behavior, see the [pipeline reference](../user_guide/pipeline.md).

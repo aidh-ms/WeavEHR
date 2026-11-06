@@ -1,21 +1,63 @@
-# WeavEHR
-
-<p style="text-align:center;" markdown="1">
-_A Python framework for extracting and harmonising ICU data into the MEDS standard._ <br>
-[![Coverage Status](https://coveralls.io/repos/github/aidh-ms/WeavEHR/badge.svg?branch=main)](https://coveralls.io/github/aidh-ms/WeavEHR?branch=main)
-</p>
-
+---
+hide:
+  - toc
 ---
 
-**Source Code:** [https://github.com/aidh-ms/WeavEHR](https://github.com/aidh-ms/WeavEHR) <br>
+# Different ICU datasets. Shared clinical concepts.
 
----
+WeavEHR turns local ICU data into **Parquet event streams with consistent names and units**.
+Describe source tables and clinical concepts in YAML; run the same Python pipeline across datasets.
 
-WeavEHR converts heterogeneous intensive care datasets — MIMIC-IV, eICU-CRD, NWICU, or your own institutional exports — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format using declarative, versioned YAML configurations.
+[Run your first pipeline](getting_started/basic_usage.md){ .md-button .md-button--primary }
+[Check dataset coverage](reference/datasets.md){ .md-button }
 
-- **One concept, many datasets** — define clinical concepts once, map them per dataset, and run the same study code everywhere.
-- **MEDS-native output** — Parquet event streams with full metadata, ready for the MEDS ecosystem.
-- **Fully offline** — designed for sensitive medical data; nothing leaves your secure perimeter.
-- **Fast and lightweight** — built on Polars lazy streaming; processes full MIMIC-IV on a laptop.
+## From a source observation to a useful variable
 
-New here? Start with the [package overview](getting_started/overview.md), then follow [installation](getting_started/installation.md) and [basic usage](getting_started/basic_usage.md).
+| Stage | Example | What changes |
+| --- | --- | --- |
+| Source table | item `220045`, value `80`, unit `bpm` | Local files in their original layout |
+| Extraction | `CHART//220045//Heart Rate//bpm` | Common event columns, source-specific codes |
+| Harmonisation | `heart_rate//bpm` | Shared concept name and target unit |
+
+The output follows the [Medical Event Data Standard (MEDS)](https://github.com/Medical-Event-Data-Standard/meds).
+You can read it with Polars, pandas, or another Parquet reader. Processing runs locally;
+WeavEHR does not download the source data for you.
+
+<div class="grid cards" markdown>
+
+- **Try it without patient data**
+
+    Run four synthetic observations through a complete pipeline and inspect the result.
+
+    [Start the tutorial →](getting_started/basic_usage.md)
+
+- **Prepare data for a study**
+
+    Connect a downloaded dataset, keep provenance, and rerun only the work you need.
+
+    [Run a real dataset →](guides/run-dataset.md)
+
+- **Adapt a mapping**
+
+    Find the source event, change its mapping, and inspect a small frame before a full run.
+
+    [Debug a mapping →](guides/debug.md)
+
+- **Understand a clinical definition**
+
+    Check the timing, missingness rules, and dataset-specific assumptions behind a score.
+
+    [Read the method notes →](reference/clinical/index.md)
+
+</div>
+
+## What to expect
+
+Extraction preserves the configured event timestamps; it does not impose hourly bins.
+Harmonisation applies the selected mappings, conversions, and limits. Clinical scores
+have their own alignment windows. A common schema does **not** guarantee equivalent
+measurement practices or complete concept coverage across hospitals.
+
+WeavEHR is under active development. These docs describe the code and configs in this
+checkout. Start with [how it fits together](getting_started/overview.md) for the main ideas,
+or go directly to the [concept catalogue](reference/concepts.md).

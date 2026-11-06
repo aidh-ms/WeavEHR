@@ -1,0 +1,21 @@
+path: observations.csv
+columns:
+  - name: patient_id
+    type: int64
+  - name: recorded_at
+    type: datetime
+    params:
+      format: "%Y-%m-%d %H:%M:%S"
+  - name: item
+    type: string
+  - name: value
+    type: float32
+  - name: unit
+    type: string
+events:
+  - name: OBSERVATION
+    columns:
+      subject_id: col(patient_id)
+      time: col(recorded_at)
+      code: [col(item), col(unit)]
+      numeric_value: col(value)

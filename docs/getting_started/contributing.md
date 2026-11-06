@@ -1,84 +1,48 @@
-# Contributing
+# Contribute to WeavEHR
 
-Here is how you can contribute to this project. Contributions of dataset configurations and concept definitions are especially welcome — they are pure YAML and require no changes to the framework itself.
+Dataset mappings, synthetic regression examples, and clear documentation are all
+useful contributions. Start with the smallest change that makes a reader or
+researcher's task work.
 
-## Setup
-
-Use the included dev container to automatically install all the necessary dev tools and dependencies.
-
-> **Prerequisite**: To use this you first need to install Docker under Linux, macOS, or WSL2 under Windows.
-
-1. **Clone the repository:**
-    ```bash
-    git clone https://github.com/aidh-ms/WeavEHR.git
-    cd WeavEHR
-    ```
-
-2. **Open the project in Visual Studio Code:**
-    ```bash
-    code .
-    ```
-
-3. **Reopen in Container:**
-    - Press `F1` to open the command palette.
-    - Type `Remote-Containers: Reopen in Container` and select it.
-    - VS Code will build the Docker container defined in the `.devcontainer` folder and open the project inside the container.
-
-Alternatively, set up a local environment with [uv](https://docs.astral.sh/uv/):
+## Development environment
 
 ```bash
-uv sync --all-groups
+git clone https://github.com/aidh-ms/WeavEHR.git
+cd WeavEHR
+uv sync --frozen --all-groups
 ```
 
-## Development with Conventional Commits
+The included dev container is an alternative when using VS Code and Docker.
+Python 3.13+ and the repository's Ruff settings define the code style.
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification to maintain a consistent commit history and enable automated tooling for releases and changelogs.
-
-### Commit message format
-```
-<type>(optional scope): <short summary>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-### Common Types
-
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation only changes
-- `style`: Changes that do not affect the meaning of the code (formatting, missing semicolons, etc.)
-- `refactor`: A code change that neither fixes a bug nor adds a feature
-- `perf`: A code change that improves performance
-- `test`: Adding or correcting tests
-- `chore`: Changes to the build process or auxiliary tools
-- `infra`: Infrastructure changes
-
-## Code quality
-
-The CI pipeline runs linting, type checking, and tests on every push. Run the same checks locally before opening a pull request:
+## Make and check a change
 
 ```bash
-uv run ruff format        # format code
-uv run ruff check         # lint (add --fix to auto-fix)
-uv run ty check .         # static type checking
-uv run pytest             # tests with coverage
+uv run ruff format
+uv run ruff check .
+uv run ty check .
+uv run pytest
+uv run mkdocs build --strict
 ```
 
-Code style follows the repository's Ruff configuration (line length 120) and all public functions require type hints.
+During iteration, run the relevant test module with `--no-cov`; the full suite
+checks the coverage floor. New mappings should include a small synthetic example
+that demonstrates item selection, units, and relevant boundary cases. Never commit
+patient-level records or credentialed dataset extracts.
 
-## Testing
+Preview the site with `uv run mkdocs serve`. The same strict build runs in CI.
+The full build is in `site/` and can be served with a local HTTP server; no live
+site deployment is required to review documentation.
 
-To test your contribution, you can use the testing tab in VS Code or run the unit tests directly:
+## Find the right extension point
 
-```shell
-uv run pytest .
-```
+- [Add a table or concept](../guides/extend.md) for source and mapping changes.
+- [Write a transformer](../guides/transformer.md) for time-dependent calculations.
+- [Architecture](../contributing/architecture.md) for changes to the engine.
+- [Documentation design](../contributing/documentation.md) and
+  [comment policy](../contributing/comments.md) for prose and attribution.
 
-## Contributing dataset or concept configurations
-
-- New **dataset support** lives in `configs/datasets/<dataset>/<version>/tables/` (one YAML per source table). See the [extraction configuration guide](../user_guide/extraction.md).
-- New **concepts** consist of a dataset-agnostic definition in `configs/concepts/<category>/` plus one mapping per dataset in `configs/datasets/<dataset>/<version>/mappings/`. See the [concept configuration guide](../user_guide/concepts.md).
-
-When adding concept mappings, please document the source items (e.g. MIMIC `itemid`s) you considered, so reviewers can verify completeness.
+Use Conventional Commit titles such as `fix(eicu): ...` or `docs: ...`.
+A PR should explain the concrete problem, resulting behavior, relevant validation,
+and remaining limitations. For a mapping, identify its source and intentional
+differences from upstream. For a clinical rule, update its canonical method page.

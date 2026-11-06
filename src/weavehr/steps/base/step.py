@@ -147,9 +147,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
 
         logger.info("Running step '%s'", self._step_name)
         if not skip:
-            # Invalidate the earlier run before changing anything, so a crash at any
-            # later point (config snapshot, reset, extraction, collection) makes the
-            # next run start over instead of reusing the half-changed output.
+            # Invalidate completion before mutating output so a crash forces recomputation.
             self.completion_marker.unlink(missing_ok=True)
             # The snapshot must describe the configs that produced the step's data,
             # so a skipped step keeps the snapshot of its completed run.
@@ -176,12 +174,10 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         return self._workspace_dir
 
     def setup_config(self) -> None:
-        """Load external configuration files into the registry.
+        """Save the current registry to the project's config snapshot directory.
 
-        Processes each ConfigFileConfig from the step configuration, loading
-        YAML files into the registry with specified filtering and overwrite
-        behavior. Saves the consolidated configuration to the project's
-        configs directory.
+        Config loading and overrides happen before this lifecycle stage.
+        The snapshot can include registered configurations unused by this step.
         """
 
         logger.info(
