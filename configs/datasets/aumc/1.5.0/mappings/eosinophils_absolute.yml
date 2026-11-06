@@ -1,0 +1,14 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
+#   3009932 = Eosinophils [#/volume] in Blood by Manual count
+#   3013115 = Eosinophils [#/volume] in Blood
+#   3028615 = Eosinophils [#/volume] in Blood by Automated count
+# Stored in 10^9/l, which equals K/uL.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^(3028615|3013115|3009932)(//.*)?$"
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
