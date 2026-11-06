@@ -1,0 +1,23 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- artificial airways (device_concept_id):
+#   endotracheal_tube: 4097216 (Tube), 4208623 (DL-tube)
+#   tracheostomy:      4044008 (Tracheostoma, Trach. stoma), 4178391 (Kunstneus),
+#                      45772284 (Spreekklepje, Spreekcanule)
+# A double-lumen tube records only the airway, like every other tube.
+type: simple
+mappings:
+  - pattern:
+      table: device_exposure
+      event: DEVICE_START
+      code: ^(4097216|4208623)//
+    level: endotracheal_tube
+    columns: &device_columns
+      text_value: col(code)
+      extension:
+        stay_id: col(visit_occurrence_id)
+        device_exposure_id: col(device_exposure_id)
+  - pattern:
+      table: device_exposure
+      event: DEVICE_START
+      code: ^(4044008|4178391|45772284)//
+    level: tracheostomy
+    columns: *device_columns

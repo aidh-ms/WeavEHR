@@ -66,7 +66,7 @@ Not yet mapped / not cleanly mappable as `simple`:
   (`hirid_urine`) — needs a `complex` transform.
 - **GCS total** and **lymphocytes**: derived (sum of GCS components / blood-cell
   ratio against the white-cell count).
-- **Ventilation** windows / start / end / tracheostomy and **length-of-stay**
+- **Ventilation** windows / start / end, airway markers and **length-of-stay**
   outcomes: `derived`/`complex`.
 - Concepts with **no HiRID source** in ricu (not invented here): `troponin_I`,
   `hematocrit`, `basophils`, `eosinophils`, `erythrocyte_distribution_width`,

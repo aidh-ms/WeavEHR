@@ -474,6 +474,73 @@ and patient timelines. Partial SOFA scores and changes in measurement coverage
 can affect the apparent rise; no additional SOFA completeness or washout rule
 is applied here.
 
+### Respiratory support and airway
+
+`respiratory_support` records each charted oxygen device or ventilator mode as
+an observation of the kind of support at that time. Its levels are:
+
+- `invasive`: an invasive ventilator mode, or ventilation through a tracheostomy;
+- `noninvasive`: a CPAP or BiPAP interface, or a noninvasive ventilator mode;
+- `ventilator`: a ventilator without evidence of the interface, such as a
+  spontaneous mode or an eICU entry that only says "ventilator";
+- `high_flow`: high-flow nasal cannula;
+- `oxygen`: other supplemental oxygen, such as a nasal cannula, a mask, a face
+  tent or a trach collar;
+- `none`: room air.
+
+`airway_start` and `airway_end` record artificial airways, with the levels
+`endotracheal_tube` and `tracheostomy`. A start is an insertion or an airway
+charted in place; an end is a recorded removal. An end without a level records
+that no artificial airway is present.
+
+All three are observations without duration; each row keeps the raw text in
+`text_value` and the `stay_id`. Several observations can share a timestamp, for
+example a nasal cannula charted with a high-flow device. Ranking them and
+deciding how long an observation stays valid is left to the concepts that use
+them. An endotracheal tube on its own is recorded only as an airway, not as
+invasive support: during a T-piece trial the patient is intubated but not
+ventilated. Keeping the airway separate lets a later step resolve `ventilator`
+observations, for example as invasive when a tube is in place. Respiratory SOFA
+does not use these concepts yet; the "advanced ventilatory support" of
+[SOFA-2](https://doi.org/10.1001/jamanetworkopen.2025.45040) corresponds to the
+levels `invasive`, `noninvasive`, `ventilator` and `high_flow`.
+
+The MIMIC-IV mappings use the device and mode lists of
+[mimic-code's `ventilation.sql` at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/treatment/ventilation.sql),
+matched after trimming spaces. They differ from it in that they:
+
+- emit observations rather than episodes;
+- keep device rows even when no oxygen flow is charted at the same time;
+- record the endotracheal tube and tracheostomy devices as airways rather than
+  as invasive ventilation and a separate tracheostomy category;
+- classify Hamilton `SPONT` and the plain `CPAP` mode, which mimic-code leaves
+  out, as `ventilator`.
+
+Airways also come from the intubation, extubation and tracheostomy procedures,
+from Trach Tube Type and from Trach Care when it was done.
+
+The eICU mappings combine respiratory charting (`O2 Device`, `Oxygen Delivery
+Method` and the ventilator and NIV mode fields) with the nurse-charted
+`O2 Admin Device`, which is free text and matched regardless of case. A bare
+"high flow" without a device, T-piece entries, `Other` and plain flow rates are
+not classified. Airways come from `respiratoryCare.airwaytype`, at the time the
+care entry was recorded, and from nurse entries that mention a tracheostomy.
+Some care entries record contradictory airway types at the same time, such as
+`Oral ETT` and `No Artificial Airway`; the row with the highest
+`currenthistoryseqnum`, the latest one, counts. The eICU extraction gains an
+`AIRWAY` event for this; existing extractions need rerunning to expose it.
+
+The AmsterdamUMCdb mappings read the OMOP export: ventilator modes from
+`procedure_occurrence`, and oxygen devices and airways from `device_exposure`.
+The ambiguous modes (PS/CPAP, BIPAP, CPAP, VC and PC) are `ventilator`, and any
+listed mode whose source value contains "NIV" is `noninvasive`. Tube and
+tracheostoma ends recorded in `device_exposure` become `airway_end`, and
+`device_exposure_id` links each end to its start. A Guedel airway and an Ambu
+bag are not supplemental oxygen, and a double-lumen tube records only the
+airway, like every other tube. No high-flow nasal cannula or room-air item is
+mapped yet. Rows keep the source code, concept ID and source value, in
+`text_value`.
+
 ## Output layout
 
 Each concept is written per dataset and dataset version:
