@@ -1,4 +1,3 @@
-# HiRID v1.1.1 -- observations variableid(s) 24000806 [ricu tnt]; converts to the concept unit (/ 1000)
 type: simple
 mappings:
   - pattern:

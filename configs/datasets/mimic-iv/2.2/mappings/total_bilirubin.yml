@@ -1,6 +1,4 @@
-# mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
-# mimic-iv/concepts/measurement/enzyme.sql
-# Item selection and unit conversion only; preserve all source observations and values.
+# Source: mimic-code/measurement/enzyme.sql; see configs/SOURCES.md.
 type: simple
 mappings:
   - pattern:

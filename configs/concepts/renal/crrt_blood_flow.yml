@@ -1,4 +1,4 @@
-# Unit explicitly documented in the pinned mimic-code treatment/crrt.sql.
+# Unit source: mimic-code/treatment/crrt.sql; see configs/SOURCES.md.
 name: crrt_blood_flow
 version: 1.0.0
 unit: mL/min

@@ -14,7 +14,7 @@ table configs rather than extending the [`omop` reference](../omop/).
 ## Configured tables
 
 HiRID stores everything as long, ID-keyed event tables. Each event's MEDS code is
-built as `hirid // <table> // <id> // <Variable Name> // <Unit>` — the human-
+built from the event name and `<id> // <Variable Name> // <Unit>`. Dataset/table identity is in the output path. The human-
 readable name and unit are joined in from `hirid_variable_reference.csv` (the same
 reference covers both observation and pharma variables), so the codes are
 self-documenting and harmonisation can key on the leading numeric id.
@@ -27,11 +27,12 @@ self-documenting and harmonisation can key on the leading numeric id.
 
 ## Concept mappings
 
-The shared concepts in `configs/concepts/` are ricu-derived, and so are these
-mappings: the HiRID `variableid`s and unit conversions are taken from
+Exact upstream concept keys are indexed in [`configs/SOURCES.md`](../../SOURCES.md).
+
+The HiRID `variableid`s and unit conventions in these mappings are taken from
 [`ricu`](https://github.com/eth-mds/ricu)'s `hirid` entries in
 `concept-dict.json`. A `simple` mapping matches codes of the form
-`hirid//observations//<variableid>`, with the unit conversion applied inline so
+`[OBSERVATION//]<variableid>//...`, with the unit conversion applied inline so
 values come out in each concept's target unit, e.g. creatinine (µmol/L → mg/dL):
 
 ```yaml
@@ -40,7 +41,7 @@ mappings:
   - pattern:
       table: observations
       event: OBSERVATION
-      code: "^(20000600)(//.*)?$"   # ricu crea, HiRID variableid 20000600
+      code: "^(20000600)(//.*)?$"
     columns:
       numeric_value: col(numeric_value) * 0.011312
       text_value: col(text_value)
