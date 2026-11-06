@@ -477,8 +477,8 @@ matched after trimming spaces. They differ from it in that they:
 - classify Hamilton `SPONT` and the plain `CPAP` mode, which mimic-code leaves
   out, as `ventilator`.
 
-Airways also come from the intubation, extubation and tracheostomy procedures
-and from Trach Tube Type.
+Airways also come from the intubation, extubation and tracheostomy procedures,
+from Trach Tube Type and from Trach Care when it was done.
 
 The eICU mappings combine respiratory charting (`O2 Device`, `Oxygen Delivery
 Method` and the ventilator and NIV mode fields) with the nurse-charted

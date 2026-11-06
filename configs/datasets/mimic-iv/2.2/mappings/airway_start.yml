@@ -39,3 +39,11 @@ mappings:
       code: ^224829//
     level: tracheostomy
     columns: *chart_columns
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^227130//
+    level: tracheostomy
+    columns: *chart_columns
+    filters:
+      - strip_str(text_value) == "1"

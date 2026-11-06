@@ -1,5 +1,0 @@
-name: tracheostomy
-version: 1.0.0
-extension_columns:
-  dataset: col("dataset")
-  table: col("table")
