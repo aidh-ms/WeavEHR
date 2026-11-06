@@ -1,12 +1,20 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
 #   3027315 = Oxygen [Partial pressure] in Blood
 #   3027801 = Oxygen [Partial pressure] in Arterial blood
+# Stored in mmHg, except for PO2 (bloed) - kPa, which is converted to mmHg (1 kPa = 7.50062 mmHg).
 type: simple
 mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: "^(3027315|3027801)(//.*)?$"
+      code: "^(3027315|3027801)//[^/]*//mmHg$"
     columns:
       numeric_value: col(numeric_value)
+      text_value: col(text_value)
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^(3027315|3027801)//[^/]*//kPa$"
+    columns:
+      numeric_value: col(numeric_value) * 7.50062
       text_value: col(text_value)
