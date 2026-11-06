@@ -1,6 +1,7 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
 #   3039000 = Anion gap in Blood
-# Stored in mmol/l, which equals mEq/L.
+# Stored in mmol/l, which equals mEq/L. Values run lower than MIMIC-IV's
+# laboratory anion gap; the calculation may differ.
 type: simple
 mappings:
   - pattern:
