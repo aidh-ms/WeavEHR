@@ -45,8 +45,9 @@ respiratory numerics (SpO2, respiratory rate, FiO2) and urine output.
 
 Respiratory support and the airway markers (`respiratory_support`,
 `airway_start`, `airway_end`) come from `procedure_occurrence` (ventilator
-modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). They
-have not yet been checked against AUMCdb output.
+modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). On
+AUMCdb 1.5.0 they select the listed items as intended. Whether a heat-moisture
+exchanger (Kunstneus) always means a tracheostomy is still open.
 
 ### Validation against ricu
 
