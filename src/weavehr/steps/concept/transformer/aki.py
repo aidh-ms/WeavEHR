@@ -19,9 +19,8 @@ day. Two departures from the guideline text are worth stating:
 - *Baseline* is the lowest creatinine in the preceding ``baseline_window``
   (7 days by default), the usual operationalisation where a premorbid value is
   unavailable. Early in a stay that window is mostly empty and the baseline is
-  effectively the admission value, so AKI present on admission is not
-  detectable — a known limitation of every retrospective implementation, not
-  of this one.
+  effectively the admission value. An elevated admission value alone cannot
+  establish an acute rise without prior observations.
 - The paediatric criterion (eGFR < 35 mL/min/1.73m^2 in patients under 18) is
   not implemented.
 """

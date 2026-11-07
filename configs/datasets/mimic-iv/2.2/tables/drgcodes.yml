@@ -1,13 +1,10 @@
 path: hosp/drgcodes.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: subject_id
     type: int64
   - name: hadm_id
     type: int64
-  # db fields - times
-  # db fields - values
   - name: drg_type
     type: string
   - name: drg_code
@@ -24,15 +21,12 @@ join:
   - name: admissions
     path: hosp/admissions.csv.gz
     columns:
-      # subject_id and extensions
       - name: hadm_id
         type: int64
-      # db fields - times
       - name: dischtime
         type: datetime
         params:
           format: "%Y-%m-%d %H:%M:%S"
-      # db fields - values
     both_on:
       - hadm_id
 

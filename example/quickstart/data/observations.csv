@@ -1,0 +1,5 @@
+patient_id,recorded_at,item,value,unit
+1,2024-01-01 08:00:00,HR,80,bpm
+1,2024-01-01 08:05:00,HR,82,bpm
+2,2024-01-02 10:00:00,PULSE,90,bpm
+2,2024-01-02 10:00:30,TEMP,37,degC

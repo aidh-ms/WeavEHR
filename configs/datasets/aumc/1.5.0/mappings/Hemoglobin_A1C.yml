@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3004410 = Hemoglobin A1c/Hemoglobin.total in Blood
+# 3004410 = Hemoglobin A1c/Hemoglobin.total in Blood
 # HbA1c (bloed) is stored in % (unit Geen); HbA1c  (bloed) in mmol/mol (IFCC), converted to % (NGSP) with
 # the IFCC-NGSP master equation: % = 0.09148 * mmol/mol + 2.152.
 type: simple

@@ -13,11 +13,14 @@ OMOP CDM 5.4 by the [AMSTEL ETL](https://github.com/AmsterdamUMC/AMSTEL).
 
 ## Concept mappings
 
-The shared concepts in `configs/concepts/` are ricu-derived. Because AUMCdb is
-read as OMOP, each mapping keys on the **OMOP `*_concept_id`** that AMSTEL
+Because AUMCdb is read as OMOP, each mapping keys on the
+**OMOP `*_concept_id`** that AMSTEL
 assigned to the corresponding AUMCdb item — taken from AMSTEL's Usagi mapping
 files (`data/mappings/*.usagi.csv`). A `simple` mapping therefore matches codes
-of the form `aumc//<table>//<concept_id>`, e.g. heart rate:
+of the form `[MEASUREMENT//]<concept_id>//...`, e.g. heart rate.
+The matcher accepts the code with or without the event-name component;
+dataset/table identity is in the output path.
+See the [source index](../../SOURCES.md) for attribution.
 
 ```yaml
 type: simple
@@ -25,7 +28,7 @@ mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: "(3027018|21490872)(//.*)?$"   # OMOP "Heart rate" concept_ids
+      code: "^(3027018|21490872)(//.*)?$"
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)

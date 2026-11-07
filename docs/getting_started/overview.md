@@ -1,62 +1,90 @@
-# Package overview
+# How it fits together
 
-WeavEHR is an open-source Python framework for extracting, preprocessing, and harmonising intensive care unit (ICU) time series data from diverse sources. It converts heterogeneous ICU datasets — public ones such as [MIMIC-IV](https://physionet.org/content/mimiciv/) and [eICU-CRD](https://physionet.org/content/eicu-crd/), as well as custom institutional data — into the standardised [MEDS](https://github.com/Medical-Event-Data-Standard/meds) (Medical Event Data Standard) format.
+WeavEHR separates two jobs that are usually tangled together in extraction
+scripts: *syntactic alignment*, which puts source events into a common layout,
+and *semantic alignment*, which maps them to shared clinical concepts and
+units. Extraction and harmonisation each produce an output that is usable on
+its own or in combination with the other. Keeping them separate also allows
+changes to clinical mappings and definitions without reading the original
+source tables again.
 
-## The problem
+## The vocabulary
 
-ICU research routinely needs the same clinical variables — heart rate, creatinine, norepinephrine doses, ventilation episodes — but every dataset stores them differently: different table layouts, item identifiers, units, and timestamp conventions. Studies therefore accumulate one-off, dataset-specific extraction scripts that are hard to validate, hard to reuse, and hard to reproduce. Tools like the R package [`ricu`](https://github.com/eth-mds/ricu) showed that a shared, dataset-agnostic concept dictionary solves this; WeavEHR brings that approach to the Python ecosystem and combines it with the MEDS output standard.
+| Term | What it is | Example |
+| --- | --- | --- |
+| Project | A directory holding a run's outputs and the configs that produced them | `runs/study-01/` |
+| Step config | Selects datasets and wires one pipeline stage to the previous one | `extraction.yml`, `concept.yml` |
+| Table config | How to read one source table and emit events from it | `chartevents.yml` |
+| Concept | A shared clinical variable with a name and a target unit | `heart_rate`, `bpm` |
+| Mapping | How to find or compute that concept in one dataset version | MIMIC item `220045` → heart rate |
+| Registry | The in-memory collection of loaded configs: bundled ones plus yours | `concept_config_registry` |
 
-## The approach
+The bundled configs under `configs/` cover the public ICU datasets and the
+concepts listed in the [dataset reference](../reference/datasets.md) and the
+[concept catalogue](../reference/concepts.md), both generated from the configs.
 
-WeavEHR separates *what* to extract from *how* to extract it:
+## Two steps, two outputs
 
-- **Declarative YAML configurations** describe source tables, joins, events, and clinical concepts. They are versioned, carry stable identifiers, and are snapshotted into every output project for reproducibility.
-- **A processing pipeline** of steps executes those configurations:
-    1. The **extraction step** turns raw source tables into MEDS event streams, with codes that preserve full provenance (`mimic-iv//chartevents//220045//Heart Rate//bpm`).
-    2. The **concept step** maps those dataset-specific codes onto shared clinical concepts (`heart_rate//bpm`), so downstream code is identical for every dataset.
-- **MEDS-compliant output**: every step writes a self-contained MEDS dataset (Parquet data plus `dataset.json` and `codes.parquet` metadata).
+**Extraction** reads CSV, gzipped CSV or Parquet, does the joins and
+timestamp reconstruction a source needs, and writes one Parquet file per
+event type in a common column layout. The codes still describe source
+events, `CHART//220045//Heart Rate//bpm` for instance; the dataset, version
+and table live in the file path, not in the code.
+This output retains the dataset's native vocabulary for analysis or model
+training; [extraction without harmonisation](../guides/extract-only.md)
+shows how to use it on its own or alongside selected concepts.
 
-See the [user guide](../user_guide/pipeline.md) for a detailed walk through the pipeline.
+**Harmonisation** (the concept step) reads those files and writes one file
+per concept and dataset version, with shared codes like `heart_rate//bpm`. A
+concept can be a *simple* mapping (match source codes, convert the unit), a
+*derived* one (an exact-time join of other concepts) or a *complex* one (a
+Python transformer, for anything that needs windows or state, such as SOFA).
+This output provides shared variables and derived scores for analysis or
+model training, including EHR foundation models that mix these concepts with
+native events from extraction.
 
-## Key properties
-
-| Property | How WeavEHR achieves it |
-| --- | --- |
-| Reproducibility | Versioned configs with deterministic identifiers; merged config snapshot stored in each project |
-| Privacy | Fully offline operation; no data ever leaves your machine |
-| Performance | Polars lazy/streaming execution; full MIMIC-IV is processable on a 16–32 GB laptop |
-| Extensibility | New datasets are pure YAML; custom transformation callbacks and complex concepts plug in via Python |
-| Interoperability | MEDS v0.4+ output consumable by the wider MEDS tool ecosystem |
-
-## Bundled configurations
-
-The repository ships curated configurations under `configs/`:
-
-- **Extraction configs** for MIMIC-IV 3.1, eICU-CRD 2.0 (full and demo), and NWICU 0.1.0.
-- **A concept dictionary** of ~90 concepts across vital signs, blood gas, clinical chemistry, hematology, medications, neurological scores, respiratory parameters, fluid output, and demographics, with per-dataset mappings (most complete for MIMIC-IV).
-
-# License
+An optional **sharding** step regroups concept events into files by subject,
+keeping the five MEDS columns only. Read [output and sharding](../guides/output.md)
+before combining datasets, because `subject_id` is not globally unique.
 
 ```
-MIT License
-
-Copyright (c) 2023 AIDH MS
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+project/
+├── configs/                       snapshots of the loaded registries
+└── datasets/
+    ├── extraction/data/<dataset>/<version>/<table>/<EVENT>.parquet
+    └── concept/data/<concept>/<concept version>/<dataset>/<version>.parquet
 ```
+
+## Time and identity
+
+WeavEHR keeps source timestamps. Nothing is resampled to hours; a measurement
+at 08:05 stays at 08:05, and the clinical scores carry inputs forward for
+windows that are stated on their [method pages](../reference/clinical/index.md).
+Some sources only give offsets from admission (eICU, SICdb); the table config
+reconstructs a timestamp from them, and the result is as precise as the
+offset, not as precise as the datetime type suggests.
+
+`subject_id` means whatever the dataset's mapping says it means: a patient in
+MIMIC-IV, a hospital admission in eICU, a person in OMOP. IDs are not unique
+across datasets. When you build a cohort, keep the dataset as part of the key
+and decide for yourself where a patient, an admission and an ICU stay begin
+and end. [Identity and time](../reference/dataset-notes.md) lists the choice
+for each bundled source.
+
+## What harmonisation decides, and what it leaves to you
+
+A mapping can select items, convert units, filter rows and null values
+outside plausibility limits. Look at those choices for the variables your
+study depends on; they are short YAML files and the
+[catalogue](../reference/concepts.md) links to each one.
+
+What a mapping cannot do is make two hospitals measure the same thing. A
+shared code says the values are comparable in name and unit, not that they
+were recorded with the same frequency, device or indication. And when a
+concept is missing for a patient, that can mean no mapping, no source file,
+no matching rows, or a calculation that lacked an input; it never means the
+value was normal.
+
+Ready to run something? [Run a dataset](../guides/run-dataset.md) uses the
+same two step configs as the tutorial, and the
+[pipeline reference](../user_guide/pipeline.md) has every field.

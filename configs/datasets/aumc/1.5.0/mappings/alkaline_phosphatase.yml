@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3035995 = Alkaline phosphatase [Enzymatic activity/volume] in Serum or Plasma
+# 3035995 = Alkaline phosphatase [Enzymatic activity/volume] in Serum or Plasma
 type: simple
 mappings:
   - pattern:

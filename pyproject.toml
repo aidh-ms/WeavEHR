@@ -1,6 +1,6 @@
 [project]
 name = "weavehr"
-description = "This is a project to unify and analyse data from different ICU data sources."
+description = "WeavEHR extracts EHR data into MEDS events with source-specific codes and harmonises them to shared clinical concepts and units."
 version = "0.0.1"
 license = "MIT"
 authors = [
@@ -34,7 +34,7 @@ homepage = "https://github.com/aidh-ms/WeavEHR"
 repository = "https://github.com/aidh-ms/WeavEHR"
 changelog = "https://github.com/aidh-ms/WeavEHR/releases"
 issues = "https://github.com/aidh-ms/WeavEHR/issues"
-documentation = "https://github.com/aidh-ms/WeavEHR/wiki"
+documentation = "https://github.com/aidh-ms/WeavEHR/tree/main/docs"
 
 [build-system]
 requires = ["hatchling"]
@@ -65,10 +65,7 @@ dev = [
 docs = [
     "mkdocs>=1.6.1",
     "mkdocs-gen-files>=0.6.1",
-    "mkdocs-literate-nav>=0.6.3",
-    "mkdocs-macros-plugin>=1.5.0",
     "mkdocs-material>=9.7.6",
-    "mkdocs-section-index>=0.3.12",
     "mkdocstrings[python]>=1.0.4",
 ]
 

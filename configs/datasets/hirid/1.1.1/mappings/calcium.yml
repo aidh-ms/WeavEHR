@@ -1,4 +1,3 @@
-# HiRID v1.1.1 -- observations variableid(s) 20005100 [ricu ca]; converts to the concept unit (* 4.008)
 type: simple
 mappings:
   - pattern:
@@ -6,5 +5,6 @@ mappings:
       event: OBSERVATION
       code: "^(20005100)(//.*)?$"
     columns:
+      # mmol/L → mg/dL
       numeric_value: col(numeric_value) * 4.008
       text_value: col(text_value)

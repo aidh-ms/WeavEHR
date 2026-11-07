@@ -1,12 +1,10 @@
 path: observation_period.parquet
 
 columns:
-  # subject_id and extensions
   - name: person_id
     type: int64
   - name: observation_period_id
     type: int64
-  # db fields - times
   - name: observation_period_start_date
     type: datetime
     params:
@@ -17,7 +15,6 @@ columns:
     params:
       format: "%Y-%m-%d"
       strict: false
-  # db fields - values
   - name: period_type_concept_id
     type: int64
 

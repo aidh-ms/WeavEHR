@@ -5,10 +5,9 @@ a multi-center ICU database (requires credentialed PhysioNet access).
 
 ## Versions
 
-- `2.0/` — current configuration: 14 table configs (`tables/`) and the
-  beginnings of the per-dataset concept mappings (`mappings/`, currently only
-  `antibiotics`). Contributions of further concept mappings are very welcome —
-  see `docs/user_guide/concepts.md`.
+- `2.0/` — current configuration: the table configs (`tables/`) and the
+  per-dataset concept mappings (`mappings/`). The generated dataset reference
+  lists what is covered; further mappings are very welcome.
 
 ## Layout
 

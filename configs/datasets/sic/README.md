@@ -15,7 +15,7 @@ are taken from [`ricu`](https://github.com/eth-mds/ricu)'s `sic` entries in
 ## Configured tables
 
 SICdb stores measurements as long, ID-keyed CSV tables. Each event's MEDS code is built
-as `sic // <table> // <id> // <ReferenceName> // <ReferenceUnit>` — the human-readable
+from the event name and `<id> // <ReferenceName> // <ReferenceUnit>`. Dataset/table identity is in the output path. The human-readable
 name and unit are joined in from `d_references.csv` (the unified dictionary, keyed on
 `ReferenceGlobalID`), so the codes are self-documenting and harmonisation can key on the
 leading numeric id.
@@ -29,9 +29,10 @@ leading numeric id.
 
 ## Concept mappings
 
-The shared concepts in `config/concepts/` are ricu-derived, and so are these mappings:
-the SICdb `LaboratoryID`/`DataID`s and unit conversions come from ricu's `sic` source
-entries. A `simple` mapping matches codes of the form `sic//laboratory//<id>`, with the
+Exact upstream concept keys are indexed in [`configs/SOURCES.md`](../../SOURCES.md).
+
+The SICdb `LaboratoryID`/`DataID`s and unit conventions come from ricu's `sic` source
+entries. A `simple` mapping matches codes of the form `[LAB//]<id>//...`, with the
 unit conversion applied inline so values come out in each concept's target unit, e.g.
 blood urea nitrogen (SICdb stores urea, converted to BUN mg/dL):
 
@@ -41,7 +42,7 @@ mappings:
   - pattern:
       table: laboratory
       event: LAB
-      code: "^(355)(//.*)?$"   # ricu bun, SICdb LaboratoryID 355
+      code: "^(355)(//.*)?$"
     columns:
       numeric_value: col(numeric_value) * 0.467
       text_value: col(text_value)

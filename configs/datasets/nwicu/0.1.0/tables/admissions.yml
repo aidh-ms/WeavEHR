@@ -1,7 +1,6 @@
 path: data/nw_hosp/admissions.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
   - name: hadm_id
@@ -9,7 +8,6 @@ columns:
   - name: admit_provider_id
     type: string
 
-  # db fields - times
   - name: admittime
     type: datetime
     params:
@@ -31,7 +29,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
 
-  # db fields - values
   - name: admission_type
     type: string
   - name: admission_location

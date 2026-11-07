@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3010421 = pH of Blood
+# 3010421 = pH of Blood
 type: simple
 mappings:
   - pattern:

@@ -14,10 +14,8 @@ columns:
     type: int64
   - name: CaseID
     type: int64
-  # db fields - times
   - name: Offset
     type: int64
-  # db fields - values
   - name: DrugID
     type: int64
   - name: Amount

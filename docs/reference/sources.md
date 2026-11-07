@@ -1,0 +1,1 @@
+--8<-- "configs/SOURCES.md"

@@ -1,11 +1,9 @@
 path: data/nw_hosp/patients.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
 
-  # db fields - times
   - name: anchor_age
     type: int64
   - name: anchor_year
@@ -17,7 +15,6 @@ columns:
     params:
       format: "%Y-%m-%d"
 
-  # db fields - values
   - name: gender
     type: string
 

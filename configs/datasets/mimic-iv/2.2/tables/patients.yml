@@ -1,10 +1,8 @@
 path: hosp/patients.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
-  # db fields - times
   - name: anchor_age
     type: int64
   - name: anchor_year
@@ -15,18 +13,15 @@ columns:
     type: datetime
     params:
       format: "%Y-%m-%d"
-  # db fields - values
   - name: gender
     type: string
 
 join:
   - path: hosp/admissions.csv.gz
     columns:
-      # subject_id and extensions
       - name: subject_id
         type: int64
 
-      # db fields - times
       - name: deathtime
         type: datetime
         params:

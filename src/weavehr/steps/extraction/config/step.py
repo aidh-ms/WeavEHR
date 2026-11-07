@@ -21,8 +21,8 @@ class DatasetConfig(BaseModel):
             by table configurations.
         version: Version string for the dataset.
         path: Filesystem path to the dataset directory.
-        includes: Optional list of sections to include from the dataset config file.
-        excludes: Optional list of sections to exclude from the dataset config file.
+        includes: Exact table identifiers to include; omitted or empty selects all.
+        excludes: Exact table identifiers to exclude; takes precedence over includes.
     """
 
     name: str = Field(..., description="Name of the dataset.")

@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3024561 = Albumin [Mass/volume] in Serum or Plasma
-#   3028286 = Albumin [Mass/volume] in Serum or Plasma by Electrophoresis
+# 3024561 = Albumin [Mass/volume] in Serum or Plasma
+# 3028286 = Albumin [Mass/volume] in Serum or Plasma by Electrophoresis
 type: simple
 mappings:
   - pattern:

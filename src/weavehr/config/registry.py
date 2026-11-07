@@ -231,7 +231,7 @@ def load_configs[T: BaseConfig](
         config_type: The configuration class to instantiate
         includes: If specified, only load configurations with these identifiers
         excludes: If specified, skip configurations with these identifiers
-        **kwargs: Additional keyword arguments to pass to the configuration loader
+        **kwargs (Any): Additional keyword arguments to pass to the configuration loader
 
     Returns:
         List of successfully loaded configuration objects

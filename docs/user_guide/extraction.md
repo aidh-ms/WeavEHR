@@ -2,10 +2,10 @@
 
 The extraction step turns raw source tables into MEDS event streams. It is driven by two kinds of YAML:
 
-1. a **step config** that selects which table configs to load and where the raw data lives, and
+1. a **step config** that selects which registered tables to use and where the raw data lives, and
 2. one **table config** per source table that describes columns, joins, and the events to emit.
 
-WeavEHR ships table configs for MIMIC-IV 3.1, eICU-CRD 2.0, and NWICU 0.1.0 under `configs/datasets/<dataset>/<version>/tables/`. This page explains how they work, so you can adapt them or add your own datasets.
+Bundled table configs live under `configs/datasets/<dataset>/<version>/tables/`; the [dataset reference](../reference/datasets.md) lists effective versions and paths. This page explains how they work, so you can adapt them or add your own datasets.
 
 ## Step configuration
 
@@ -20,7 +20,7 @@ config:
       path: /path/to/physionet.org/files/mimiciv/3.1
 ```
 
-`config.data` maps dataset names to local data roots. Table configs whose dataset has no entry are skipped with a warning, as are tables whose source file does not exist — so a partial download still processes whatever is available.
+`config.data` selects registered tables by dataset name and version and supplies their local data root. A missing source or join file skips that table with a warning. An unrecognised name/version can select no tables, so inspect logs and outputs.
 
 ## Table configuration
 
@@ -89,23 +89,23 @@ By default joins preserve the row order of the main table (`maintain_order: left
 
 ### Events
 
-Each event produces one output file. The `columns` block maps source columns (or [expressions](expressions.md)) onto the MEDS schema:
+Each event produces one output file; repeated event names in the same table append to that file. The `columns` block maps source columns (or [expressions](expressions.md)) onto the MEDS schema:
 
-- `subject_id`, `time` — required (directly or via `event_defaults`).
+- `subject_id`, `time` — required expressions (directly or via `event_defaults`); the resulting time can be null for static events.
 - `numeric_value`, `text_value` — optional; missing ones are filled with nulls.
 - `code` — a list of code *parts*. The final code is assembled as
 
     ```
-    <dataset>//<table>//<code_prefix parts>//[event name//]<code parts>//<code_suffix parts>
+    <code_prefix parts>//[event name//]<code parts>//<code_suffix parts>
     ```
 
-    The dataset and table prefixes are added automatically. By default, the technical event name is also included after `code_prefix`; `include_event_name_in_code` can disable it globally or per table. Typical code parts are the item ID, its label, and the unit of measurement.
+    Dataset and table identity are carried by the output path, not automatically prepended to the code. By default, the technical event name is included after `code_prefix`; `include_event_name_in_code` can disable it globally or per table. Typical code parts are the item ID, its label, and the unit of measurement.
 
 - `extension` — a mapping of additional output columns, preserved alongside the MEDS standard columns (IDs like `hadm_id`/`stay_id`, data-availability timestamps, reference ranges, …).
 
 Every column an expression references must exist at that point: declared under `columns` (of the table or a joined table) or created earlier by a callback's `output=`. An unknown name, such as a typo like `col(enter_timestamp)` for a column created as `entered_timestamp`, fails the extraction with an error that suggests close matches. It never turns silently into a text value (see [column references and literals](expressions.md#column-references-and-literals)).
 
-`event_defaults` at the table level provides defaults for all events of the table; individual events override them (an explicit empty list overrides a default, too). One table can emit several events — for example, the bundled `inputevents.yml` produces `INFUSION_START`, `INFUSION_END`, and `SUBJECT_WEIGHT_AT_INFUSION` events from a single read.
+`event_defaults` at the table level provides defaults for all events of the table; individual events override them (an explicit empty list overrides a default, too). One table can emit several events — for example, the bundled `inputevents.yml` produces `INFUSION_START`, `INFUSION_END`, and `SUBJECT_WEIGHT_AT_INFUSION` events from the table configuration. Each event is materialised separately.
 
 ### Callbacks, filters, and transformations
 
@@ -122,20 +122,6 @@ Processing order:
 3. *After all joins:* the table's `post_join_callbacks` → `post_join_filters` → `transformations`
 4. *Per event:* `pre_callbacks` → column mapping and code construction → `callbacks` → `filters` → `transformations` → cast to MEDS schema → `output_filters`
 
-A practical example from eICU, where timestamps are stored as minute offsets from ICU admission and have to be reconstructed:
-
-```yaml
-join:
-  - path: patient.csv.gz
-    both_on: [patientunitstayid]
-    columns: [...]
-    callbacks:
-      - to_datetime(hospitaldischargeyear, 1, 1, hospitaladmittime24, hospitaladmitoffset, "minutes", output=admission_timestamp)
-
-post_join_callbacks:
-  - add_offset(admission_timestamp, labresultoffset, output=event_timestamp)
-```
-
 ## Output layout
 
 Within the extraction step's output dataset, files are organised by provenance:
@@ -146,13 +132,9 @@ datasets/extraction/data/<dataset>/<version>/<table>/<EVENT>.parquet
 
 If the same event file already exists (e.g. when several table configs write to the same event), new rows are appended.
 
-## Adding a new dataset
+## Add or adapt a source
 
-> For a new *version* of an already-supported dataset, or a *variant* like a demo subset, don't copy the configs — declare the differences against a reference version with `extends.yml`. See [dataset versions and variants](versioning.md).
-
-1. Create `configs/datasets/<your-dataset>/<version>/tables/` and add one YAML per source table, as above.
-2. Reference the directory from your extraction step's `config_files` and add the dataset's name and data path under `config.data`.
-3. Run the extraction step and inspect `metadata/codes.parquet` to verify the extracted codes.
-4. Optionally, add [concept mappings](concepts.md) so the shared concept dictionary covers your dataset.
-
-No Python code is required for any of this.
+Follow [adding a table or concept](../guides/extend.md). Load custom table configs
+through `dataset_config_registry.load(...)`; select them by dataset name and
+version in the step config. For a new version or demo variant, use
+[configuration inheritance](versioning.md).

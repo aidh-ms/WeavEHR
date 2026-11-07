@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3019800 = Troponin T.cardiac [Mass/volume] in Serum or Plasma
-#   3048529 = Troponin T.cardiac [Mass/volume] in Blood
+# 3019800 = Troponin T.cardiac [Mass/volume] in Serum or Plasma
+# 3048529 = Troponin T.cardiac [Mass/volume] in Blood
 type: simple
 mappings:
   - pattern:

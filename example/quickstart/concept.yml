@@ -1,0 +1,7 @@
+name: Concept
+version: 1.0.0
+config:
+  extraction_step: Extraction
+  mapping_configs:
+    - name: tutorial
+      version: "1.0"

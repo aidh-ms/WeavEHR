@@ -34,11 +34,15 @@ When a version with an `extends.yml` is loaded, its effective configuration is b
 
 Bases may themselves extend other versions — chains resolve recursively, and cycles are rejected with an error. Diffs stack forward in time: the oldest fully-specified version is the reference, and each newer version (or variant) states only its changes — e.g. `mimic-iv/3.1` extends the `mimic-iv/2.2` reference, and `mimic-iv-demo/2.2` extends it too.
 
-**Identity always comes from the extending version's directory**: a table inherited by `eicu-demo/2.0` is registered as `WeavEHR.config.table.eicu-demo.2.0.<table>`, produces event codes prefixed `eicu-demo//…`, and inherited concept mappings match against those codes automatically. Nothing about the base leaks into the output.
+**Identity comes from the extending version's directory**: an inherited table is
+registered under `weavehr.config.table.eicu-demo.2.0.<table>` and writes into the
+`eicu-demo/2.0/` output path. Extraction codes do not gain a dataset prefix merely
+because a config is inherited. Inherited concept mappings belong to the extending
+dataset/version as well.
 
 ## Example: the eICU demo
 
-The eICU demo distribution contains all tables of the full eICU-CRD with the same schema (just ~2,500 patients instead of ~200,000). Its complete configuration is therefore:
+The eICU demo distribution contains all tables of the full eICU-CRD with the same schema (with fewer records). Its complete configuration is therefore:
 
 ```yaml
 # configs/datasets/eicu-demo/2.0/extends.yml
@@ -53,7 +57,7 @@ version: "2.0"
 path: infusiondrug.csv.gz
 ```
 
-Two small files instead of fourteen copied table configs — and when the eICU-CRD configs are improved, the demo picks the changes up automatically.
+Two small files instead of copying the table configs — and when the eICU-CRD configs are improved, the demo picks the changes up automatically.
 
 ## Example: a version bump
 

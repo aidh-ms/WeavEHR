@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   43534077 = Urea [Moles/volume] in Blood
+# 43534077 = Urea [Moles/volume] in Blood
 type: simple
 mappings:
   - pattern:

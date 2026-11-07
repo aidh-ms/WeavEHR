@@ -1,6 +1,6 @@
 # Expression language
 
-Wherever extraction and concept configurations compute, filter, or reshape values, they use a small, safe expression language. Expressions are written as strings in the YAML and compiled to [Polars](https://pola.rs) expressions — they execute inside Polars' lazy streaming engine, so they are fast and memory-efficient.
+Wherever extraction and concept configurations compute, filter, or reshape values, they use a small, restricted expression language. Expressions are written as strings in the YAML and compiled to [Polars](https://pola.rs) expressions — they execute inside Polars' lazy streaming engine, so they are fast and memory-efficient.
 
 ```yaml
 callbacks:
@@ -33,6 +33,7 @@ Bare names and quoted strings never mean the same thing:
 ```yaml
 filters:
   - col(valueuom) == "mg"                    # column valueuom vs. the text "mg"
+callbacks:
   - replace(col(temp_unit) == "F", (col(temp) - 32) / 1.8, col(temp), output=temp_c)
 ```
 

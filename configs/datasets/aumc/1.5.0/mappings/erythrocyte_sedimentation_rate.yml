@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3015183 = Erythrocyte sedimentation rate
+# 3015183 = Erythrocyte sedimentation rate
 type: simple
 mappings:
   - pattern:

@@ -1,7 +1,6 @@
 path: condition_occurrence.parquet
 
 columns:
-  # subject_id and extensions
   - name: person_id
     type: int64
   - name: condition_occurrence_id
@@ -10,7 +9,6 @@ columns:
     type: int64
   - name: provider_id
     type: int64
-  # db fields - times
   - name: condition_start_date
     type: datetime
     params:
@@ -31,7 +29,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: condition_concept_id
     type: int64
   - name: condition_source_value

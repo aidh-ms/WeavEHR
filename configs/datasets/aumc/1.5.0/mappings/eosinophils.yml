@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3006504 = Eosinophils/100 leukocytes in Blood
+# 3006504 = Eosinophils/100 leukocytes in Blood
 type: simple
 mappings:
   - pattern:

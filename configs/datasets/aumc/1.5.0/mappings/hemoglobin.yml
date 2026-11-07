@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   40762351 = Hemoglobin [Moles/volume] in Blood
-#   40758903 = Hemoglobin [Mass/volume] in Blood by Oximetry
+# 40762351 = Hemoglobin [Moles/volume] in Blood
+# 40758903 = Hemoglobin [Mass/volume] in Blood by Oximetry
 type: simple
 mappings:
   - pattern:

@@ -25,8 +25,10 @@ extract the raw OMOP events into MEDS. Concepts are mapped on the standardised
 
 ## Configured tables
 
-Each event's MEDS code is built as `omop // <table> // <concept_id> //
-<source_value> [...]`, so harmonisation can key on the OMOP `*_concept_id`.
+Measurement codes contain the event name followed by the configured concept ID,
+source value, and unit: `MEASUREMENT//<concept_id>//<source_value>//<unit>`.
+Other events use their table's configured code fields. Dataset and table names
+are in the output path, not automatically added to the code.
 
 | OMOP table             | Events emitted                                   |
 | ---------------------- | ------------------------------------------------ |

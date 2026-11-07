@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3035357 = Carbon dioxide [Partial pressure] in Exhaled gas --at end expiration
-#   3017485 = Carbon dioxide/Gas.total.at end expiration in Exhaled gas
+# 3035357 = Carbon dioxide [Partial pressure] in Exhaled gas --at end expiration
+# 3017485 = Carbon dioxide/Gas.total.at end expiration in Exhaled gas
 # 3035357 items are stored in mmHg. 3017485 items (EtCO2 (%), End Tidal CO2 %) are mostly in %, converted
 # to mmHg with ricu's factor (1 % = 7.6 mmHg); End Tidal CO2 % also holds mmHg values, so only values up to
 # 15 (114 mmHg) are taken as %.

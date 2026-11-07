@@ -1,76 +1,135 @@
 site_name: WeavEHR
+site_url: https://aidh-ms.github.io/WeavEHR/
+site_description: WeavEHR extracts EHR data into MEDS events with source-specific codes and harmonises them to shared clinical concepts and units.
 docs_dir: docs
+repo_url: https://github.com/aidh-ms/WeavEHR
+repo_name: aidh-ms/WeavEHR
+edit_uri: edit/main/docs/
+
 nav:
   - Home: index.md
-  - Getting Started:
-      - Package Overview: "getting_started/overview.md"
-      - Installation: "getting_started/installation.md"
-      - Basic Usage: "getting_started/basic_usage.md"
-      - Contributing: "getting_started/contributing.md"
-  - User Guide:
-      - Projects and the Pipeline: "user_guide/pipeline.md"
-      - Extraction Configuration: "user_guide/extraction.md"
-      - Dataset Versions and Variants: "user_guide/versioning.md"
-      - Concept Configuration: "user_guide/concepts.md"
-      - Expression Language: "user_guide/expressions.md"
-  - Architecture:
-      - Introduction and Goals: "arc/introduction.md"
-      - Architecture Constraints: "arc/constraints.md"
-      - Context and Scope: "arc/context.md"
-      - Solution Strategy: "arc/strategy.md"
-      - Building Block View: "arc/building_block.md"
-      - Runtime View: "arc/runtime.md"
-      - Deployment view: "arc/deployment.md"
-      - Crosscutting Concepts: "arc/concepts.md"
-      - Architecture Decisions: "arc/decisions.md"
-      - Quality Requirements: "arc/quality.md"
-      - Risks and Technical Debt: "arc/risks.md"
-      - Glossary: "arc/glossary.md"
-  - API Reference: reference/
+  - Start here:
+      - Your first pipeline: getting_started/basic_usage.md
+      - How it fits together: getting_started/overview.md
+      - Installation: getting_started/installation.md
+  - How-to guides:
+      - Run a dataset: guides/run-dataset.md
+      - Extract events without harmonising: guides/extract-only.md
+      - Select and override configs: guides/configure.md
+      - Read and shard output: guides/output.md
+      - Rerun and reproduce: guides/rerun.md
+      - Debug a mapping: guides/debug.md
+      - Add a table or concept: guides/extend.md
+      - Write a transformer: guides/transformer.md
+      - Inherit a dataset version: user_guide/versioning.md
+  - Reference:
+      - Datasets: reference/datasets.md
+      - Identity and time: reference/dataset-notes.md
+      - Concept catalogue: reference/concepts.md
+      - Pipeline and steps: user_guide/pipeline.md
+      - Table configuration: user_guide/extraction.md
+      - Concept mappings: user_guide/concepts.md
+      - Expressions: user_guide/expressions.md
+      - Clinical definitions:
+          - Overview: reference/clinical/index.md
+          - GCS: reference/clinical/gcs.md
+          - SOFA: reference/clinical/sofa.md
+          - Sepsis: reference/clinical/sepsis.md
+          - AKI: reference/clinical/aki.md
+          - Respiratory support: reference/clinical/respiratory.md
+      - Python API:
+          - Projects and steps: reference/api/steps.md
+          - Configuration models: reference/api/config.md
+          - Registries and loading: reference/api/registries.md
+          - Transformers: reference/api/transformers.md
+      - Sources and credit: reference/sources.md
+  - Contribute:
+      - Development: getting_started/contributing.md
+      - Architecture: contributing/architecture.md
+      - Documentation: contributing/documentation.md
+      - Comments and attribution: contributing/comments.md
 
-copyright: Copyright &copy; 2023 AIDH MS
-repo_url: "https://github.com/aidh-ms/WeavEHR"
+not_in_nav: |
+  /reference/datasets/**
+
+exclude_docs: |
+  /scripts/
+
+validation:
+  nav:
+    omitted_files: warn
+    not_found: warn
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+
+copyright: Copyright &copy; AIDH MS and contributors
 
 theme:
   name: material
+  font: false
+  icon:
+    logo: material/vector-polyline
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
   features:
     - navigation.tabs
+    - navigation.sections
+    - navigation.path
+    - navigation.top
     - navigation.footer
-
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/aidh-ms/WeavEHR
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
 
 extra_css:
   - assets/css/code_select.css
-  - assets/css/fonts.css
+  - assets/css/theme.css
 
 markdown_extensions:
+  - admonition
   - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
   - pymdownx.highlight:
-      linenums: true
-      use_pygments: true
-      pygments_lang_class: true
+      anchor_linenums: true
   - pymdownx.superfences
-  - pymdownx.extra
-  - footnotes
-  - pymdownx.arithmatex:
-      generic: true
+  - pymdownx.snippets:
+      base_path: ["."]
+      check_paths: true
 
 plugins:
-  - search:
-  - macros:
-      include_dir: ./
+  - search
   - gen-files:
       scripts:
-        - docs/scripts/gen_ref_pages.py
-  - literate-nav:
-      nav_file: SUMMARY.md
-  - section-index
+        - docs/scripts/gen_catalogue.py
   - mkdocstrings:
       handlers:
         python:
-          paths: ["src"]
+          paths: [src]
           options:
             docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_signature_annotations: true
+            separate_signature: true
+            members_order: source
+            show_submodules: false

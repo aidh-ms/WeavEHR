@@ -1,12 +1,10 @@
 path: person.parquet
 
 columns:
-  # subject_id and extensions
   - name: person_id
     type: int64
   - name: person_source_value
     type: string
-  # db fields - times
   - name: year_of_birth
     type: int64
   - name: month_of_birth
@@ -18,7 +16,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: gender_concept_id
     type: int64
   - name: gender_source_value
