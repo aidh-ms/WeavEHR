@@ -13,7 +13,6 @@ plus a ``dataset`` provenance column, sorted by dataset, subject, time and code.
 from pathlib import Path
 
 import polars as pl
-from polars.io.partition import FileProviderArgs
 
 from weavehr.logging import get_logger
 from weavehr.steps.base.step import ConfigurableBaseStep
@@ -75,21 +74,17 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         )
         logger.info("Writing %d subject(s) to %d shard(s)", subject_keys.height, shard_count)
 
-        # Assign every event its shard via a join and write all shards in a single pass
-        # instead of rescanning the selected concept files once per shard.
+        # Assign every event its shard via a join and execute all shard sinks together, so the
+        # shared scan and join are evaluated once instead of once per shard.
         lf = self._scan_core_columns(concept_files).join(subject_keys.lazy(), on=SUBJECT_KEY, how="inner")
-        lf = lf.sort([SHARD_COLUMN, *SUBJECT_KEY, "time", "code"])
-        lf.sink_parquet(
-            pl.PartitionBy(
-                self._workspace_dir.path,
-                key=SHARD_COLUMN,
-                include_key=False,
-                file_path_provider=self._shard_file_name,
-                max_rows_per_file=None,
-                approximate_bytes_per_file=None,
-            ),
-            mkdir=True,
-        )
+        sinks = [
+            lf.filter(pl.col(SHARD_COLUMN) == shard_idx)
+            .drop(SHARD_COLUMN)
+            .sort([*SUBJECT_KEY, "time", "code"])
+            .sink_parquet(self._workspace_dir.path / self._shard_file_name(shard_idx), mkdir=True, lazy=True)
+            for shard_idx in range(shard_count)
+        ]
+        pl.collect_all(sinks, engine="streaming")
 
         logger.info("Finished sharding step: wrote %d shard file(s)", shard_count)
 
@@ -189,6 +184,5 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         return pl.lit(concept_file.parent.name, dtype=pl.String).alias("dataset")
 
     @staticmethod
-    def _shard_file_name(args: FileProviderArgs) -> str:
-        shard_idx = args.partition_keys[SHARD_COLUMN].item()
+    def _shard_file_name(shard_idx: int) -> str:
         return f"shard_{shard_idx:05d}.parquet"
