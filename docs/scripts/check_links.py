@@ -1,6 +1,7 @@
 """Check built HTML links and fragments without making network requests."""
 
 import argparse
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -22,8 +23,18 @@ class Links(HTMLParser):
             self.links.append(href)
 
 
+def site_prefix(root: Path) -> str:
+    """Path under which the site is served, taken from the sitemap (e.g. ``/WeavEHR/``)."""
+    sitemap = root / "sitemap.xml"
+    if not sitemap.is_file():
+        return "/"
+    match = re.search(r"<loc>([^<]+)</loc>", sitemap.read_text())
+    return urlsplit(match.group(1)).path if match else "/"
+
+
 def check(root: Path) -> list[str]:
     root = root.resolve()
+    prefix = site_prefix(root)
     pages = {path: Links(path.read_text()) for path in root.rglob("*.html")}
     errors = []
     for path, page in pages.items():
@@ -33,7 +44,10 @@ def check(root: Path) -> list[str]:
                 continue
             target = (path.parent / unquote(url.path)).resolve() if url.path else path
             if url.path.startswith("/"):
-                target = root / unquote(url.path).lstrip("/")
+                absolute = unquote(url.path)
+                if absolute.startswith(prefix):
+                    absolute = absolute[len(prefix) :]
+                target = root / absolute.lstrip("/")
             if target.is_dir():
                 target /= "index.html"
             if not target.exists():

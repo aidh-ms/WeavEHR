@@ -36,8 +36,8 @@ how someone runs, interprets, or extends the package.
 | Contribute | Architecture, workflow, editorial and comment policies | A second user manual |
 | Dataset README | Source-specific representation and limitations | Repeated framework explanations or hand-counted coverage |
 
-Give each fact one canonical home and link to it elsewhere. Preserve published
-page URLs when reorganising content. Generate dataset and concept inventories
+Give each fact one canonical home and link to it elsewhere. The site is
+published, so keep page URLs stable when reorganising, or leave a redirect. Generate dataset and concept inventories
 from configs. Limit the Python API navigation to public entry points that users
 need to call.
 
@@ -53,10 +53,12 @@ need to call.
 5. Inspect the landing page, a guide, and a dense reference page at desktop and
    narrow widths when changing the theme or navigation.
 
-Preview locally with `uv run mkdocs serve`. CI also uploads a `documentation-site`
-artifact after the strict build and link check. Download and extract it, run
-`python -m http.server 8000` inside the extracted directory, and open
-`http://localhost:8000`. Serving it over HTTP enables directory links and search.
+Preview locally with `uv run mkdocs serve`. Every CI run does the strict build
+and link check and uploads the result as a `documentation-site` artifact, so a
+reviewer can download it, run `python -m http.server 8000` inside it and open
+`http://localhost:8000` without checking the branch out. Merges to `main`
+publish the site to <https://aidh-ms.github.io/WeavEHR/> through the
+`Documentation` workflow.
 
 Catalogue generation uses effective configs, including inheritance, and excludes
 empty simple mappings from availability counts. Describe coverage in terms of

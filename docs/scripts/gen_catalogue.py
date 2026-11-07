@@ -42,7 +42,13 @@ def readme_intro(dataset_dir: Path) -> tuple[str, str]:
         elif collecting and paragraph:
             break
     intro = " ".join(paragraph)
-    intro = re.sub(r"\]\((?!https?://)([^)]+)\)", lambda m: f"]({REPO.replace('/blob/', '/tree/')}{(readme.parent / m.group(1)).resolve().relative_to(ROOT).as_posix()}/)", intro)
+    intro = re.sub(
+        r"\]\((?!https?://)([^)]+)\)",
+        lambda m: (
+            f"]({REPO.replace('/blob/', '/tree/')}{(readme.parent / m.group(1)).resolve().relative_to(ROOT).as_posix()}/)"
+        ),
+        intro,
+    )
     return title, intro
 
 
@@ -136,8 +142,16 @@ for dataset_dir in datasets:
         + ", ".join(f"[`{v}`]({page})" for v, page, *_ in rows)
         + f" | {rows[-1][2]} | {rows[-1][3]} |"
     )
-    sections += [f"\n## {title}\n", (intro + "\n") if intro else "", "| Version | Tables | Non-empty concept mappings | Inherits from |", "| --- | ---: | ---: | --- |"]
-    sections += [f"| [`{v}`]({page}) | {n_tables} | {n_mappings} | {inherits} |" for v, page, n_tables, n_mappings, inherits in rows]
+    sections += [
+        f"\n## {title}\n",
+        (intro + "\n") if intro else "",
+        "| Version | Tables | Non-empty concept mappings | Inherits from |",
+        "| --- | ---: | ---: | --- |",
+    ]
+    sections += [
+        f"| [`{v}`]({page}) | {n_tables} | {n_mappings} | {inherits} |"
+        for v, page, n_tables, n_mappings, inherits in rows
+    ]
     sections.append("")
 index = overview + sections
 write("reference/datasets.md", "\n".join(index) + "\n")
