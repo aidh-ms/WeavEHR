@@ -16,6 +16,7 @@
 .md-typeset h1 { color: var(--md-default-fg-color); font-weight: 700; letter-spacing: -.025em; }
 .md-typeset h2 { font-weight: 650; letter-spacing: -.015em; }
 .md-typeset code { font-size: .82em; }
+.md-typeset .grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
 .md-typeset .grid.cards > ul > li { border-radius: .45rem; box-shadow: none; }
 .md-typeset .md-button { border-radius: .35rem; margin: .3rem .35rem .3rem 0; }
 .md-typeset table:not([class]) th { background: var(--md-code-bg-color); }
