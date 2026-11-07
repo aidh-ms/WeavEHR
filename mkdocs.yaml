@@ -1,6 +1,6 @@
 site_name: WeavEHR
 site_url: https://aidh-ms.github.io/WeavEHR/
-site_description: Extract ICU data. Harmonise clinical concepts. Understand every transformation.
+site_description: WeavEHR extracts EHR data into MEDS events with source-specific codes and harmonises them to shared clinical concepts and units.
 docs_dir: docs
 repo_url: https://github.com/aidh-ms/WeavEHR
 repo_name: aidh-ms/WeavEHR
@@ -14,6 +14,7 @@ nav:
       - Installation: getting_started/installation.md
   - How-to guides:
       - Run a dataset: guides/run-dataset.md
+      - Extract events without harmonising: guides/extract-only.md
       - Select and override configs: guides/configure.md
       - Read and shard output: guides/output.md
       - Rerun and reproduce: guides/rerun.md

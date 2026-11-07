@@ -1,10 +1,12 @@
 # How it fits together
 
 WeavEHR separates two jobs that are usually tangled together in extraction
-scripts: *reading a source* and *deciding what its events mean*. Reading is
-expensive and dataset-specific; deciding is cheap and the part you will
-revise most. Keeping them apart means you can change a clinical mapping, or
-add a whole new concept, without touching the original CSV files again.
+scripts: *syntactic alignment*, which puts source events into a common layout,
+and *semantic alignment*, which maps them to shared clinical concepts and
+units. Extraction and harmonisation each produce an output that is usable on
+its own or in combination with the other. Keeping them separate also allows
+changes to clinical mappings and definitions without reading the original
+source tables again.
 
 ## The vocabulary
 
@@ -28,12 +30,18 @@ timestamp reconstruction a source needs, and writes one Parquet file per
 event type in a common column layout. The codes still describe source
 events, `CHART//220045//Heart Rate//bpm` for instance; the dataset, version
 and table live in the file path, not in the code.
+This output retains the dataset's native vocabulary for analysis or model
+training; [extraction without harmonisation](../guides/extract-only.md)
+shows how to use it on its own or alongside selected concepts.
 
 **Harmonisation** (the concept step) reads those files and writes one file
 per concept and dataset version, with shared codes like `heart_rate//bpm`. A
 concept can be a *simple* mapping (match source codes, convert the unit), a
 *derived* one (an exact-time join of other concepts) or a *complex* one (a
 Python transformer, for anything that needs windows or state, such as SOFA).
+This output provides shared variables and derived scores for analysis or
+model training, including EHR foundation models that mix these concepts with
+native events from extraction.
 
 An optional **sharding** step regroups concept events into files by subject,
 keeping the five MEDS columns only. Read [output and sharding](../guides/output.md)

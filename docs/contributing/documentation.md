@@ -9,6 +9,7 @@ example, and its expected output before explaining the package internals.
 | --- | --- | --- |
 | Researcher evaluating the package | Can I get a useful result without access paperwork? | Synthetic tutorial → three expected heart-rate rows |
 | Analyst with a downloaded database | What path/version do I use, and what files come out? | Run a dataset → inspect one concept and its coverage |
+| Foundation-model researcher | Can I use native codes, selected clinical concepts, or both? | [Use extraction output](../guides/extract-only.md) → native events, their vocabulary and a mix with selected concepts |
 | Multicentre researcher | Does this variable mean the same thing in each source? | Catalogue → effective mappings → identity/time and clinical definitions |
 | Clinical methods researcher | Why does this score differ, and does it use future evidence? | Clinical methods → parameters, missingness, timing, source references |
 | Data engineer adding a hospital | Which part do I extend? | Add a table/concept → small-frame validation → inheritance |

@@ -12,21 +12,25 @@ from source tables and stores them as Parquet files in the
 [Medical Event Data Standard (MEDS)](https://github.com/Medical-Event-Data-Standard/meds)
 format.
 
-Extraction can be used on its own, retaining source-specific event codes for
-workflows such as training EHR foundation models. An optional
-harmonisation step maps these events to shared clinical concepts and units,
-allowing the same analysis code to be used across datasets. Mappings and
-clinical definitions can be revised without repeating extraction.
+Extraction keeps source-specific event codes. Harmonisation maps these events
+to clinical concepts and units shared across datasets. Analyses and EHR
+foundation models can use either output or combine source events with selected
+harmonised concepts. Revising mappings and clinical definitions does not
+require repeating extraction.
 
 Source tables, unit conversions and concept mappings are defined in YAML.
 Clinical scores and definitions, including SOFA and Sepsis-3, are implemented
 as Python transformers.
-The [dataset reference](https://aidh-ms.github.io/WeavEHR/reference/datasets/)
-lists the available sources and versions. Custom configurations can be added
-for local hospital data.
+Bundled configurations cover MIMIC-IV, eICU-CRD, AmsterdamUMCdb (via its OMOP
+export), HiRID, SICdb and NWICU; the
+[dataset reference](https://aidh-ms.github.io/WeavEHR/reference/datasets/)
+lists versions and coverage. Custom configurations support local hospital data.
 
 Processing uses [Polars](https://pola.rs) and can run offline on machines
 with 16 GB of RAM. No database server is required.
+
+WeavEHR is pre-1.0. Configuration formats can still change between releases;
+pin a revision for a study.
 
 **Documentation:** <https://aidh-ms.github.io/WeavEHR/>
 
@@ -53,7 +57,9 @@ python example/quickstart/run.py
 ```
 
 The example writes four extracted events and three harmonised
-`heart_rate//bpm` events from synthetic data. The
+`heart_rate//bpm` events from synthetic data. The fourth source row is a
+temperature with no concept mapping: it is present in the extraction output
+and absent from the harmonised output. The
 [tutorial](https://aidh-ms.github.io/WeavEHR/getting_started/basic_usage/)
 explains each step and shows how to modify the mapping.
 

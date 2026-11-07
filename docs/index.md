@@ -3,15 +3,15 @@ hide:
   - toc
 ---
 
-# Different ICU datasets. Shared clinical concepts.
+# Extract and harmonise EHR events
 
-Every ICU database stores a heart rate differently: a different table, a
-different item ID, sometimes a different unit. WeavEHR lets you describe each
-source once in YAML and then asks the same question of all of them. The
-answer comes back as Parquet event streams in the
-[MEDS](https://github.com/Medical-Event-Data-Standard/meds) layout, with one
-name and one unit per concept, so the analysis code you write against MIMIC-IV
-runs unchanged against eICU or your own hospital's export.
+WeavEHR provides syntactic and semantic alignment of electronic health
+record (EHR) data. Extraction puts source tables into a common
+[MEDS](https://github.com/Medical-Event-Data-Standard/meds) event layout,
+retaining source-specific codes. Harmonisation maps those events to clinical
+concepts and units shared across datasets. Both outputs are Parquet files.
+Analyses and EHR foundation models can use either output or combine native
+events with selected harmonised concepts and clinical scores.
 
 [Run your first pipeline](getting_started/basic_usage.md){ .md-button .md-button--primary }
 [See what is covered](reference/datasets.md){ .md-button }
@@ -22,7 +22,7 @@ runs unchanged against eICU or your own hospital's export.
 | Extraction | `CHART//220045//Heart Rate//bpm` | Common event columns, source-specific codes |
 | Harmonisation | `heart_rate//bpm` | Shared concept name and target unit |
 
-<div class="grid cards" markdown>
+<div class="grid cards workflow-cards" markdown>
 
 - **Try it without patient data**
 
@@ -38,6 +38,13 @@ runs unchanged against eICU or your own hospital's export.
 
     [Run a real dataset →](guides/run-dataset.md)
 
+- **Choose events for a foundation model**
+
+    Keep native codes, use selected clinical concepts, or combine both in
+    an event stream.
+
+    [Use extraction output →](guides/extract-only.md)
+
 - **Adapt a mapping**
 
     Find the source event, change its mapping, and test it on a handful of
@@ -47,23 +54,23 @@ runs unchanged against eICU or your own hospital's export.
 
 - **Check a clinical definition**
 
-    Thresholds, windows, missing-data rules, and where we differ from ricu or
+    Thresholds, windows, missing-data rules, and differences from ricu or
     mimic-code, for every bundled score.
 
     [Read the method pages →](reference/clinical/index.md)
 
 </div>
 
-## Why we built it
+## Design choices
 
 WeavEHR builds on [ricu](https://github.com/eth-mds/ricu)'s shared dictionary
 of clinical concepts, with a small per-dataset mapping for each. It brings
 that design to Python, uses [Polars](https://pola.rs) for processing, and
 writes Parquet files that other tools can read directly.
 
-- **One concept, many datasets.** `heart_rate` is defined once. MIMIC-IV,
-  eICU, AmsterdamUMCdb, HiRID, SICdb and NWICU each contribute a mapping;
-  adding a hospital means adding YAML, not Python.
+- **Two alignments, separate outputs.** Extraction aligns the event layout;
+  harmonisation aligns clinical concepts and units. A study can use either
+  output or combine them; changes to a mapping do not require repeating extraction.
 - **Every stage is a file you can open.** Extraction and harmonisation both
   write ordinary Parquet. If a value looks wrong you can follow it from the
   source row to the concept with nothing but a Parquet reader.

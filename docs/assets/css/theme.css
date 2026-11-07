@@ -18,9 +18,14 @@
 .md-typeset code { font-size: .82em; }
 .md-typeset .grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); }
 .md-typeset .grid.cards > ul > li { border-radius: .45rem; box-shadow: none; }
+.md-typeset .workflow-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.md-typeset .workflow-cards > ul > li:last-child { grid-column: 1 / -1; }
 .md-typeset .md-button { border-radius: .35rem; margin: .3rem .35rem .3rem 0; }
 .md-typeset table:not([class]) th { background: var(--md-code-bg-color); }
 .md-typeset .admonition, .md-typeset details { border-radius: .35rem; }
+@media (max-width: 44.99em) {
+  .md-typeset .workflow-cards { grid-template-columns: minmax(0, 1fr); }
+}
 @media (min-width: 76.25em) {
   .md-content { max-width: 52rem; }
 }

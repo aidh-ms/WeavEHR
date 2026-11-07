@@ -27,8 +27,8 @@ but note that the example files live in the checkout, not in the wheel.
 uv run --no-dev python example/quickstart/run.py
 ```
 
-The script loads a tiny set of tutorial configs and runs the two steps every
-WeavEHR pipeline has, extraction and then harmonisation:
+The script loads a tiny set of tutorial configs and runs both extraction and
+harmonisation:
 
 ```python
 with WeavEHRProject(output) as project:
@@ -81,6 +81,9 @@ event columns. This example also keeps `dataset` and `table` as provenance.
 
 Open the extraction file too: that is where the temperature went, and where
 you would go first when a value you expected is missing from a concept.
+With source codes such as `OBSERVATION//HR//bpm`, this file is already a MEDS
+event stream for model training; the concept step produces a second output
+with shared clinical codes.
 
 ## 4. Change the mapping
 
