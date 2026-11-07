@@ -1,5 +1,4 @@
-from functools import wraps
-from typing import Any, Hashable
+from typing import Hashable
 
 from weavehr.callbacks.proto import CallbackProtocol
 from weavehr.utils.name import camel_to_snake
@@ -93,11 +92,6 @@ registry = CallbackRegistry()
 
 
 def register_callback_cls[T: type[CallbackProtocol]](cls: T) -> T:
-    name = camel_to_snake(cls.__name__)
-    registry.register(name, cls)
-
-    @wraps(cls)
-    def wrapper(*args: Any, **kwargs: Any) -> T:
-        return cls(*args, **kwargs)  # ty: ignore[invalid-return-type]
-
-    return wrapper  # ty: ignore[invalid-return-type]
+    """Register a callback class under the snake_case form of its name and return it unchanged."""
+    registry.register(camel_to_snake(cls.__name__), cls)
+    return cls

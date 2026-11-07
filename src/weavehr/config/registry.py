@@ -77,7 +77,7 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
             overwrite: If True, replace existing configuration with same identifier
         """
         if overwrite or value.identifier not in self._registry:
-            logger.info("Loaded configuration: %s", value.identifier)
+            logger.debug("Registered configuration: %s", value.identifier)
             self._registry[value.identifier] = value
 
     def unregister(self, identifiers: tuple[str, ...] | str) -> bool:
@@ -162,11 +162,6 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
             overwrite,
         )
         for config in load_configs(file_path, self._config_type, includes=includes, excludes=excludes):
-            logger.debug(
-                "Registering config '%s' (overwrite=%s)",
-                config.identifier,
-                overwrite,
-            )
             self.register(config, overwrite=overwrite)
 
     def save(self, path: Path) -> None:
@@ -260,8 +255,8 @@ def load_configs[T: BaseConfig](
         try:
             config = config_type.load(file_path, **kwargs)
             logger.debug("Loaded configuration %s from %s", config.identifier, file_path)
-        except ValidationError:
-            logger.warning("failed to load config from %s", file_path)
+        except ValidationError as e:
+            logger.warning("failed to load config from %s: %s", file_path, e)
             continue
 
         if (_excludes and config.identifier in _excludes) or (_includes and config.identifier not in _includes):
@@ -306,8 +301,8 @@ def _load_inherited_configs[T: BaseConfig](
         try:
             config = config_type(**data)
             logger.debug("Loaded inherited configuration %s from %s", config.identifier, path)
-        except ValidationError:
-            logger.warning("failed to load inherited config '%s' from %s", name, path)
+        except ValidationError as e:
+            logger.warning("failed to load inherited config '%s' from %s: %s", name, path, e)
             continue
 
         if (excludes and config.identifier in excludes) or (includes and config.identifier not in includes):

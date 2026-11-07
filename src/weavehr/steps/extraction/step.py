@@ -7,6 +7,7 @@ joins, and outputs MEDS-compliant Parquet files.
 
 import gc
 from pathlib import Path
+from typing import Callable
 
 import polars as pl
 import pyarrow as pa
@@ -85,55 +86,17 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
     def _extract(self, table: TableConfig, path: Path) -> None:
         try:
-            lf = self._read_table(table, path)
-
-            for join_table in table.join:
-                # Use broadcast join with small right table
-                logger.debug(
-                    "Joining table %s with %s",
-                    table.name,
-                    join_table.path,
-                )
-                join_lf = self._read_table(join_table, path)
-
-                lf = lf.join(
-                    join_lf,
-                    how=join_table.how,  # ty: ignore[invalid-argument-type]
-                    coalesce=True,  # Reduces memory by coalescing join keys
-                    **join_table.join_params,  # ty: ignore[invalid-argument-type]
-                )
-
-                lf = self._apply_callbacks(
-                    lf,
-                    join_table.post_join_callbacks,
-                    callback_type="Post-join callback",
-                )
-                lf = self._apply_filters(
-                    lf,
-                    join_table.post_join_filters,
-                    callback_type="Post-join filter",
-                )
-
+            lf = self.build_table_frame(table, lambda t: self._scan_table(t, path))
         except FileNotFoundError as e:
             logger.warning("Skipping table %s: %s", table.name, e)
             return
 
         logger.info("Processing table %s", table.name)
 
-        lf = self._apply_callbacks(
-            lf,
-            table.post_join_callbacks,
-            callback_type="Table post-join callback",
-        )
-        lf = self._apply_filters(
-            lf,
-            table.post_join_filters,
-            callback_type="Table post-join filter",
-        )
-        lf = self._apply_transformations(
-            lf,
-            table.transformations,
-            callback_type="Table transformation",
+        include_event_name = (
+            table.settings.include_event_name_in_code
+            if table.settings.include_event_name_in_code is not None
+            else self._config.config.settings.include_event_name_in_code
         )
 
         for event in table.events:
@@ -144,93 +107,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             )
 
             event_identifier: tuple[str, ...] = table.identifier_tuple[1:] + (event.name,)
-            event_lf = lf
-
-            event_lf = self._apply_callbacks(
-                event_lf,
-                event.pre_callbacks,
-                callback_type="Event pre-callback",
-            )
-
-            # Add missing columns
-            if event.columns.text_value is None:
-                event_lf = event_lf.with_columns(pl.lit(None, dtype=pl.String).alias("text_value"))
-            if event.columns.numeric_value is None:
-                event_lf = event_lf.with_columns(pl.lit(None, dtype=pl.Float32).alias("numeric_value"))
-
-            # Rename columns
-            columns = event.columns.model_dump()
-            extension = columns.pop("extension")
-            columns.pop("code", None)
-
-            for col_name, col_expr in columns.items():
-                if col_expr is not None:
-                    event_lf = event_lf.with_columns(
-                        self._parse_expr(
-                            event_lf,
-                            col_expr,
-                            callback_type="Event column mapping",
-                        ).alias(col_name)
-                    )
-
-            for col_name, col_expr in extension.items():
-                if col_expr is not None:
-                    event_lf = event_lf.with_columns(
-                        self._parse_expr(
-                            event_lf,
-                            col_expr,
-                            callback_type="Event extension mapping",
-                        ).alias(col_name)
-                    )
-
-            # Create code column.
-            #
-            # Event-specific code structure:
-            # code_prefix // [event_name //] columns.code // code_suffix
-            #
-            # The event name is included by default and can be disabled through
-            # the global extraction settings or a table-specific override.
-            code_expr = self._build_code_expr(event_lf, table, event)
-
-            # Add constructed MEDS code column
-            event_lf = event_lf.with_columns(code_expr)
-
-            # Apply event callbacks
-            event_lf = self._apply_callbacks(
-                event_lf,
-                event.callbacks,
-                callback_type="Event callback",
-            )
-
-            event_lf = self._apply_filters(
-                event_lf,
-                event.filters,
-                callback_type="Event filter",
-            )
-
-            event_lf = self._apply_transformations(
-                event_lf,
-                event.transformations,
-                callback_type="Event transformation",
-            )
-
-            # Reorder columns
-            event_lf = event_lf.select(
-                [
-                    pl.col("subject_id").cast(pl.Int64),
-                    pl.col("time").cast(pl.Datetime(time_unit="us")),
-                    pl.col("code").cast(pl.String),
-                    pl.col("numeric_value").cast(pl.Float32, strict=False),
-                    pl.col("text_value").cast(pl.String),
-                ]
-                + [pl.col(col) for col in event.columns.extension.keys()]
-            )
-
-            event_lf = self._apply_filters(
-                event_lf,
-                event.output_filters,
-                callback_type="Event output filter",
-            )
+            event_lf = self.build_event_frame(lf, event, include_event_name)
 
             # Ensure output directory exists
             assert self._workspace_dir is not None
@@ -270,6 +147,164 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         del lf
         gc.collect()
 
+    @classmethod
+    def build_table_frame(cls, table: TableConfig, scan: Callable[[BaseTableConfig], LazyFrame]) -> LazyFrame:
+        """Build the joined and transformed frame of a table, before it is split into events.
+
+        Args:
+            table: Configuration of the table to build
+            scan: Returns the raw frame of a table or join table (typed by its declared columns).
+                Separated from the processing so the pipeline can be checked on empty frames.
+
+        Returns:
+            LazyFrame after table/join callbacks, filters and transformations
+        """
+        lf = cls._prepare_table(scan(table), table)
+
+        for join_table in table.join:
+            # Use broadcast join with small right table
+            logger.debug(
+                "Joining table %s with %s",
+                table.name,
+                join_table.path,
+            )
+            join_lf = cls._prepare_table(scan(join_table), join_table)
+
+            lf = lf.join(
+                join_lf,
+                coalesce=True,  # Reduces memory by coalescing join keys
+                **join_table.join_params,
+            )
+
+            lf = cls._apply_callbacks(
+                lf,
+                join_table.post_join_callbacks,
+                callback_type="Post-join callback",
+            )
+            lf = cls._apply_filters(
+                lf,
+                join_table.post_join_filters,
+                callback_type="Post-join filter",
+            )
+
+        lf = cls._apply_callbacks(
+            lf,
+            table.post_join_callbacks,
+            callback_type="Table post-join callback",
+        )
+        lf = cls._apply_filters(
+            lf,
+            table.post_join_filters,
+            callback_type="Table post-join filter",
+        )
+        return cls._apply_transformations(
+            lf,
+            table.transformations,
+            callback_type="Table transformation",
+        )
+
+    @classmethod
+    def build_event_frame(cls, lf: LazyFrame, event: EventConfig, include_event_name: bool) -> LazyFrame:
+        """Map a table frame to the MEDS columns of one event.
+
+        Args:
+            lf: Table frame from `build_table_frame`
+            event: Configuration of the event to extract
+            include_event_name: Whether the event name becomes part of the code
+
+        Returns:
+            LazyFrame with the MEDS columns plus the event's extension columns
+        """
+        event_lf = lf
+
+        event_lf = cls._apply_callbacks(
+            event_lf,
+            event.pre_callbacks,
+            callback_type="Event pre-callback",
+        )
+
+        # Add missing columns
+        if event.columns.text_value is None:
+            event_lf = event_lf.with_columns(pl.lit(None, dtype=pl.String).alias("text_value"))
+        if event.columns.numeric_value is None:
+            event_lf = event_lf.with_columns(pl.lit(None, dtype=pl.Float32).alias("numeric_value"))
+
+        # Rename columns
+        columns = event.columns.model_dump()
+        extension = columns.pop("extension")
+        columns.pop("code", None)
+
+        for col_name, col_expr in columns.items():
+            if col_expr is not None:
+                event_lf = event_lf.with_columns(
+                    cls._parse_expr(
+                        event_lf,
+                        col_expr,
+                        callback_type="Event column mapping",
+                    ).alias(col_name)
+                )
+
+        for col_name, col_expr in extension.items():
+            if col_expr is not None:
+                event_lf = event_lf.with_columns(
+                    cls._parse_expr(
+                        event_lf,
+                        col_expr,
+                        callback_type="Event extension mapping",
+                    ).alias(col_name)
+                )
+
+        # Create code column.
+        #
+        # Event-specific code structure:
+        # code_prefix // [event_name //] columns.code // code_suffix
+        #
+        # The event name is included by default and can be disabled through
+        # the global extraction settings or a table-specific override.
+        code_expr = cls._build_code_expr(event_lf, event, include_event_name)
+
+        # Add constructed MEDS code column
+        event_lf = event_lf.with_columns(code_expr)
+
+        # Apply event callbacks
+        event_lf = cls._apply_callbacks(
+            event_lf,
+            event.callbacks,
+            callback_type="Event callback",
+        )
+
+        event_lf = cls._apply_filters(
+            event_lf,
+            event.filters,
+            callback_type="Event filter",
+        )
+
+        event_lf = cls._apply_transformations(
+            event_lf,
+            event.transformations,
+            callback_type="Event transformation",
+        )
+
+        # Reorder columns
+        event_lf = event_lf.select(
+            [
+                pl.col("subject_id").cast(pl.Int64),
+                pl.col("time").cast(pl.Datetime(time_unit="us")),
+                pl.col("code").cast(pl.String),
+                pl.col("numeric_value").cast(pl.Float32, strict=False),
+                pl.col("text_value").cast(pl.String),
+            ]
+            + [pl.col(col) for col in event.columns.extension.keys()]
+        )
+
+        event_lf = cls._apply_filters(
+            event_lf,
+            event.output_filters,
+            callback_type="Event output filter",
+        )
+
+        return event_lf
+
     @staticmethod
     def _resolve_source(table: BaseTableConfig, path: Path) -> Path | list[Path]:
         """Resolve a table path to a concrete source for Polars scanners.
@@ -291,12 +326,9 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             raise FileNotFoundError(f"file not found ({file_path})")
         return file_path
 
-    def _read_table(self, table: BaseTableConfig, path: Path) -> pl.LazyFrame:
-        """Read and transform a table from CSV.
-
-        Scans the CSV file, applies schema overrides, executes pre-callbacks,
-        applies pre-filters, converts datetime columns, executes callbacks, and
-        applies filters.
+    @classmethod
+    def _scan_table(cls, table: BaseTableConfig, path: Path) -> pl.LazyFrame:
+        """Scan a table from Parquet or CSV, restricted and cast to its declared columns.
 
         Args:
             table: Configuration for the table to read
@@ -305,7 +337,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         Returns:
             LazyFrame with the transformed table data
         """
-        source = self._resolve_source(table, path)
+        source = cls._resolve_source(table, path)
 
         if table.type == TableType.PARQUET:
             sources = [source] if isinstance(source, Path) else source
@@ -316,8 +348,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             decimal256_columns = {
                 field.name
                 for field in arrow_dataset.schema
-                if field.name in required_columns
-                and pa.types.is_decimal256(field.type)
+                if field.name in required_columns and pa.types.is_decimal256(field.type)
             }
 
             if decimal256_columns:
@@ -327,11 +358,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 )
 
                 columns = {
-                    name: (
-                        ds.field(name).cast(pa.float64())
-                        if name in decimal256_columns
-                        else ds.field(name)
-                    )
+                    name: (ds.field(name).cast(pa.float64()) if name in decimal256_columns else ds.field(name))
                     for name in required_columns
                 }
 
@@ -344,11 +371,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             # Parquet carries its own schema, so cast the non-temporal columns to
             # the declared dtypes. Datetime columns ("datetime" maps to String)
             # are handled below to support both native timestamps and strings.
-            casts = [
-                pl.col(col.name).cast(col.dtype, strict=False)
-                for col in table.columns
-                if col.type != "datetime"
-            ]
+            casts = [pl.col(col.name).cast(col.dtype, strict=False) for col in table.columns if col.type != "datetime"]
             if casts:
                 lf = lf.with_columns(casts)
         else:
@@ -360,12 +383,25 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             )
             lf = lf.select(table.dtypes.keys())
 
-        lf = self._apply_callbacks(
+        return lf
+
+    @classmethod
+    def _prepare_table(cls, lf: LazyFrame, table: BaseTableConfig) -> pl.LazyFrame:
+        """Apply pre-callbacks, pre-filters, datetime conversion, callbacks and filters to a scanned table.
+
+        Args:
+            lf: Frame from `_scan_table`
+            table: Configuration for the table
+
+        Returns:
+            LazyFrame with the transformed table data
+        """
+        lf = cls._apply_callbacks(
             lf,
             table.pre_callbacks,
             callback_type="Table pre-callback",
         )
-        lf = self._apply_filters(
+        lf = cls._apply_filters(
             lf,
             table.pre_filters,
             callback_type="Table pre-filter",
@@ -382,12 +418,12 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 else:
                     lf = lf.with_columns(pl.col(col.name).cast(pl.Datetime("us"), strict=False).alias(col.name))
 
-        lf = self._apply_callbacks(
+        lf = cls._apply_callbacks(
             lf,
             table.callbacks,
             callback_type="Table callback",
         )
-        lf = self._apply_filters(
+        lf = cls._apply_filters(
             lf,
             table.filters,
             callback_type="Table filter",
@@ -395,11 +431,12 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
         return lf
 
+    @classmethod
     def _build_code_expr(
-        self,
+        cls,
         lf: LazyFrame,
-        table: TableConfig,
         event: EventConfig,
+        include_event_name: bool,
     ) -> pl.Expr:
         """Build the MEDS code expression for an event.
 
@@ -410,14 +447,9 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         Whether the event name is included is controlled by the global
         extraction-step setting. A table-specific setting may override it.
         """
-        include_event_name = (
-            table.settings.include_event_name_in_code
-            if table.settings.include_event_name_in_code is not None
-            else self._config.config.settings.include_event_name_in_code
-        )
 
         prefix_parts = [
-            self._parse_expr(
+            cls._parse_expr(
                 lf,
                 expr,
                 callback_type="Event code prefix",
@@ -426,7 +458,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         ]
 
         event_code_parts = [
-            self._parse_expr(
+            cls._parse_expr(
                 lf,
                 expr,
                 callback_type="Event code part",
@@ -435,7 +467,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         ]
 
         suffix_parts = [
-            self._parse_expr(
+            cls._parse_expr(
                 lf,
                 expr,
                 callback_type="Event code suffix",
@@ -482,8 +514,9 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
         return result
 
+    @classmethod
     def _apply_callbacks(
-        self,
+        cls,
         lf: LazyFrame,
         callbacks: list[str],
         callback_type: str,
@@ -491,7 +524,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         """Apply expression callbacks with LazyFrame.with_columns."""
         for expr in callbacks:
             lf = lf.with_columns(
-                self._parse_expr(
+                cls._parse_expr(
                     lf,
                     expr,
                     callback_type=callback_type,
@@ -500,8 +533,9 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
         return lf
 
+    @classmethod
     def _apply_filters(
-        self,
+        cls,
         lf: LazyFrame,
         filters: list[str],
         callback_type: str,
@@ -509,7 +543,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         """Apply expression filters with LazyFrame.filter."""
         for expr in filters:
             lf = lf.filter(
-                self._parse_expr(
+                cls._parse_expr(
                     lf,
                     expr,
                     callback_type=callback_type,

@@ -10,6 +10,7 @@ import shutil
 from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
+from typing import Callable
 from uuid import uuid4
 
 import polars as pl
@@ -24,6 +25,7 @@ from weavehr.steps.concept.config.concept import (
     SimpleDatasetConceptConfig,
 )
 from weavehr.steps.concept.config.derived import BaseConceptTable
+from weavehr.steps.concept.config.simple import MappingConfig
 from weavehr.steps.concept.config.step import ConceptStepConfig
 from weavehr.steps.concept.registry import concept_config_registry
 from weavehr.storage.project import WeavEHRProject
@@ -64,10 +66,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             depend_concepts = dict()
 
             assert self._workspace_dir is not None
-            routed_cache_dir = (
-                Path(self._workspace_dir.path).parent
-                / "_concept_routed_sources"
-            )
+            routed_cache_dir = Path(self._workspace_dir.path).parent / "_concept_routed_sources"
             if routed_cache_dir.exists():
                 shutil.rmtree(routed_cache_dir)
 
@@ -233,14 +232,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         if expr is None:
             return []
 
-        return (
-            self.codes_df.lazy()
-            .filter(expr)
-            .select("code")
-            .collect()
-            .get_column("code")
-            .to_list()
-        )
+        return self.codes_df.lazy().filter(expr).select("code").collect().get_column("code").to_list()
 
     def _build_code_concept_routes(
         self,
@@ -264,12 +256,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 table = mapping.pattern.table
                 event = mapping.pattern.event
 
-                table_path = (
-                    self.extraction_dataset.data_path
-                    / dataset
-                    / version
-                    / table
-                )
+                table_path = self.extraction_dataset.data_path / dataset / version / table
 
                 if event is None:
                     mapping_paths = sorted(table_path.glob("*.parquet"))
@@ -325,23 +312,14 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 table = mapping.pattern.table
                 event = mapping.pattern.event
 
-                table_path = (
-                    extraction_dataset.data_path
-                    / dataset
-                    / version
-                    / table
-                )
+                table_path = extraction_dataset.data_path / dataset / version / table
 
                 if event is None:
                     data_paths = sorted(table_path.glob("*.parquet"))
                 else:
                     data_paths = [table_path / f"{event}.parquet"]
 
-                source_paths.update(
-                    data_path
-                    for data_path in data_paths
-                    if data_path.exists()
-                )
+                source_paths.update(data_path for data_path in data_paths if data_path.exists())
 
         routed_sources: dict[tuple[Path, str], list[Path]] = {}
 
@@ -359,9 +337,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             if routes["concept_identifier"].n_unique() < 2:
                 continue
 
-            relative_path = data_path.relative_to(
-                extraction_dataset.data_path
-            )
+            relative_path = data_path.relative_to(extraction_dataset.data_path)
             output_dir = cache_dir / relative_path.parent / data_path.stem
 
             logger.debug(
@@ -380,6 +356,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     left_on="code",
                     right_on="source_code",
                     how="inner",
+                    # Keep the extraction file order so that order-dependent concept filters
+                    # (e.g. first_distinct) are deterministic across runs.
+                    maintain_order="left",
                 )
                 .sink_parquet(
                     pl.PartitionBy(
@@ -391,20 +370,13 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 )
             )
 
-            for concept_identifier in routes[
-                "concept_identifier"
-            ].unique():
-                concept_dir = (
-                    output_dir
-                    / f"concept_identifier={concept_identifier}"
-                )
+            for concept_identifier in routes["concept_identifier"].unique():
+                concept_dir = output_dir / f"concept_identifier={concept_identifier}"
 
                 files = sorted(concept_dir.glob("*.parquet"))
 
                 if files:
-                    routed_sources[
-                        (data_path, concept_identifier)
-                    ] = files
+                    routed_sources[(data_path, concept_identifier)] = files
 
         return routed_sources
 
@@ -484,14 +456,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
                 source_path: Path | list[Path] = data_path
 
-                if (
-                    routed_sources
-                    and not mapping.pattern.extensions
-                    and not mapping.filters
-                ):
-                    routed = routed_sources.get(
-                        (data_path, concept.identifier)
-                    )
+                if routed_sources and not mapping.pattern.extensions and not mapping.filters:
+                    routed = routed_sources.get((data_path, concept.identifier))
                     if routed:
                         source_path = routed
                         logger.debug(
@@ -501,52 +467,21 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                         )
 
                 lf = pl.scan_parquet(source_path).filter(
-                    code.str.contains(mapping.pattern.code)
-                    | code_without_event_name.str.contains(mapping.pattern.code)
+                    code.str.contains(mapping.pattern.code) | code_without_event_name.str.contains(mapping.pattern.code)
                 )
 
                 for col_name, pattern in mapping.pattern.extensions.items():
                     lf = lf.filter(pl.col(col_name).str.contains(pattern))
 
-                # extension columns
-                lf = lf.with_columns(pl.lit(dataset).alias("dataset"))
-                lf = lf.with_columns(pl.lit(version).alias("version"))
-                lf = lf.with_columns(pl.lit(table).alias("table"))
-                lf = lf.with_columns(pl.lit(event_name).alias("event"))
-
-                extension_columns = concept.extension_columns.copy()
-                extension_columns.update(dataset_extension_columns or {})
-                for col_name, col_expr in extension_columns.items():
-                    lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
-
-                # value columns
-                if mapping.columns.text_value is None:
-                    lf = lf.with_columns(pl.lit(None).alias("text_value"))
-                else:
-                    lf = lf.with_columns(parse_expr(lf, mapping.columns.text_value).alias("text_value"))
-
-                if mapping.columns.numeric_value is None:
-                    lf = lf.with_columns(pl.lit(None).alias("numeric_value"))
-                else:
-                    expr = parse_expr(lf, mapping.columns.numeric_value)
-
-                    lf = lf.with_columns(expr.cast(pl.Float64, strict=False).alias("numeric_value"))
-
-                # code column
-                lf = lf.with_columns(pl.lit(concept.code).alias("code"))
-
-                for expr in mapping.filters:
-                    lf = lf.filter(parse_expr(lf, expr))
-
-                lf = lf.select(
-                    [
-                        pl.col("subject_id").cast(pl.Int64),
-                        pl.col("time").cast(pl.Datetime(time_unit="us")),
-                        pl.col("code").cast(pl.String),
-                        pl.col("numeric_value").cast(pl.Float32),
-                        pl.col("text_value").cast(pl.String),
-                    ]
-                    + [pl.col(col).cast(pl.String) for col in extension_columns]
+                lf = self.build_mapping_frame(
+                    lf,
+                    concept,
+                    mapping,
+                    dataset=dataset,
+                    version=version,
+                    table=table,
+                    event_name=event_name,
+                    dataset_extension_columns=dataset_extension_columns,
                 )
 
                 lf = self.apply_limits(concept, lf)
@@ -571,7 +506,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 concept.identifier,
                 output_file,
             )
-            pl.scan_parquet(files).sink_parquet(output_file)
+            pl.concat([pl.scan_parquet(file) for file in files], how="diagonal").sink_parquet(output_file)
 
         logger.debug(
             "Cleaning up temporary concept files for %s in %s",
@@ -582,6 +517,169 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             file.unlink()
 
         output_dataset_path.rmdir()
+
+    @classmethod
+    def build_mapping_frame(
+        cls,
+        lf: pl.LazyFrame,
+        concept: ConceptConfig,
+        mapping: MappingConfig,
+        *,
+        dataset: str,
+        version: str,
+        table: str,
+        event_name: str,
+        dataset_extension_columns: dict[str, str] | None = None,
+    ) -> pl.LazyFrame:
+        """Map the matching rows of one extracted event to the concept's output columns.
+
+        Args:
+            lf: Extracted event rows matching the mapping pattern
+            concept: The concept being extracted
+            mapping: The simple mapping that matched `lf`
+            dataset: Dataset name, exposed as the ``dataset`` column
+            version: Dataset version, exposed as the ``version`` column
+            table: Source table name, exposed as the ``table`` column
+            event_name: Source event name, exposed as the ``event`` column
+            dataset_extension_columns: Extra extension columns configured for the dataset
+
+        Returns:
+            LazyFrame with the MEDS columns plus the concept's extension columns
+        """
+        # extension columns
+        lf = lf.with_columns(pl.lit(dataset).alias("dataset"))
+        lf = lf.with_columns(pl.lit(version).alias("version"))
+        lf = lf.with_columns(pl.lit(table).alias("table"))
+        lf = lf.with_columns(pl.lit(event_name).alias("event"))
+
+        extension_columns = concept.extension_columns.copy()
+        extension_columns.update(dataset_extension_columns or {})
+        extension_columns.update(mapping.columns.extension)
+        for col_name, col_expr in extension_columns.items():
+            lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
+
+        # Preserve the source timestamp unless this mapping derives a new one.
+        if mapping.columns.time is not None:
+            lf = lf.with_columns(parse_expr(lf, mapping.columns.time).alias("time"))
+
+        # value columns
+        if mapping.columns.text_value is None:
+            lf = lf.with_columns(pl.lit(None).alias("text_value"))
+        else:
+            lf = lf.with_columns(parse_expr(lf, mapping.columns.text_value).alias("text_value"))
+
+        if mapping.columns.numeric_value is None:
+            lf = lf.with_columns(pl.lit(None).alias("numeric_value"))
+        else:
+            expr = parse_expr(lf, mapping.columns.numeric_value)
+
+            lf = lf.with_columns(expr.cast(pl.Float64, strict=False).alias("numeric_value"))
+
+        for expr in mapping.filters:
+            lf = lf.filter(parse_expr(lf, expr))
+
+        # Preserve source codes through filtering, then assign the concept code.
+        lf = lf.with_columns(pl.lit(concept.level_code(mapping.level)).alias("code"))
+
+        lf = lf.select(
+            [
+                pl.col("subject_id").cast(pl.Int64),
+                pl.col("time").cast(pl.Datetime(time_unit="us")),
+                pl.col("code").cast(pl.String),
+                pl.col("numeric_value").cast(pl.Float32),
+                pl.col("text_value").cast(pl.String),
+            ]
+            + [pl.col(col).cast(pl.String) for col in extension_columns]
+        )
+
+        return lf
+
+    @classmethod
+    def build_derived_frame(
+        cls,
+        concept: ConceptConfig,
+        dataset_concept: DerivedDatasetConceptConfig,
+        scan: Callable[[BaseConceptTable], pl.LazyFrame],
+    ) -> pl.LazyFrame:
+        """Join the dependency concepts of a derived concept and map them to its output columns.
+
+        Args:
+            concept: The derived concept
+            dataset_concept: The dataset-specific derived mapping
+            scan: Returns the output frame of a dependency concept. Separated from
+                the processing so the pipeline can be checked on empty frames.
+
+        Returns:
+            LazyFrame with the MEDS columns plus the concept's extension columns
+        """
+
+        def _read_table(table: BaseConceptTable) -> pl.LazyFrame:
+            lf = scan(table).select(table.columns)
+
+            for expr in table.pre_callbacks:
+                lf = lf.with_columns(parse_expr(lf, expr))
+
+            for expr in table.callbacks:
+                lf = lf.with_columns(parse_expr(lf, expr))
+
+            return lf
+
+        lf = _read_table(dataset_concept.table)
+        post_callbacks = [*dataset_concept.table.post_callbacks]
+
+        for join_table in dataset_concept.join:
+            logger.debug(
+                "Joining concept table %s with %s (how=%s)",
+                dataset_concept.table.concept,
+                join_table.concept,
+                join_table.how,
+            )
+            lf = lf.join(
+                _read_table(join_table),
+                suffix=join_table.suffix,
+                # Full joins don't coalesce keys by default, which would leave
+                # subject_id/time null for rows present only on the right side.
+                coalesce=True,
+                **join_table.join_params,
+            )
+            post_callbacks.extend(join_table.post_callbacks)
+
+        for expr in post_callbacks:
+            lf = lf.with_columns(parse_expr(lf, expr))
+
+        columns = dataset_concept.event.model_dump()
+        extension = concept.extension_columns.copy()
+        extension.update(columns.pop("extension") or {})
+        # Keyed by output column name so several columns may share the same expression.
+        mapping = {col_name: col_expr for col_name, col_expr in (columns | extension).items() if col_expr is not None}
+
+        if dataset_concept.event.text_value is None:
+            lf = lf.with_columns(pl.lit(None, dtype=pl.String).alias("text_value"))
+        if dataset_concept.event.numeric_value is None:
+            lf = lf.with_columns(pl.lit(None, dtype=pl.Float32).alias("numeric_value"))
+
+        for col_name, col_expr in mapping.items():
+            lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
+
+        # code column
+        lf = lf.with_columns(pl.lit(concept.level_code(dataset_concept.level)).alias("code"))
+
+        for expr in dataset_concept.filters:
+            lf = lf.filter(parse_expr(lf, expr))
+
+        # Reorder columns
+        lf = lf.select(
+            [
+                pl.col("subject_id").cast(pl.Int64),
+                pl.col("time").cast(pl.Datetime(time_unit="us")),
+                pl.col("code").cast(pl.String),
+                pl.col("numeric_value").cast(pl.Float32),
+                pl.col("text_value").cast(pl.String),
+            ]
+            + [pl.col(col).cast(pl.String) for col in extension.keys()]
+        )
+
+        return lf
 
     def get_path_for_concept_table(self, table: BaseConceptTable, dataset: str, version: str) -> Path:
         concept = self._registry.get(table.concept)
@@ -600,7 +698,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             dataset_concept.dataset,
         )
 
-        def _read_table(file_path: Path, table: BaseConceptTable) -> pl.LazyFrame:
+        def _scan(table: BaseConceptTable) -> pl.LazyFrame:
+            file_path = self.get_path_for_concept_table(table, dataset_concept.dataset, dataset_concept.version)
             if not file_path.exists():
                 raise FileNotFoundError(f"file not found ({file_path})")
             logger.debug(
@@ -608,94 +707,13 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 table.concept,
                 file_path,
             )
-            lf = pl.scan_parquet(
-                file_path,
-                low_memory=True,
-            ).select(table.columns)
-
-            for expr in table.pre_callbacks:
-                lf = lf.with_columns(parse_expr(lf, expr))
-
-            for expr in table.callbacks:
-                lf = lf.with_columns(parse_expr(lf, expr))
-
-            return lf
+            return pl.scan_parquet(file_path, low_memory=True)
 
         try:
-            lf = _read_table(
-                self.get_path_for_concept_table(
-                    dataset_concept.table,
-                    dataset_concept.dataset,
-                    dataset_concept.version,
-                ),
-                dataset_concept.table,
-            )
-            post_callbacks = [*dataset_concept.table.post_callbacks]
-
-            for join_table in dataset_concept.join:
-                logger.debug(
-                    "Joining concept table %s with %s (how=%s)",
-                    dataset_concept.table.concept,
-                    join_table.concept,
-                    join_table.how,
-                )
-                lf = lf.join(
-                    _read_table(
-                        self.get_path_for_concept_table(
-                            join_table,
-                            dataset_concept.dataset,
-                            dataset_concept.version,
-                        ),
-                        join_table,
-                    ),
-                    how=join_table.how,  # ty: ignore[invalid-argument-type]
-                    suffix=join_table.suffix,
-                    # Full joins don't coalesce keys by default, which would leave
-                    # subject_id/time null for rows present only on the right side.
-                    coalesce=True,
-                    **join_table.join_params,  # ty: ignore[invalid-argument-type]
-                )
-                post_callbacks.extend(join_table.post_callbacks)
+            lf = self.build_derived_frame(concept, dataset_concept, _scan)
         except FileNotFoundError as e:
             logger.warning("skipping table %s: %s", dataset_concept.table.concept, e)
             return
-
-        for expr in post_callbacks:
-            lf = lf.with_columns(parse_expr(lf, expr))
-
-        columns = dataset_concept.event.model_dump()
-        extension = concept.extension_columns.copy()
-        extension.update(columns.pop("extension") or {})
-        # Keyed by output column name so several columns may share the same expression.
-        mapping = {
-            col_name: col_expr for col_name, col_expr in (columns | extension).items() if col_expr is not None
-        }
-
-        if dataset_concept.event.text_value is None:
-            lf = lf.with_columns(pl.lit(None, dtype=pl.String).alias("text_value"))
-        if dataset_concept.event.numeric_value is None:
-            lf = lf.with_columns(pl.lit(None, dtype=pl.Float32).alias("numeric_value"))
-
-        for col_name, col_expr in mapping.items():
-            lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
-
-        # code column
-        lf = lf.with_columns(pl.lit(concept.code).alias("code"))
-
-        for expr in dataset_concept.filters:
-            lf = lf.filter(parse_expr(lf, expr))
-
-        # Reorder columns
-        lf = lf.select(
-            [
-                pl.col("subject_id").cast(pl.Int64),
-                pl.col("time").cast(pl.Datetime(time_unit="us")),
-                pl.col("code").cast(pl.String),
-                pl.col("numeric_value").cast(pl.Float32),
-                pl.col("text_value").cast(pl.String),
-            ]
-            + [pl.col(col).cast(pl.String) for col in extension.keys()]
-        )
 
         lf = self.apply_limits(concept, lf)
 

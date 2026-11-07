@@ -1,7 +1,9 @@
 """Centralized logging configuration for WeavEHR.
 
 This module provides a standardized logging setup that can be used throughout the WeavEHR project.
-It supports console logging with configurable levels and formats.
+Following the conventions for libraries, WeavEHR only attaches a ``logging.NullHandler`` to its
+package logger and leaves handlers and levels to the application: records propagate to the root
+logger as usual. Call :func:`configure_logging` to opt into WeavEHR's console output.
 
 Usage:
     # Get a logger for your module
@@ -40,7 +42,9 @@ def configure_logging(
     """Configure logging for the WeavEHR package.
 
     This function sets up console logging for the WeavEHR package. It's safe to call
-    multiple times - subsequent calls will reconfigure the logging system.
+    multiple times - subsequent calls will reconfigure the logging system. It is meant
+    for applications and scripts; WeavEHR never calls it itself. Records no longer
+    propagate to the root logger afterwards, to avoid duplicate output.
 
     Args:
         level: Minimum log level to capture (DEBUG, INFO, WARNING, ERROR, CRITICAL)
@@ -76,8 +80,7 @@ def get_logger(name: str) -> logging.Logger:
     """Get a logger instance for the specified module.
 
     This function returns a logger that is a child of the WeavEHR package logger.
-    If the package logger hasn't been configured yet, it will be configured with
-    default settings (INFO level, console only) on first use.
+    It does not configure any handlers (see :func:`configure_logging`).
 
     Args:
         name: Name for the logger, typically __name__ of the calling module
@@ -90,13 +93,6 @@ def get_logger(name: str) -> logging.Logger:
         >>> logger.info("Processing data")
         >>> logger.error("Failed to load file: %s", filename)
     """
-    # Get the package logger
-    package_logger = logging.getLogger(LOGGER_NAME)
-
-    # Auto-configure with defaults if not already configured (no handlers)
-    if not package_logger.handlers:
-        configure_logging()
-
     # Return a child logger of the package logger
     # If name is "weavehr.meds.processor", this creates the hierarchy automatically
     if name.startswith(LOGGER_NAME):
@@ -124,6 +120,9 @@ def set_log_level(level: LogLevel) -> None:
     for handler in logger.handlers:
         handler.setLevel(level)
 
+
+# Library convention: avoid "No handlers could be found" output without configuring the application's logging
+logging.getLogger(LOGGER_NAME).addHandler(logging.NullHandler())
 
 # Create a default logger for this module
 logger = get_logger(__name__)

@@ -2,9 +2,12 @@
 
 import polars as pl
 import pytest
+from pydantic import ValidationError
 
+from weavehr.steps.extraction.config.column import ColumnConfig
 from weavehr.steps.extraction.config.step import CustomConfig
 from weavehr.steps.extraction.config.table import JoinTableConfig, TableConfig, TableType
+from weavehr.utils.dtype import resolve_dtype
 
 
 def make_table_config(**overrides) -> TableConfig:
@@ -80,8 +83,8 @@ class TestTableTypeInference:
         assert make_table_config(path="data.parquet", type="csvgz").type == TableType.CSVGZ
 
     def test_join_table_type_inferred_from_path(self) -> None:
-        assert JoinTableConfig(path="d_items.csv.gz").type == TableType.CSVGZ
-        assert JoinTableConfig(path="d_items.parquet").type == TableType.PARQUET
+        assert JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"]).type == TableType.CSVGZ
+        assert JoinTableConfig(path="d_items.parquet", both_on=["itemid"]).type == TableType.PARQUET
 
 
 class TestEventDefaults:
@@ -167,20 +170,19 @@ class TestEventDefaults:
 
 
 class TestJoinTableConfig:
-    def test_join_params_both_on(self) -> None:
+    def test_join_defaults(self) -> None:
         join = JoinTableConfig(path="d_items.csv.gz", both_on=["itemid"])
-        assert join.join_params == {"on": ["itemid"]}
-        assert join.how == "left"
+        assert join.join_params == {
+            "how": "left",
+            "maintain_order": "left_right",
+            "on": ["itemid"],
+            "left_on": None,
+            "right_on": None,
+        }
 
-    def test_join_params_left_right(self) -> None:
-        join = JoinTableConfig(
-            path="d_items.csv.gz",
-            left_on=["itemid"],
-            right_on=["item_id"],
-            how="inner",
-        )
-        assert join.join_params == {"left_on": ["itemid"], "right_on": ["item_id"]}
-        assert join.how == "inner"
+    def test_join_without_keys_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            JoinTableConfig(path="d_items.csv.gz")
 
 
 class TestEventNameCodeSettings:
@@ -226,3 +228,21 @@ class TestGlobalEventNameCodeSettings:
         )
 
         assert config.settings.include_event_name_in_code is False
+
+
+class TestColumnDtype:
+    @pytest.mark.parametrize(("name", "expected"), [("int64", pl.Int64), ("float", pl.Float32), ("utf8", pl.String)])
+    def test_uses_shared_dtype_names(self, name: str, expected: pl.DataType) -> None:
+        assert ColumnConfig(name="c", type=name).dtype == expected == resolve_dtype(name)
+
+    def test_datetime_is_read_as_string(self) -> None:
+        assert ColumnConfig(name="c", type="datetime").dtype == pl.String
+
+    def test_type_is_normalised_to_lowercase(self) -> None:
+        column = ColumnConfig(name="c", type="DateTime")
+        assert column.type == "datetime"
+        assert column.dtype == pl.String
+
+    def test_unknown_type_rejected_at_validation(self) -> None:
+        with pytest.raises(ValidationError, match="Unsupported dtype"):
+            ColumnConfig(name="c", type="complex128")

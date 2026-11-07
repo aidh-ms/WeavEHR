@@ -1,0 +1,6 @@
+name: erythrocyte_distribution_width_sd
+version: 1.0.0
+unit: fL
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

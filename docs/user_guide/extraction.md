@@ -44,6 +44,8 @@ columns:                           # only listed columns are read, with these ty
     type: string
   - name: valueuom
     type: string
+  - name: ref_range_lower
+    type: float32
 
 join:                              # lookup tables joined before event extraction
   - path: hosp/d_labitems.csv.gz
@@ -81,7 +83,9 @@ Only the columns listed under `columns` are read from the source file. Available
 
 ### Joins
 
-Each entry under `join` is itself a table definition (with its own `path`, `columns`, callbacks, and filters) plus join keys: `both_on` for same-named keys, or `left_on`/`right_on`, and `how` (default `left`). Joins typically attach human-readable labels (like MIMIC's `d_items`) or admission times needed to reconstruct timestamps (like eICU's `patient` table).
+Each entry under `join` is itself a table definition (with its own `path`, `columns`, callbacks, and filters) plus join keys: `both_on` for same-named keys, or `left_on` together with `right_on` (exactly one of the two forms), and `how` (`inner`, `left` (default), `right`, `full`, `semi`, or `anti`; cross joins are not supported). Joins typically attach human-readable labels (like MIMIC's `d_items`) or admission times needed to reconstruct timestamps (like eICU's `patient` table).
+
+By default joins preserve the row order of the main table (`maintain_order: left_right`), so order-dependent filters such as `first_distinct` give the same result on every run. `maintain_order` accepts the Polars values (`none`, `left`, `right`, `left_right`, `right_left`); `none` is slightly faster but makes order-dependent filters non-deterministic. When the rows `first_distinct` chooses between differ in content, prefer stating the rule explicitly with `order_by` instead of relying on file order.
 
 ### Events
 
@@ -98,6 +102,8 @@ Each event produces one output file. The `columns` block maps source columns (or
     The dataset and table prefixes are added automatically. By default, the technical event name is also included after `code_prefix`; `include_event_name_in_code` can disable it globally or per table. Typical code parts are the item ID, its label, and the unit of measurement.
 
 - `extension` — a mapping of additional output columns, preserved alongside the MEDS standard columns (IDs like `hadm_id`/`stay_id`, data-availability timestamps, reference ranges, …).
+
+Every column an expression references must exist at that point: declared under `columns` (of the table or a joined table) or created earlier by a callback's `output=`. An unknown name, such as a typo like `col(enter_timestamp)` for a column created as `entered_timestamp`, fails the extraction with an error that suggests close matches. It never turns silently into a text value (see [column references and literals](expressions.md#column-references-and-literals)).
 
 `event_defaults` at the table level provides defaults for all events of the table; individual events override them (an explicit empty list overrides a default, too). One table can emit several events — for example, the bundled `inputevents.yml` produces `INFUSION_START`, `INFUSION_END`, and `SUBJECT_WEIGHT_AT_INFUSION` events from a single read.
 

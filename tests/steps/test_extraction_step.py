@@ -59,6 +59,17 @@ class TestExtractionStep:
         assert df.schema["text_value"] == pl.String
         assert "stay_id" in df.columns  # extension column preserved
 
+    def test_output_is_moved_from_workspace_to_dataset(self, tmp_path: Path, extraction_config: Path) -> None:
+        project = run_extraction(tmp_path, extraction_config)
+
+        data_path = project.datasets_path / "extraction" / "data"
+        assert sorted(p.relative_to(data_path).as_posix() for p in data_path.rglob("*.parquet")) == [
+            "testdb/1.0/measurements/HEIGHT.parquet",
+            "testdb/1.0/measurements/WEIGHT.parquet",
+            "testdb/1.0/vitals/CHART.parquet",
+        ]
+        assert not list((project.workspace_path / "extraction").rglob("*.parquet"))
+
     @pytest.mark.parametrize(
         ("include_event_name", "expected_codes"),
         [
@@ -180,6 +191,18 @@ class TestExtractionStep:
         step.run()
         assert output.stat().st_mtime_ns == first_mtime
 
+    def test_rerun_is_skipped_after_workspace_removed(self, tmp_path: Path, extraction_config: Path) -> None:
+        """The workspace is empty after a run, so removing it must not trigger a full re-extraction."""
+        project = run_extraction(tmp_path, extraction_config)
+        output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        first_mtime = output.stat().st_mtime_ns
+        shutil.rmtree(project.workspace_path / "extraction")
+
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        ExtractionStep.load(project, extraction_config).run()
+
+        assert output.stat().st_mtime_ns == first_mtime
+
     def test_rerun_after_interrupted_run_starts_from_scratch(
         self, tmp_path: Path, extraction_config: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -202,10 +225,8 @@ class TestExtractionStep:
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         ExtractionStep.load(project, extraction_config).run()
 
-        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         assert dataset_output.exists(), "interrupted run was treated as complete and skipped"
-        assert pl.read_parquet(workspace_output).height == 4
         assert pl.read_parquet(dataset_output).height == 4
         assert (project.datasets_path / "extraction" / "metadata" / "codes.parquet").exists()
         assert marker.exists()
@@ -217,9 +238,7 @@ class TestExtractionStep:
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         ExtractionStep.load(project, extraction_config).run()
 
-        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
-        assert pl.read_parquet(workspace_output).height == 4
         assert pl.read_parquet(dataset_output).height == 4
 
     def test_missing_dataset_path_is_skipped(self, tmp_path: Path, table_config_dir: Path) -> None:
@@ -409,15 +428,7 @@ config:
         load_extracation_config(config_dir)
         ExtractionStep.load(project, config_file).run()
 
-        output = (
-            project.datasets_path
-            / "extraction"
-            / "data"
-            / "decimaldb"
-            / "1.0"
-            / "vitals"
-            / "CHART.parquet"
-        )
+        output = project.datasets_path / "extraction" / "data" / "decimaldb" / "1.0" / "vitals" / "CHART.parquet"
         df = pl.read_parquet(output).sort("subject_id")
 
         assert df.height == 2
@@ -485,3 +496,81 @@ config:
         # both part files are read and concatenated
         assert df.height == 2
         assert df["numeric_value"].to_list() == [80.0, 120.0]
+
+    def test_first_distinct_after_join_keeps_file_order(self, tmp_path: Path) -> None:
+        """The streaming lookup join must not reorder rows ahead of order-dependent filters."""
+        data_dir = tmp_path / "data" / "joindb"
+        data_dir.mkdir(parents=True)
+        n = 200_000
+        events = pl.select(i=pl.int_range(n)).select(
+            subject_id=(pl.col("i") % 500).cast(pl.Int64),
+            itemid=(pl.col("i").hash(2) % 50).cast(pl.Int64),
+            value=pl.col("i").cast(pl.Float32),
+            charttime=pl.lit(datetime(2024, 1, 1)),
+        )
+        events.write_parquet(data_dir / "events.parquet")
+        pl.DataFrame({"itemid": list(range(50)), "label": [f"item{i}" for i in range(50)]}).write_parquet(
+            data_dir / "items.parquet"
+        )
+
+        config_dir = tmp_path / "config" / "joindb" / "1.0" / "tables"
+        config_dir.mkdir(parents=True)
+        (config_dir / "events.yml").write_text(
+            """\
+path: events.parquet
+columns:
+  - name: subject_id
+    type: int64
+  - name: itemid
+    type: int64
+  - name: value
+    type: float32
+  - name: charttime
+    type: datetime
+join:
+  - name: items
+    path: items.parquet
+    columns:
+      - name: itemid
+        type: int64
+      - name: label
+        type: str
+    both_on:
+      - itemid
+event_defaults:
+  subject_id: col(subject_id)
+  time: col(charttime)
+events:
+  - name: EVENT
+    columns:
+      code:
+        - col(label)
+      numeric_value: col(value)
+    filters:
+      - first_distinct(subject_id)
+"""
+        )
+
+        config_file = tmp_path / "extraction.yml"
+        config_file.write_text(
+            f"""\
+name: Extraction
+version: 1.0.0
+config_files:
+  - path: {config_dir}
+config:
+  data:
+    - name: joindb
+      version: "1.0"
+      path: {data_dir}
+"""
+        )
+
+        project = WeavEHRProject(tmp_path / "project")
+        load_extracation_config(config_dir)
+        ExtractionStep.load(project, config_file).run()
+
+        output = project.datasets_path / "extraction" / "data" / "joindb" / "1.0" / "events" / "EVENT.parquet"
+        df = pl.read_parquet(output).sort("subject_id")
+        expected = events.filter(pl.col("subject_id").is_first_distinct()).sort("subject_id")
+        assert df["numeric_value"].to_list() == expected["value"].to_list()

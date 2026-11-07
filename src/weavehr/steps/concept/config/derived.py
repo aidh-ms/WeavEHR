@@ -1,8 +1,9 @@
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from weavehr.config.base import BaseDatasetConfig
+from weavehr.config.join import JoinConfig, JoinHow
 
 
 class BaseConceptTable(BaseModel):
@@ -19,38 +20,23 @@ class BaseConceptTable(BaseModel):
     )
 
 
-class JoinConceptTable(BaseConceptTable):
+class JoinConceptTable(BaseConceptTable, JoinConfig):
+    """A concept table joined onto the main concept table of a derived concept.
+
+    Uses the shared join specification from JoinConfig; joins default to a ``full`` join on
+    ``subject_id`` and ``time`` when no keys are configured.
+    """
+
+    default_both_on: ClassVar[list[str]] = ["subject_id", "time"]
+
     type: Literal["join"] = Field("join", description="Type of concept table: 'join' or 'aggregate'.")
-    both_on: list[str] = Field(
-        default_factory=lambda: ["subject_id", "time"],
-        description="List of columns to be used for joining table on both sides.",
-    )
-    left_on: list[str] = Field(
-        default_factory=list,
-        description="List of columns to be used for joining table on the left side.",
-    )
-    right_on: list[str] = Field(
-        default_factory=list,
-        description="List of columns to be used for joining table on the right side.",
-    )
-    how: str = Field(
+    how: JoinHow = Field(
         "full",
-        description="Type of join to be performed (e.g. inner, left, right, outer).",
+        description="Type of join to be performed (inner, left, right, full, semi, anti).",
     )
-    suffix: str = Field("_right", description="Suffix to be added to overlapping column names during the join operation.")
-
-    @computed_field
-    @property
-    def join_params(self) -> dict[str, list[str]]:
-        params = {}
-        if self.both_on:
-            params["on"] = self.both_on
-        if self.left_on:
-            params["left_on"] = self.left_on
-        if self.right_on:
-            params["right_on"] = self.right_on
-
-        return params
+    suffix: str = Field(
+        "_right", description="Suffix to be added to overlapping column names during the join operation."
+    )
 
 
 class ConceptTable(BaseConceptTable):
@@ -58,8 +44,8 @@ class ConceptTable(BaseConceptTable):
 
 
 class MEDSConceptTable(BaseModel):
-    # The output code is always the concept code (``name//unit``), so it is not configurable here;
-    # unknown keys (e.g. ``code``) are rejected instead of being silently ignored.
+    # The output code is the concept code (``name//unit`` or ``name``, plus the mapping's ``level``), so it is
+    # not configurable here; unknown keys (e.g. ``code``) are rejected instead of being silently ignored.
     model_config = ConfigDict(extra="forbid")
 
     # None means the column is passed through unchanged from the input concept table.
@@ -86,6 +72,7 @@ class DerivedDatasetConceptConfig(BaseDatasetConfig):
     event: MEDSConceptTable = Field(
         ..., description="The configuration for the MEDS event concept table to be derived (if applicable)."
     )
+    level: str | None = Field(None, description="Concept level for all rows of this mapping; part of the code.")
     filters: list[str] = Field(
         default_factory=list, description="The list of filter configurations for the derived concept."
     )

@@ -4,12 +4,12 @@ from typing import Optional, Sequence
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, to_expr, with_output
 from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
-class Add(CallbackProtocol):
+class Add(OutputCallbackProtocol):
     def __init__(self, augend: AstValue, addend: AstValue, output: Optional[str] = None) -> None:
         self.augend = augend
         self.addend = addend
@@ -17,13 +17,11 @@ class Add(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.augend) + to_expr(lf, self.addend)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Sum(CallbackProtocol):
+class Sum(OutputCallbackProtocol):
     def __init__(self, *summands: AstValue, output: Optional[str] = None) -> None:
         if len(summands) == 1 and isinstance(summands[0], list):
             self.summands: Sequence[AstValue] = summands[0]
@@ -36,18 +34,14 @@ class Sum(CallbackProtocol):
 
         if not exprs:
             expr = pl.lit(0)
-            if self.output is None:
-                return expr
-            return expr.alias(self.output)
+            return with_output(expr, self.output)
 
         expr = pl.sum_horizontal(exprs)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Subtract(CallbackProtocol):
+class Subtract(OutputCallbackProtocol):
     def __init__(self, minuend: AstValue, subtrahend: AstValue, output: Optional[str] = None) -> None:
         self.minuend = minuend
         self.subtrahend = subtrahend
@@ -55,13 +49,11 @@ class Subtract(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.minuend) - to_expr(lf, self.subtrahend)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Multiply(CallbackProtocol):
+class Multiply(OutputCallbackProtocol):
     def __init__(self, multiplicand: AstValue, multiplier: AstValue, output: Optional[str] = None) -> None:
         self.multiplicand = multiplicand
         self.multiplier = multiplier
@@ -69,13 +61,11 @@ class Multiply(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.multiplicand) * to_expr(lf, self.multiplier)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Product(CallbackProtocol):
+class Product(OutputCallbackProtocol):
     def __init__(self, *factors: AstValue, output: Optional[str] = None) -> None:
         if len(factors) == 1 and isinstance(factors[0], list):
             self.factors: Sequence[AstValue] = factors[0]
@@ -88,18 +78,14 @@ class Product(CallbackProtocol):
 
         if not exprs:
             expr = pl.lit(1)
-            if self.output is None:
-                return expr
-            return expr.alias(self.output)
+            return with_output(expr, self.output)
 
         expr = pl.fold(acc=pl.lit(1), function=operator.mul, exprs=exprs)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Divide(CallbackProtocol):
+class Divide(OutputCallbackProtocol):
     def __init__(self, dividend: AstValue, divisor: AstValue, output: Optional[str] = None) -> None:
         self.dividend = dividend
         self.divisor = divisor
@@ -107,13 +93,11 @@ class Divide(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.dividend) / to_expr(lf, self.divisor)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class FloorDivide(CallbackProtocol):
+class FloorDivide(OutputCallbackProtocol):
     def __init__(self, dividend: AstValue, divisor: AstValue, output: Optional[str] = None) -> None:
         self.dividend = dividend
         self.divisor = divisor
@@ -121,13 +105,11 @@ class FloorDivide(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.dividend) // to_expr(lf, self.divisor)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Pow(CallbackProtocol):
+class Pow(OutputCallbackProtocol):
     def __init__(self, base: AstValue, exponent: AstValue, output: Optional[str] = None) -> None:
         self.base = base
         self.exponent = exponent
@@ -135,13 +117,11 @@ class Pow(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.base) ** to_expr(lf, self.exponent)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Root(CallbackProtocol):
+class Root(OutputCallbackProtocol):
     def __init__(self, radicand: AstValue, index: AstValue, output: Optional[str] = None) -> None:
         self.radicand = radicand
         self.index = index
@@ -151,13 +131,11 @@ class Root(CallbackProtocol):
         radicand_expr = to_expr(lf, self.radicand)
         idx_expr = to_expr(lf, self.index)
         expr = radicand_expr.sign() * radicand_expr.abs() ** (pl.lit(1) / idx_expr)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Modulo(CallbackProtocol):
+class Modulo(OutputCallbackProtocol):
     def __init__(self, dividend: AstValue, divisor: AstValue, output: Optional[str] = None) -> None:
         self.dividend = dividend
         self.divisor = divisor
@@ -165,6 +143,4 @@ class Modulo(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = to_expr(lf, self.dividend) % to_expr(lf, self.divisor)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)

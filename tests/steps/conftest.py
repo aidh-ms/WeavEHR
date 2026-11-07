@@ -89,6 +89,8 @@ path: measurements.csv
 columns:
   - name: subject_id
     type: int64
+  - name: stay_id
+    type: int64
   - name: charttime
     type: datetime
     params:
@@ -101,6 +103,8 @@ columns:
 event_defaults:
   subject_id: col(subject_id)
   time: col(charttime)
+  extension:
+    stay_id: col(stay_id)
 
 events:
   - name: WEIGHT

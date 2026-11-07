@@ -3,12 +3,12 @@ from typing import Optional
 import polars as pl
 from polars import LazyFrame
 
-from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, to_expr
+from weavehr.callbacks.proto import AstValue, CallbackResult, OutputCallbackProtocol, resolve_column, with_output
 from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
-class Col(CallbackProtocol):
+class Col(OutputCallbackProtocol):
     def __init__(
         self,
         col: AstValue,
@@ -18,14 +18,12 @@ class Col(CallbackProtocol):
         self.output = output
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
-        expr = to_expr(lf, self.col)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        expr = resolve_column(lf, self.col)
+        return with_output(expr, self.output)
 
 
 @register_callback_cls
-class Const(CallbackProtocol):
+class Const(OutputCallbackProtocol):
     def __init__(
         self,
         value: AstValue,
@@ -36,6 +34,4 @@ class Const(CallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         expr = pl.lit(self.value)
-        if self.output is None:
-            return expr
-        return expr.alias(self.output)
+        return with_output(expr, self.output)

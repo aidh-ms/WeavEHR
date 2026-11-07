@@ -49,6 +49,23 @@ columns:
   - name: hospital_expire_flag
     type: int64
 
+join:
+  - path: data/nw_hosp/patients.csv.gz
+    columns:
+      - name: subject_id
+        type: int64
+      - name: anchor_age
+        type: int64
+      - name: anchor_year
+        type: int64
+    both_on:
+      - subject_id
+
+post_join_callbacks:
+  - cast(admittime, "string", output=admit_text)
+  - slice_str(admit_text, 0, 4, output=admit_year_text)
+  - cast(admit_year_text, "int64", output=admit_year)
+
 event_defaults:
   subject_id: col(subject_id)
   time: col(admittime)
@@ -58,6 +75,14 @@ event_defaults:
     admit_provider_id: col(admit_provider_id)
 
 events:
+  # Age at this admission, as for MIMIC-IV: anchor_age plus the calendar years
+  # since anchor_year.
+  - name: PATIENT_AGE
+    columns:
+      code:
+        - const("PATIENT_AGE")
+      numeric_value: anchor_age + admit_year - anchor_year
+
   - name: ED_REGISTRATION
     columns:
       code:

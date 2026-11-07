@@ -1,11 +1,20 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
 #   3004410 = Hemoglobin A1c/Hemoglobin.total in Blood
+# HbA1c (bloed) is stored in % (unit Geen); HbA1c  (bloed) in mmol/mol (IFCC), converted to % (NGSP) with
+# the IFCC-NGSP master equation: % = 0.09148 * mmol/mol + 2.152.
 type: simple
 mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: "^3004410(//.*)?$"
+      code: "^3004410//[^/]*//Geen$"
     columns:
       numeric_value: col(numeric_value)
+      text_value: col(text_value)
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^3004410//[^/]*//mmol/mol$"
+    columns:
+      numeric_value: col(numeric_value) * 0.09148 + 2.152
       text_value: col(text_value)

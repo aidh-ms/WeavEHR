@@ -7,11 +7,11 @@ generation, and code vocabulary extraction.
 
 import json
 from datetime import datetime
+from importlib.metadata import version
 from pathlib import Path
 
 import polars as pl
 import pyarrow.parquet as pq
-from meds._version import __version__ as meds_version
 from meds.schema import CodeMetadataSchema, DatasetMetadataSchema
 
 from weavehr.logging import get_logger
@@ -70,8 +70,8 @@ class MEDSDataset(FileStorage):
         """Write dataset metadata to dataset.json.
 
         Automatically adds ETL information (WeavEHR version, MEDS version,
-        creation timestamp) to the provided metadata and validates against
-        the MEDS schema before writing.
+        creation timestamp) to a copy of the provided metadata and validates
+        against the MEDS schema before writing. The input dict is not modified.
 
         Args:
             metadata: Dictionary of dataset metadata (e.g., dataset_name, dataset_version)
@@ -79,14 +79,14 @@ class MEDSDataset(FileStorage):
         Raises:
             ValidationError: If metadata doesn't conform to MEDS DatasetMetadataSchema
         """
-        _metadata = {
+        metadata = {
+            **metadata,
             "etl_name": "WeavEHR",
-            "etl_version": "1.0.0",
-            "meds_version": meds_version,
+            "etl_version": version("weavehr"),
+            "meds_version": version("meds"),
             "created_at": datetime.now().isoformat(),
         }
 
-        metadata.update(_metadata)
         DatasetMetadataSchema.validate(metadata)
 
         logger.info(

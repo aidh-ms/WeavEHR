@@ -47,6 +47,23 @@ columns:
   - name: hospital_expire_flag
     type: int64
 
+join:
+  - path: hosp/patients.csv.gz
+    columns:
+      - name: subject_id
+        type: int64
+      - name: anchor_age
+        type: int64
+      - name: anchor_year
+        type: int64
+    both_on:
+      - subject_id
+
+post_join_callbacks:
+  - cast(admittime, "string", output=admit_text)
+  - slice_str(admit_text, 0, 4, output=admit_year_text)
+  - cast(admit_year_text, "int64", output=admit_year)
+
 event_defaults:
   subject_id: col(subject_id)
   time: col(admittime)
@@ -81,6 +98,14 @@ events:
       code:
         - col(admission_type)
         - col(admission_location)
+
+  # Age at this admission, as in mimic-code: anchor_age plus the calendar years
+  # since anchor_year. Anchor ages above 89 are recorded as 91.
+  - name: PATIENT_AGE
+    columns:
+      code:
+        - const("PATIENT_AGE")
+      numeric_value: anchor_age + admit_year - anchor_year
 
   - name: ADMISSION_TYPE
     columns:

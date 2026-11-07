@@ -38,12 +38,18 @@ class BaseStepConfig[T: BaseModel](BaseConfig, metaclass=ABCMeta):
         T: The type of step-specific configuration (must be a BaseModel)
 
     Attributes:
-        overwrite: Whether to overwrite existing workspace and dataset directories
+        overwrite: Whether to run the step again even if an earlier run completed
         config: Step-specific configuration object
         dataset: Dataset metadata configuration
     """
 
-    overwrite: bool = Field(False, description="Whether to overwrite the workspace dir if it already exists.")
+    overwrite: bool = Field(
+        False,
+        description=(
+            "Whether to run the step again even if an earlier run completed. The step's workspace "
+            "and dataset are emptied first."
+        ),
+    )
     config: T = Field(..., description="Additional configuration specific to the step.")
     dataset: DatasetConfig = Field(
         default_factory=DatasetConfig,

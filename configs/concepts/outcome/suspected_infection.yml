@@ -1,0 +1,4 @@
+name: suspected_infection
+version: 1.0.0
+extension_columns:
+  dataset: col("dataset")
