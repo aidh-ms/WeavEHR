@@ -1,12 +1,49 @@
 type: simple
 mappings:
   - pattern:
+      table: respiratorycare
+      event: VENTILATION_START
+      code: ^RESPIRATORY_CARE(//.*)?$
+    columns:
+      extension:
+        stay_id: col(stay_id)
+    filters:
+      - first_distinct(subject_id, stay_id, time)
+  - pattern:
       table: respiratorycharting
       event: RESPIRATORY_CHART
       code: ^respFlowCareData//RT Vent On/Off$
-    columns:
+    columns: &chart_columns
       text_value: col(text_value)
       extension:
         stay_id: col(stay_id)
     filters:
-      - text_value == "Start"
+      - str_contains(text_value, "(?i)^(start|continued)$")
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowCareData//O2 Device$
+    columns: *chart_columns
+    filters:
+      - str_contains(text_value, "(?i)^(ventilator|bi-pap|cpap)$")
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    columns: *chart_columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^(ventilator|vent|mechanical ventilator)$|trach.*vent|vent.*trach|bi?-?pap|cpap|(^|[^a-z])niv([^a-z]|$)")
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowSettings//(PEEP|PEEP/CPAP|CPAP|Pressure Control|Pressure Support|Tidal Volume \(set\)|Vent Rate)$
+    columns: *chart_columns
+    filters:
+      - cast(strip_str(text_value), "float64") > 0
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: '^respFlowPtVentData//(Exhaled MV|Exhaled TV \((patient|machine)\)|Mean Airway Pressure|Peak Insp\. Pressure|Plateau Pressure|B1: IPAP|B2: EPAP)$'
+    columns: *chart_columns
+    filters:
+      - cast(strip_str(text_value), "float64") > 0

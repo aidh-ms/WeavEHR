@@ -93,6 +93,7 @@ events:
         - col(hospitaladmitsource)
       extension:
         available_time: col(hospital_admission_timestamp)
+        hospital_id: col(hospitalid)
     filters:
       - drop_na(time)
       - first_distinct(subject_id, time)
@@ -104,6 +105,7 @@ events:
         - col(unittype)
       extension:
         available_time: col(admission_timestamp)
+        hospital_id: col(hospitalid)
 
   - name: MEDS_BIRTH
     columns:

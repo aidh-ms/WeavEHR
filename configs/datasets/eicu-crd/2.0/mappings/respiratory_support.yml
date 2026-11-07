@@ -1,0 +1,96 @@
+type: simple
+mappings:
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowCareData//(O2 Device|Oxygen Delivery Method|Ventilator Support Mode|Mechanical Ventilator Mode)$
+    level: invasive
+    columns: &chart_columns
+      text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
+    filters: &invasive
+      - str_contains(strip_str(text_value), "(?i)trach.*vent|vent.*trach|^(cmv|ac/cmv|simv)$")
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    level: invasive
+    columns: *chart_columns
+    filters: *invasive
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowCareData//(O2 Device|Oxygen Delivery Method|Bipap Delivery Mode|Non-invasive Ventilation Mode)$
+    level: noninvasive
+    columns: *chart_columns
+    filters: &noninvasive
+      - str_contains(strip_str(text_value), "(?i)bi?-?pap|cpap|(^|[^a-z])niv([^a-z]|$)|^s/t$")
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    level: noninvasive
+    columns: *chart_columns
+    filters: *noninvasive
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowCareData//(O2 Device|Oxygen Delivery Method|Ventilator Support Mode)$
+    level: ventilator
+    columns: *chart_columns
+    filters: &ventilator
+      - str_contains(strip_str(text_value), "(?i)^(ventilator|vent|mechanical ventilator|ps-auto|spontaneous)$")
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    level: ventilator
+    columns: *chart_columns
+    filters: *ventilator
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowCareData//(O2 Device|Oxygen Delivery Method)$
+    level: high_flow
+    columns: *chart_columns
+    filters: &high_flow
+      - str_contains(strip_str(text_value), "(?i)hfnc|high ?flow nasal|heated high flow|(high|hi)[- ]?flo[a-z]* ?nc|vapot|vaport")
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    level: high_flow
+    columns: *chart_columns
+    filters: *high_flow
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowCareData//(O2 Device|Oxygen Delivery Method)$
+    level: oxygen
+    columns: *chart_columns
+    filters: &oxygen
+      - str_contains(strip_str(text_value), "(?i)nasal cannula|^nc$|^n/c$|mask|rebreather|^nrm$|nrb|oxym|oxim|venturi|face tent|aerosol|trach collar|misty")
+      - not str_contains(strip_str(text_value), "(?i)bi?-?pap|cpap|(^|[^a-z])niv([^a-z]|$)|hfnc|high ?flow nasal|heated high flow|(high|hi)[- ]?flo[a-z]* ?nc|vapot|vaport")
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    level: oxygen
+    columns: *chart_columns
+    filters: *oxygen
+  - pattern:
+      table: respiratorycharting
+      event: RESPIRATORY_CHART
+      code: ^respFlowCareData//(O2 Device|Oxygen Delivery Method)$
+    level: none
+    columns: *chart_columns
+    filters: &none
+      - str_contains(strip_str(text_value), "(?i)^(ra|r/a|r[.]a[.]?|ro+m ?air|rm ?air|none|none [(]room air[)])$")
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    level: none
+    columns: *chart_columns
+    filters: *none

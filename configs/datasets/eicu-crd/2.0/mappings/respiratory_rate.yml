@@ -1,9 +1,18 @@
+# vitalperiodic: monitor values. nursecharting: nurse-charted values; rows at the same
+# time as a monitor value are kept.
 type: simple
 mappings:
 - pattern:
     table: vitalperiodic
     event: RESPIRATORY_RATE
     code: ^VITALS_PERIODIC//bpm$
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+- pattern:
+    table: nursecharting
+    event: NURSE_CHART
+    code: ^Vital Signs//Respiratory Rate//Respiratory Rate$
   columns:
     numeric_value: col(numeric_value)
     text_value: col(text_value)
