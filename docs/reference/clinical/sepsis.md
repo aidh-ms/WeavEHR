@@ -1,8 +1,5 @@
 # Suspected infection and Sepsis-3
 
-These notes describe the bundled implementation, including its assumptions and
-differences from upstream methods. They are not a claim of clinical validation.
-
 `suspected_infection` is the shared output concept. Each dataset's
 `suspected_infection.yml` selects its evidence rule: antibiotic/culture pairing
 for MIMIC-IV, or sustained antibiotic treatment for eICU.
@@ -24,8 +21,8 @@ Several windows can produce several events for the same patient. Overlapping
 windows can produce identical onset timestamps; `Sepsis3Transformer` collapses
 these copies by `subject_id` and `time` after assessing every window. Later
 distinct onsets are retained. Selecting a first onset per patient or episode
-belongs downstream; the transformer does not accept an `infection_window` selector. This deliberately differs from ricu's default selection of only its
-first infection window.
+belongs downstream; the transformer does not accept an `infection_window` selector.
+This differs from ricu's default selection of only its first infection window.
 Pairing, window lengths and the cumulative-minimum baseline follow
 [ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-sep3.R).
 
@@ -81,14 +78,13 @@ death shortens the horizon and excludes antibiotics starting after death. This
 intentionally extends YAIB's ICU-death exception to deaths after ICU discharge.
 Death applies across the subject's hospital admission. Missing death events leave the full horizon.
 Live discharge does not shorten it. No culture pairing is required
-by this transformer. Every qualifying start feeds the existing `sepsis3` SOFA-rise rule;
+by this transformer. Every qualifying start feeds the `sepsis3` SOFA-rise rule;
 YAIB's additional cohort and prediction-label rules are not applied. eICU demo
 inherits both mappings. Calculations retain continuous timestamps rather than
 reproducing ricu's time-grid rounding.
 
-For the missing eICU death events described in
-[issue #84](https://github.com/aidh-ms/WeavEHR/issues/84), we use the earliest
-recorded death timestamp. ICU discharge is eligible when `unitdischargestatus`
+eICU emits one death event per hospital admission at the earliest recorded
+death timestamp. ICU discharge is eligible when `unitdischargestatus`
 is `Expired`; hospital discharge is eligible when `hospitaldischargestatus` is
 `Expired`. `min` selects the earliest non-null death timestamp within each row,
 then `first_distinct(subject_id, order_by=[time, stay_id])` retains exactly one event per MEDS

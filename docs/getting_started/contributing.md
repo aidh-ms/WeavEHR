@@ -31,15 +31,14 @@ that demonstrates item selection, units, and relevant boundary cases. Never comm
 patient-level records or credentialed dataset extracts.
 
 Preview the site with `uv run mkdocs serve`. The same strict build runs in CI.
-The full build is in `site/` and can be served with a local HTTP server; no live
-site deployment is required to review documentation.
+The full build is in `site/` and can be served with a local HTTP server.
 
 ## Find the right extension point
 
 - [Add a table or concept](../guides/extend.md) for source and mapping changes.
 - [Write a transformer](../guides/transformer.md) for time-dependent calculations.
 - [Architecture](../contributing/architecture.md) for changes to the engine.
-- [Documentation design](../contributing/documentation.md) and
+- [Writing documentation](../contributing/documentation.md) and
   [comment policy](../contributing/comments.md) for prose and attribution.
 
 Use Conventional Commit titles such as `fix(eicu): ...` or `docs: ...`.

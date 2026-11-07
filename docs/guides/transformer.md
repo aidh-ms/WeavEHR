@@ -6,8 +6,7 @@ it directly on small Polars frames.
 
 ## Example: a trailing mean heart rate
 
-This runnable example computes the mean at each observation time, over the preceding
-hour. It is a teaching example, not a new bundled clinical concept.
+`MeanHeartRate` computes the mean at each observation time over the preceding hour.
 
 ```python
 --8<-- "example/quickstart/transformer.py"
@@ -24,8 +23,8 @@ is exactly one hour old and is excluded: `RollingMean` uses `(t - window, t]`.
 The last observation, at 11:00, demonstrates that an expired value is not carried
 forward indefinitely. No event is generated in the two-hour gap.
 
-Calling `transform()` does no file I/O. The example passes a real concept, mapping,
-and step to the constructor so it uses the same contract as the pipeline.
+The constructor takes a concept, dataset mapping, and owning step.
+Calling `transform()` does no file I/O.
 
 ## Connect it to a pipeline
 

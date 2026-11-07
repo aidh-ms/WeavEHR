@@ -50,11 +50,10 @@ are optional lists; empty means all. `subjects_per_shard` is a positive integer,
 default `1000`. Dataset filters accept either a name or `name/version`.
 See [sharding limitations](../guides/output.md#write-subject-based-shards).
 
-!!! note "Older configuration examples"
-    Top-level `config_files` and concept `dataset_configs` are not current step fields.
-    Select bundled configurations by dataset name/version; load custom configurations
-    through the registries. Many config models ignore unknown fields, so a misspelled
-    or obsolete option may have no effect rather than raising an error.
+!!! note "Unknown configuration fields"
+    Many config models ignore unknown fields. Check option names against the
+    [configuration reference](../reference/api/config.md): a misspelled option
+    may have no effect and raise no error.
 
 ## Output layout
 

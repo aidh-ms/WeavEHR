@@ -5,13 +5,7 @@ inspired the shared-concept approach. [mimic-code](https://github.com/MIT-LCP/mi
 [YAIB-cohorts](https://github.com/rvandewater/YAIB-cohorts), and
 [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL) provide source definitions and
 method references identified below. [reprodICU](https://github.com/CUB-CORR/reprodICU)
-was also consulted during development; this acknowledgment does not claim a
-specific file-level port where one has not been recorded.
-
-This index records provenance, not equivalence or validation. It consolidates
-existing citations; it does not retroactively establish how every line was authored.
-Keep required copyright/licence notices with copied or adapted material. General
-credit and this index do not replace such notices or the original dataset citations.
+was also consulted during development.
 
 ## MIMIC-IV measurement mappings
 
@@ -22,8 +16,7 @@ these mappings unless overridden. They do not reproduce the upstream SQL pipelin
 source observations are retained subject to the local mapping and concept limits;
 upstream aggregation and value-cleaning rules are not generally copied.
 
-The local filenames below omit `.yml`. Exact item IDs and expressions remain in
-the mapping files. A short `Source:` pointer there resolves to this pinned index.
+The local filenames below omit `.yml`.
 
 | Upstream file | Local mappings |
 | --- | --- |
@@ -42,19 +35,17 @@ the mapping files. A short `Source:` pointer there resolves to this pinned index
 | [treatment/crrt.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/treatment/crrt.sql) | `crrt_access_pressure`, `crrt_blood_flow`, `crrt_citrate`, `crrt_current_goal`, `crrt_dialysate_rate`, `crrt_effluent_pressure`, `crrt_filter_pressure`, `crrt_heparin_dose`, `crrt_hourly_patient_fluid_removal`, `crrt_postfilter_replacement_rate`, `crrt_prefilter_replacement_rate`, `crrt_replacement_rate`, `crrt_return_pressure`, `crrt_ultrafiltrate_output` |
 
 The shared `crrt_blood_flow` unit (`mL/min`) is also documented in the pinned
-`treatment/crrt.sql`. Comments for exceptional source representations remain
-beside those mappings.
+`treatment/crrt.sql`.
 
 ## HiRID and SICdb item mappings
 
 These mappings use the `hirid` and `sic` source entries in ricu's
 [`inst/extdata/config/concept-dict.json`](https://github.com/eth-mds/ricu/blob/main/inst/extdata/config/concept-dict.json).
-**The original per-file headers did not record an upstream revision.** The link
-is a discovery aid, not an immutable provenance claim. The table preserves their
-exact ricu concept keys. Local scope is `configs/datasets/hirid/1.1.1/mappings/`
+**Upstream revision: unrecorded.** The table lists the corresponding ricu concept
+keys. Local scope is `configs/datasets/hirid/1.1.1/mappings/`
 and `configs/datasets/sic/1.0.6/mappings/`; later versions may inherit them.
-Unit conversions are implemented locally. The entry does not imply replication
-of ricu's resampling or cross-concept calculations.
+These simple mappings select items and convert units; they do not perform ricu's
+resampling or cross-concept calculations.
 
 | Local mapping (without `.yml`) | ricu key | Source datasets |
 | --- | --- | --- |
@@ -133,7 +124,7 @@ of ricu's resampling or cross-concept calculations.
 | GCS, SOFA, sepsis transformers and associated mappings | [ricu callback-cncpt.R](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R), [callback-sep3.R](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-sep3.R), and concept dictionary at `c0efac720dbe72caaf63b361b6978a24383835bf` (0.6.3) | Reference thresholds, evidence rules, and selected mappings; continuous event-time evaluation and local missingness/state policies differ. See the clinical method pages. |
 | MIMIC-IV GCS correction, pressor overlap, antibiotic selection/exclusions | [mimic-code](https://github.com/MIT-LCP/mimic-code/tree/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts): `measurement/gcs.sql`, `score/sofa.sql`, `medication/antibiotic.sql` | Specific rules, not full SQL equivalence; local timing and antibiotic selection differences are documented with the methods. |
 | eICU antibiotics and sustained-treatment infection rule | [YAIB-cohorts medication dictionary](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/configs/medications/concept-dict.json) and [callback-sepsis.R](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/callbacks/callback-sepsis.R) at `74ac699f5d4117613f9c48bdc4e0852099c42e19` | Drug selection and continuity rule; WeavEHR uses hospital-admission subjects, continuous timestamps, and an extended recorded-death exception. |
-| AmsterdamUMCdb OMOP mappings | [AMSTEL mapping files](https://github.com/AmsterdamUMC/AMSTEL/tree/main/data/mappings) and local `configs/datasets/aumc/README.md` | OMOP targets and source-item disambiguation. Existing main-branch headers do not consistently pin a revision; do not assign one retroactively. |
+| AmsterdamUMCdb OMOP mappings | [AMSTEL mapping files](https://github.com/AmsterdamUMC/AMSTEL/tree/main/data/mappings) and local `configs/datasets/aumc/README.md` | OMOP targets and source-item disambiguation. See individual mappings for source details; no common upstream revision is recorded. |
 
 ## Maintain this index
 

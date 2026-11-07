@@ -1,8 +1,8 @@
 # Clinical definitions
 
-The same score name can hide different timing, missingness, and cohort rules.
-These pages describe **what the bundled code computes**. Check the dataset's mapping
-and parameters alongside them before using a score as an outcome or model input.
+Bundled clinical concepts use the timing, missingness, and cohort rules below.
+Check the dataset's mapping and parameters when selecting a score as an outcome
+or model input.
 
 | Method | Start here | Decision to inspect |
 | --- | --- | --- |

@@ -1,9 +1,8 @@
 # Acute kidney injury
 
-WeavEHR provides `aki_creatinine`, `aki_urine_output`, and their combination `aki`.
-These notes describe the implementation in
+WeavEHR provides `aki_creatinine`, `aki_urine_output`, and their combination `aki`,
+implemented in
 [`aki.py`](https://github.com/aidh-ms/WeavEHR/blob/main/src/weavehr/steps/concept/transformer/aki.py).
-They are not a claim of clinical validation.
 
 ## Creatinine criterion
 

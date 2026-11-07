@@ -1,8 +1,5 @@
 # SOFA
 
-These notes describe the bundled implementation, including its assumptions and
-differences from upstream methods. They are not a claim of clinical validation.
-
 ## SOFA measurement alignment
 
 SOFA components carry the latest point measurements forward for **one hour**
@@ -11,15 +8,15 @@ Both boundaries are inclusive. Set `kwargs.window` in a component's mapping to
 override this alignment window. Creatinine, platelets, bilirubin, GCS and MAP
 retain the one-hour default. Urine collection remains a trailing 24-hour
 window; ventilation and pressors retain their separate state-expiry rules.
-Total SOFA still takes each component's worst emitted score over 24 hours.
+Total SOFA takes each component's worst emitted score over 24 hours.
 
 Exact timestamp ties use the worst-value direction: maximum creatinine,
 bilirubin and FiO₂; minimum platelets, MAP, GCS and PaO₂. GCS reconstruction
 also takes the minimum of tied component or recorded-total values; correction
-flags keep their existing precedence. Later measurements replace these tied
-values normally. These reductions occur inside score calculations; ordinary
-mapped concepts retain every record. Urine volumes still sum, and state inputs
-retain their existing rules.
+flags use 1 when conflicting flags share a timestamp (see [GCS](gcs.md)). Later
+measurements replace these tied values normally. These reductions occur inside score calculations; ordinary
+mapped concepts retain every record. Tied urine volumes are summed; ventilation
+and pressors use the episode rules below.
 
 SOFA and GCS ignore numeric `NaN` and positive or negative infinity inside
 their calculations. Those rows neither generate assessments nor refresh
@@ -36,17 +33,17 @@ to align ventilation with the gas measurements. No intermediate state concept is
 Gas alignment defaults to **two hours**, following
 [ricu's default matching window](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L192).
 The latest PaO₂ and FiO₂ must each be within that window; no score is emitted
-without both, and missing FiO₂ is not replaced with 21%. Assessments still use
-the input event timestamps rather than ricu's hourly grid. 
+without both, and missing FiO₂ is not replaced with 21%. Assessments use
+the input event timestamps rather than ricu's hourly grid.
 
 The MIMIC-IV mappings select procedure items 225792 and 225794, preserving native
 `orderid` and `stay_id` to pair each procedure's start and end. Both markers carry
 the ventilation level in the code: `ventilation_start//invasive` (225792) or
 `ventilation_start//noninvasive` (225794), and likewise for `ventilation_end`.
 Respiratory SOFA does not use the level, so noninvasive ventilation counts as
-ventilated. The eICU mappings use the existing respiratory-charting `Start` and
+ventilated. The eICU mappings use respiratory-charting `Start` and
 `Off`/`off` markers and preserve `stay_id`; those observations have no shared
-episode identifier and no level, so their codes stay `ventilation_start` and
+episode identifier and no level, so their codes are `ventilation_start` and
 `ventilation_end`.
 
 An end stops its matching episode; overlapping identified episodes keep ventilation
@@ -58,8 +55,7 @@ assessment; a stay change absent from all inputs cannot be detected.
 A linked recorded end confirms the episode until that end, even beyond the timeout;
 unidentified observations always use the configured fallback. Its boundary is
 inclusive. Expiry is evaluated at the next input event; it creates no timestamp.
-The default is `null` (no forced expiry), preserving the previous default until a
-ventilation-specific timeout is agreed. `kwargs.ventilation_id_column` can select
+The default is `null` (no forced expiry). `kwargs.ventilation_id_column` can select
 a native linking field other than the default `orderid`.
 
 ## Cardiovascular SOFA
@@ -93,7 +89,7 @@ Timeout makes a rate unknown at the next input event; it does not generate an
 event at the timeout itself. A recorded zero is observed cessation, whereas
 expiry is missing information. No component score is emitted when all inputs
 are unknown. With a current normal MAP, an expired pressor can yield a component
-score of zero. Total SOFA still uses each component's worst emitted score over
+score of zero. Total SOFA uses each component's worst emitted score over
 its own trailing 24-hour window.
 
 The shipped defaults were selected on **2026-10-23 from public demo
@@ -106,7 +102,7 @@ distributions**, not validated as clinical cutoffs:
 
 The MIMIC analysis used
 [`inputevents.csv.gz` from demo 2.2](https://physionet.org/files/mimic-iv-demo/2.2/icu/inputevents.csv.gz),
-items 221906, 221289, 221662 and 221653, with the existing `mcg/kg/min`
+items 221906, 221289, 221662 and 221653, with the configured `mcg/kg/min`
 selection. Episodes were grouped by stay and `linkorderid`, split at retained
 ends (`statusdescription != "ChangeDose/Rate"`), with simultaneous stop/restart
 treated as continuation. There were 247 closed episodes. All linked streams

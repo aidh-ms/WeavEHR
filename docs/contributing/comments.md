@@ -2,7 +2,7 @@
 
 A useful comment preserves information a future reader cannot reliably recover
 from the code: **why a choice exists, what an assumption means, or where a borrowed
-rule came from**. Length is a consequence of that need, not a target.
+rule came from**.
 
 ## What belongs where
 
@@ -14,7 +14,7 @@ rule came from**. Length is a consequence of that need, not a target.
 | Shared upstream revision and mapping scope | `configs/SOURCES.md` |
 | Exact upstream algorithm used by one module | One module/class source pointer, with the pinned source in the index |
 | Required copyright, licence, or attribution notice | Preserve in its required location; a source index is not a replacement |
-| Why this PR was made, experiments, review discussion | PR description or linked issue |
+| Change rationale, experiments, review discussion | PR description or linked issue |
 | How to install or operate the package | User documentation |
 
 ## Write the reason beside the choice
@@ -77,5 +77,4 @@ Use the repository's Google-style format and type annotations.
 
 Check that executable Python and parsed YAML values are unchanged. Preserve source
 traceability and notices. Check that shortened prose still explains every unusual
-choice. A comment cleanup must not quietly change a clinical rule or claim a new
-validation result.
+choice. Keep clinical rules and validation statements unchanged in comment-only edits.

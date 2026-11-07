@@ -1,9 +1,8 @@
 # Configuration models
 
-Start with the hand-written [table](../../user_guide/extraction.md),
+Start with the [table](../../user_guide/extraction.md),
 [concept](../../user_guide/concepts.md), and [step](../../user_guide/pipeline.md)
-references for YAML examples and processing order. These model signatures and
-field docstrings are read from the code in this checkout.
+references for YAML examples and processing order.
 
 ::: weavehr.steps.extraction.config.step
     options:

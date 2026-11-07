@@ -1,8 +1,5 @@
 # GCS
 
-These notes describe the bundled implementation, including its assumptions and
-differences from upstream methods. They are not a claim of clinical validation.
-
 `gcs_total` preserves directly recorded totals, currently mapped for eICU.
 The computed `gcs` concept uses `GcsTransformer`, a `WindowedConceptTransformer`
 that aligns `gcs_eye`, `gcs_motor`, `gcs_verbal`, recorded totals and optional
@@ -41,11 +38,11 @@ eICU; RASS and ventilation status are not interpreted by `GcsTransformer`.
 Only numeric GCS components or recorded totals generate assessments. Flags
 and expiry alone create no assessment; they take effect at the next numeric
 GCS input. A patient with no numeric GCS observations has no GCS timeline;
-total SOFA already treats a missing CNS component as zero.
+total SOFA treats a missing CNS component as zero.
 
 Six-hour component carry-forward and normal-value imputation follow
 [ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L362).
-The recency rule deliberately differs from ricu's preference for any still-current
+The recency rule differs from ricu's preference for any still-current
 recorded total. Setting the total to 15 for an explicit ETT marker follows the
 default correction in ricu and
 [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/gcs.sql#L66).

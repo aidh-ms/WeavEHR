@@ -38,9 +38,10 @@ concept_paths = {yaml.safe_load(p.read_text())["name"]: p for p in (CONFIGS / "c
 versions = sorted(p for p in (CONFIGS / "datasets").glob("*/*") if p.is_dir())
 index = [
     "# Dataset reference\n",
-    "This inventory is generated from the configurations in this checkout, after resolving inheritance. "
-    "A configured mapping is **not** evidence of complete source coverage or clinical validation. "
+    "Configured datasets and mappings, including inherited definitions. "
     "Open a dataset/version to see its expected files and concept mappings.\n",
+    "Counts include non-empty mappings. Actual output depends on the available source files "
+    "and matching observations; check coverage in your cohort after running the pipeline.\n",
     "Use these exact names and quoted version strings in your step configs. "
     "See [running a dataset](../guides/run-dataset.md) and [identity and time conventions](dataset-notes.md).\n",
     "| Dataset | Version | Tables | Non-empty concept mappings |",
