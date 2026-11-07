@@ -103,8 +103,11 @@ scores and changing measurement coverage can create or hide a rise.
 
 ## Reading the output
 
-These are retrospective labels. The culture, antibiotic or sustained course
-that confirms suspicion can occur after the reported onset, and the onset
-itself is dated by the earlier of two events. Calculations use continuous
-timestamps and the dataset's `subject_id`, which in eICU spans ICU stays.
-Provenance is pinned in [sources and credit](../sources.md).
+With culture pairing, suspected infection is dated by the earlier antibiotic
+or culture event; with sustained treatment, it is dated by the qualifying
+antibiotic start. Sepsis onset is the first qualifying SOFA rise within the
+surrounding infection window. The evidence confirming suspicion can arrive
+after either timestamp, so these are retrospective labels.
+
+Calculations use continuous timestamps and the dataset's `subject_id`, which
+in eICU spans ICU stays. Provenance is pinned in [sources and credit](../sources.md).

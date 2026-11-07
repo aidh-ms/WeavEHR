@@ -112,7 +112,7 @@ Two heart-rate events this time. Put `|PULSE` back when you are done.
 The fresh directory matters: a step that already completed in an output
 directory is skipped on the next run, even if you changed its config. That
 is deliberate, so that a crash or a tweak to a later step never silently
-re-extracts a full database, but it catches everyone once. [Rerunning a
+re-extracts a full database. [Rerunning a
 pipeline](../guides/rerun.md) explains how to force a step.
 
 ## Where next

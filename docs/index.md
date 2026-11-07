@@ -56,12 +56,10 @@ runs unchanged against eICU or your own hospital's export.
 
 ## Why we built it
 
-We kept rewriting the same extraction code for every dataset and every
-study, and so did everyone we talked to. [ricu](https://github.com/eth-mds/ricu)
-showed that the right abstraction is a dictionary of clinical concepts with
-a small per-dataset mapping for each; WeavEHR takes that idea into Python,
-onto [Polars](https://pola.rs), and into a file layout that other tools can
-read without us.
+WeavEHR builds on [ricu](https://github.com/eth-mds/ricu)'s shared dictionary
+of clinical concepts, with a small per-dataset mapping for each. It brings
+that design to Python, uses [Polars](https://pola.rs) for processing, and
+writes Parquet files that other tools can read directly.
 
 - **One concept, many datasets.** `heart_rate` is defined once. MIMIC-IV,
   eICU, AmsterdamUMCdb, HiRID, SICdb and NWICU each contribute a mapping;

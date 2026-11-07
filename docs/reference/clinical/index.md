@@ -15,7 +15,7 @@ and [YAIB-cohorts](https://github.com/rvandewater/YAIB-cohorts)).
 | [AKI](aki.md) | `aki`, `aki_creatinine`, `aki_urine_output` | MIMIC-IV, eICU | Observed-window baseline; urine output needs observed coverage and a weight |
 | [Respiratory support](respiratory.md) | `respiratory_support`, `airway_start`, `airway_end` | MIMIC-IV, eICU, AmsterdamUMCdb | Observations, not episodes; an endotracheal tube is an airway, not ventilation |
 
-## Three things that hold for all of them
+## Interpreting the outputs
 
 **Continuous time, not an hourly grid.** ricu and mimic-code evaluate scores on
 a resampled hourly timeline. We evaluate at the timestamps of the inputs and
@@ -28,10 +28,10 @@ rather than zero, so you can tell "no data" from "scored 0". Where a total
 has to be formed anyway (total SOFA, combined AKI), the page says exactly how
 missing parts are treated.
 
-**Labels are retrospective.** Sepsis onset is dated by the earlier of two
-events that may both lie in the future relative to the onset timestamp. If
-you use these as prediction targets, decide for yourself when the evidence
-would have been available.
+**Sepsis labels are retrospective.** Sepsis onset is the first qualifying
+SOFA rise within a suspected-infection window. The evidence confirming
+infection can arrive after the reported onset. When using these labels as
+prediction targets, account for when that evidence would have been available.
 
 The `subject_id` these scores partition by is whatever the dataset mapping
 defines; in eICU that is a hospital admission, not an ICU stay. None of the
