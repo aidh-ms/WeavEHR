@@ -6,76 +6,79 @@
 [![Python](https://img.shields.io/badge/python-3.13%2B-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**Different ICU datasets. Shared clinical concepts.**
+WeavEHR is a Python package for preparing electronic health record (EHR) data
+for analysis and machine learning. It extracts timestamped clinical events
+from source tables and stores them as Parquet files in the
+[Medical Event Data Standard (MEDS)](https://github.com/Medical-Event-Data-Standard/meds)
+format.
 
-Every ICU database stores a heart rate differently. WeavEHR lets you describe
-each source once in YAML and then asks the same question of all of them,
-returning Parquet event streams in the
-[MEDS](https://github.com/Medical-Event-Data-Standard/meds) layout with one
-name and one unit per concept. The analysis code you write against MIMIC-IV
-runs unchanged against eICU, AmsterdamUMCdb, HiRID, SICdb, NWICU, or your own
-hospital's export.
+Extraction can be used on its own, retaining source-specific event codes for
+workflows such as training EHR foundation models. An optional
+harmonisation step maps these events to shared clinical concepts and units,
+allowing the same analysis code to be used across datasets. Mappings and
+clinical definitions can be revised without repeating extraction.
 
-It is a Python successor to [ricu](https://github.com/eth-mds/ricu), built on
-[Polars](https://pola.rs) and [Pydantic](https://docs.pydantic.dev), and
-designed to run offline on a 16–32 GB laptop with no database server.
+Source tables, unit conversions and concept mappings are defined in YAML.
+Clinical scores and definitions, including SOFA and Sepsis-3, are implemented
+as Python transformers.
+The [dataset reference](https://aidh-ms.github.io/WeavEHR/reference/datasets/)
+lists the available sources and versions. Custom configurations can be added
+for local hospital data.
+
+Processing uses [Polars](https://pola.rs) and can run offline on machines
+with 16 GB of RAM. No database server is required.
 
 **Documentation:** <https://aidh-ms.github.io/WeavEHR/>
 
-## Try it in a minute, without patient data
+## Installation
 
-With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Git:
+WeavEHR requires Python 3.13 or newer. Install from PyPI:
+
+```bash
+pip install weavehr
+```
+
+Dataset and concept configurations are included in the package.
+
+## Run the example
+
+The repository contains the example script, synthetic data and configurations.
+After installing WeavEHR, clone the repository to get these files and run the
+example with the same Python environment:
 
 ```bash
 git clone https://github.com/aidh-ms/WeavEHR.git
 cd WeavEHR
-uv sync --frozen --no-dev
-uv run --no-dev python example/quickstart/run.py
+python example/quickstart/run.py
 ```
 
-Four synthetic observations go in; three `heart_rate//bpm` events come out,
-and the temperature that has no mapping stays behind in extraction. The
+The example writes four extracted events and three harmonised
+`heart_rate//bpm` events from synthetic data. The
 [tutorial](https://aidh-ms.github.io/WeavEHR/getting_started/basic_usage/)
-walks through the files that made that happen and lets you change one.
+explains each step and shows how to modify the mapping.
 
-To use WeavEHR as a library, `pip install weavehr` works too; the bundled
-dataset and concept configs ship inside the wheel.
+## Documentation
 
-## Where to go next
-
-| I want to… | Read |
+| Task | Documentation |
 | --- | --- |
-| Understand how tables, mappings and concepts fit together | [How it fits together](https://aidh-ms.github.io/WeavEHR/getting_started/overview/) |
-| Process a dataset I have downloaded | [Run a dataset](https://aidh-ms.github.io/WeavEHR/guides/run-dataset/) |
-| See which concepts exist for which dataset | [Dataset reference](https://aidh-ms.github.io/WeavEHR/reference/datasets/) and [concept catalogue](https://aidh-ms.github.io/WeavEHR/reference/concepts/) |
-| Change a mapping or select variables | [Select and override configs](https://aidh-ms.github.io/WeavEHR/guides/configure/) |
-| Work out why a value is missing or odd | [Debug a mapping](https://aidh-ms.github.io/WeavEHR/guides/debug/) |
-| Add a hospital, a concept, or a calculation | [Extend WeavEHR](https://aidh-ms.github.io/WeavEHR/guides/extend/) |
-| Check how a score is defined | [Clinical definitions](https://aidh-ms.github.io/WeavEHR/reference/clinical/) |
-| Contribute | [Development guide](https://aidh-ms.github.io/WeavEHR/getting_started/contributing/) |
+| Understand the data model | [How it fits together](https://aidh-ms.github.io/WeavEHR/getting_started/overview/) |
+| Process a dataset | [Run a dataset](https://aidh-ms.github.io/WeavEHR/guides/run-dataset/) |
+| Find available datasets and concepts | [Dataset reference](https://aidh-ms.github.io/WeavEHR/reference/datasets/) and [concept catalogue](https://aidh-ms.github.io/WeavEHR/reference/concepts/) |
+| Select variables or change mappings | [Select and override configs](https://aidh-ms.github.io/WeavEHR/guides/configure/) |
+| Debug missing or unexpected values | [Debug a mapping](https://aidh-ms.github.io/WeavEHR/guides/debug/) |
+| Add a dataset, concept or calculation | [Extend WeavEHR](https://aidh-ms.github.io/WeavEHR/guides/extend/) |
+| Inspect clinical definitions | [Clinical definitions](https://aidh-ms.github.io/WeavEHR/reference/clinical/) |
+| Contribute to development | [Development guide](https://aidh-ms.github.io/WeavEHR/getting_started/contributing/) |
 
-The docs are generated from this repository; `uv sync --frozen --all-groups`
-and `uv run mkdocs serve` build them for the exact revision you have checked
-out, including an inventory of every table and mapping in [`configs/`](configs/).
+## Acknowledgements
 
-## Scope
-
-WeavEHR does not obtain or download data; access stays with the providers
-(PhysioNet credentialing for MIMIC, eICU, HiRID, SICdb and NWICU; a data-use
-agreement for AmsterdamUMCdb). It does not resample to an hourly grid, and a
-shared concept name does not make two hospitals' measurement practices
-equivalent. The clinical scores have explicit windows and missing-data rules,
-documented on their own pages. WeavEHR is pre-1.0 and under active
-development; pin a revision for a study.
-
-## Credit
-
-WeavEHR builds on the ICU data community: ricu's shared-concept design,
-source definitions from [mimic-code](https://github.com/MIT-LCP/mimic-code),
+WeavEHR's dictionary of clinical concepts and dataset-specific mappings is
+inspired by [ricu](https://github.com/eth-mds/ricu). Source definitions and
+clinical methods draw on [mimic-code](https://github.com/MIT-LCP/mimic-code),
 [YAIB-cohorts](https://github.com/rvandewater/YAIB-cohorts) and
-[AMSTEL](https://github.com/AmsterdamUMC/AMSTEL), and ideas from
-[reprodICU](https://github.com/CUB-CORR/reprodICU). The
-[source index](configs/SOURCES.md) records exactly what was taken from where,
-at which revision, and what differs.
+[AMSTEL](https://github.com/AmsterdamUMC/AMSTEL).
+[reprodICU](https://github.com/CUB-CORR/reprodICU) was also consulted during
+development. The [source index](configs/SOURCES.md) documents the sources,
+revisions and local adaptations.
 
 Licensed under [MIT](LICENSE). Citation metadata is in [CITATION.cff](CITATION.cff).
