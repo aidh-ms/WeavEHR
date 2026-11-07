@@ -1,7 +1,9 @@
 # Read and shard output
 
-**Goal:** use the event streams in an analysis or prepare subject-based files.
-The [pipeline reference](../user_guide/pipeline.md#output-layout) lists exact paths.
+The output is ordinary Parquet, so this page is short: how to read one
+concept, how to combine datasets without mixing up patients, and how to shard
+by subject. The exact paths are in the
+[pipeline reference](../user_guide/pipeline.md#output-layout).
 
 ## Read one concept
 
@@ -16,10 +18,10 @@ heart_rate = pl.scan_parquet(
 print(heart_rate.sort(["subject_id", "time"]).head(10).collect())
 ```
 
-Use lazy scans for large files. Event order is not guaranteed across all outputs;
-sort explicitly for trajectories. `time` is the event time, not necessarily the time
-the result became available. Availability metadata is source-specific and must be
-preserved explicitly when your prediction task needs it.
+Use lazy scans for large files and sort explicitly when you need trajectories;
+row order is not guaranteed. `time` is when the event happened, not when its
+result became available; if your prediction task needs the latter, it is a
+source-specific field that you have to carry through as an extension column.
 
 ## Combine datasets while preserving identity
 
@@ -37,9 +39,9 @@ for dataset, version in [("mimic-iv", "3.1"), ("eicu-crd", "2.0")]:
 combined = pl.concat(frames, how="diagonal_relaxed")
 ```
 
-A patient's key is now `(source_dataset, source_version, subject_id)`. For different
-releases of the same source, decide explicitly whether records overlap. Harmonised
-names do not remove differences in coverage, sampling, units, or clinical practice.
+A patient's key is now `(source_dataset, source_version, subject_id)`. Two
+releases of the same source usually contain the same patients, so decide
+explicitly whether you want both.
 
 ## Write subject-based shards
 
@@ -76,8 +78,9 @@ Sharding does not resample, pivot to a wide table, or create train/test splits.
 
 ## Nulls, duplicates, and limits
 
-A null numeric value is not zero. Some events are categorical or marker events;
-others may have been set to null by concept limits. Mappings can retain multiple
-observations at the same timestamp. Choose aggregation and missingness rules for
-your analysis explicitly; the [clinical methods](../reference/clinical/index.md)
-describe the separate rules used inside the bundled scores.
+A null `numeric_value` is not zero: some events are categorical or markers,
+and a simple mapping nulls values outside its plausibility limits rather than
+dropping the row. Mappings can also keep several observations at the same
+timestamp. Aggregation and missing-data handling are therefore yours to
+choose; the [clinical pages](../reference/clinical/index.md) say what the
+bundled scores do internally.

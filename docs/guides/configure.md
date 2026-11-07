@@ -1,8 +1,9 @@
 # Select and override configs
 
-**Goal:** run only the tables or concepts you need, or change a mapping for a study.
-Bundled configs are loaded into process-wide registries. Load them explicitly
-before inspecting or replacing them:
+Most studies want a subset of the bundled tables and concepts, and many want
+to change a mapping or two. Both go through the registries, which hold every
+loaded config for the lifetime of the Python process. Load the bundled set
+explicitly before you look at or replace anything:
 
 ```python
 from weavehr import auto_load_configs, concept_config_registry, dataset_config_registry
@@ -86,4 +87,5 @@ collection in a fresh process, use `auto_load_configs(Path("study-configs"))` wi
 `concepts/` and `datasets/` below it. That marks config loading complete; the bundled
 collection is not subsequently added automatically.
 
-**Next:** [debug the change on a small frame](debug.md) before a full run.
+Before running the changed mapping over a full database,
+[test it on a few rows](debug.md).

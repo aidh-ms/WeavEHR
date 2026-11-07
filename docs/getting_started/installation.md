@@ -1,9 +1,11 @@
 # Installation
 
-WeavEHR requires **Python 3.13 or newer**. The first pipeline uses a repository
-checkout so the code, configs, example, and documentation come from the same revision.
+WeavEHR needs **Python 3.13 or newer**. It runs on Linux, macOS and Windows
+and has no services to set up: the dependencies are Polars, PyArrow,
+Pydantic, PyYAML and the MEDS schema package, and processing happens on
+local files.
 
-## Recommended: a checkout with uv
+## A checkout with uv (recommended while pre-1.0)
 
 ```bash
 git clone https://github.com/aidh-ms/WeavEHR.git
@@ -11,39 +13,41 @@ cd WeavEHR
 uv sync --frozen --no-dev
 ```
 
-Use `uv run --no-dev python ...` for scripts in this environment. To reproduce a study,
-record `git rev-parse HEAD` and keep `uv.lock` with the run configuration.
-For development and documentation tools, use `uv sync --frozen --all-groups` instead.
+Then run scripts with `uv run --no-dev python ...`. This is what the
+tutorial and the guides assume, and it is the setup we would pick for a
+study: the code, the bundled configs, the example and these docs all come
+from one revision, and `git rev-parse HEAD` plus `uv.lock` is everything you
+need to record to rerun it later. Add `--all-groups` instead of `--no-dev`
+if you want the test and documentation tooling.
 
-## Install into an existing Python environment
-
-From a checkout:
-
-```bash
-python -m pip install .
-```
-
-Or install a specific Git revision, replacing `COMMIT_SHA` with the revision you want:
+## From PyPI, or into an existing environment
 
 ```bash
-python -m pip install "weavehr @ git+https://github.com/aidh-ms/WeavEHR.git@COMMIT_SHA"
+pip install weavehr
 ```
 
-Bundled dataset and concept configs are included in the wheel and load when the
-first step is created. You do not need to copy them into a study folder.
-The quickstart's example files are in the checkout, not the installed package.
-
-## Check the environment
+installs the [latest release](https://pypi.org/project/weavehr/), and
 
 ```bash
-uv run --no-dev python -c "from weavehr import WeavEHRProject, ExtractionStep, ConceptStep; print('WeavEHR is ready')"
+pip install "weavehr @ git+https://github.com/aidh-ms/WeavEHR.git@COMMIT_SHA"
 ```
 
-The core dependencies are Polars, PyArrow, Pydantic, PyYAML, and MEDS.
-No database server is needed for the bundled file-based extraction pipelines.
-Installation may need internet access; processing uses local data and configs.
-On an offline compute system, prepare the environment and transfer the data through
-your usual approved workflow before running WeavEHR.
+installs a specific revision. The bundled dataset and concept configs are
+inside the wheel and load the first time you create a step, so you do not
+need to copy them anywhere. The example files for the tutorial are not in
+the wheel; clone the repository for those. Because the project moves quickly,
+a release can lag the configs on `main`; check the
+[dataset reference](../reference/datasets.md) of the revision you installed.
 
-**Next:** [run the synthetic tutorial](basic_usage.md) or
-[connect your dataset](../guides/run-dataset.md).
+## Check it works
+
+```bash
+uv run --no-dev python -c "from weavehr import WeavEHRProject, ExtractionStep, ConceptStep; print('ready')"
+```
+
+Installing needs internet access; running does not. On an air-gapped system,
+build the environment where you have access and move it, together with the
+data, through whatever process your institution approves.
+
+Next: [run the synthetic tutorial](basic_usage.md), or go straight to
+[your own dataset](../guides/run-dataset.md).

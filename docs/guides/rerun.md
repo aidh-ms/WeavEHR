@@ -1,7 +1,8 @@
 # Rerun and reproduce a pipeline
 
-A completed step is reused by **step name and output location**. WeavEHR does not
-hash the inputs or automatically invalidate results when YAML or source data changes.
+A completed step is recognised by its **name and output location**, nothing
+else. WeavEHR does not hash inputs and will not notice that you edited a YAML
+file or swapped the source data; you tell it what to redo.
 
 | What changed? | What to run again |
 | --- | --- |

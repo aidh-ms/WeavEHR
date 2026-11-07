@@ -1,8 +1,9 @@
 # Run a downloaded dataset
 
-**You need:** an installed checkout, local source files, and the dataset's exact
-name and version from the [dataset reference](../reference/datasets.md).
-This example uses MIMIC-IV 3.1; the same two steps work for other configured sources.
+You need an installed checkout, the dataset's files on disk, and its exact
+name and version from the [dataset reference](../reference/datasets.md). The
+example below is MIMIC-IV 3.1, but the two step configs look the same for any
+bundled source.
 
 ## 1. Check the data root
 
@@ -11,9 +12,9 @@ For MIMIC-IV, it contains `hosp/` and `icu/`; for eICU it contains files such as
 `patient.csv.gz`. Keep the original filenames. AmsterdamUMCdb expects an AMSTEL
 OMOP export, not the legacy native tables.
 
-WeavEHR does not obtain data access or download files. Use the dataset provider's
-access process. The synthetic [tutorial](../getting_started/basic_usage.md) works
-without access; public demo variants are listed in the dataset reference.
+WeavEHR does not download anything; data access goes through the provider.
+If you are still waiting for credentials, the [tutorial](../getting_started/basic_usage.md)
+runs on synthetic data and the public demo subsets are listed in the dataset reference.
 
 ## 2. Write the two step configs
 
@@ -81,8 +82,9 @@ print(heart_rate.select(pl.len(), pl.col("subject_id").n_unique().alias("subject
 print(pl.read_parquet(data / "metadata/codes.parquet").head())
 ```
 
-Check row counts, subject coverage, units, and a few trajectories. A completed step
-is not proof of complete extraction: missing source files can be skipped with warnings.
+Look at row counts, how many subjects have the concept, the units, and a few
+individual trajectories before trusting a full run. A step can complete with
+a missing source file skipped and a warning in the log, so the log is worth a read.
 
 ## Process more than one dataset
 
@@ -91,5 +93,5 @@ Add one `{name, version, path}` entry per source to `config.data`, and matching
 dataset/version paths. Use the [catalogue](../reference/concepts.md) to check which
 concepts have mappings in each source before comparing them.
 
-**Next:** [select or override configurations](configure.md),
-[read and shard output](output.md), or [diagnose missing events](debug.md).
+From here you can [select or override configs](configure.md), [read and
+shard the output](output.md), or [chase a missing value](debug.md).

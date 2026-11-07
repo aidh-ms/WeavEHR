@@ -1,8 +1,8 @@
 # Add a table or concept
 
-**Goal:** make a new variable available without changing the pipeline engine.
-Use a study config directory while experimenting; move reviewed definitions into
-`configs/` when contributing them to WeavEHR.
+Adding a variable almost never means touching Python. Work in a study config
+directory while you experiment, and move the definitions into `configs/` once
+they are reviewed if you want to contribute them.
 
 ## Choose the smallest extension
 
@@ -58,5 +58,6 @@ and the relevant dataset/transformer tests. Record the upstream source once in t
 [source index](../reference/sources.md), and explain only non-obvious local choices
 in comments. See the [comment policy](../contributing/comments.md).
 
-**Next:** [inherit a dataset version](../user_guide/versioning.md) or
-[write a transformer](transformer.md).
+If the new dataset is a close relative of a bundled one, [inherit its
+configs](../user_guide/versioning.md) instead of copying them; if the
+calculation needs windows or state, [write a transformer](transformer.md).
