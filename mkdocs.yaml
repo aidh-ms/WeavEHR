@@ -34,6 +34,7 @@ nav:
           - SOFA: reference/clinical/sofa.md
           - Sepsis: reference/clinical/sepsis.md
           - AKI: reference/clinical/aki.md
+          - Respiratory support: reference/clinical/respiratory.md
       - Python API:
           - Projects and steps: reference/api/steps.md
           - Configuration models: reference/api/config.md

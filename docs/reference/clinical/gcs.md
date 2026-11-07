@@ -1,61 +1,73 @@
-# GCS
+# Glasgow Coma Scale
 
-`gcs_total` preserves directly recorded totals, currently mapped for eICU.
-The computed `gcs` concept uses `GcsTransformer`, a `WindowedConceptTransformer`
-that aligns `gcs_eye`, `gcs_motor`, `gcs_verbal`, recorded totals and optional
-`gcs_unable` correction flags on one grid.
+`gcs` is the total score reconstructed from the three components, with a
+recorded total used where the source charted one, and an optional correction
+to 15 for patients who cannot be assessed verbally. It is computed by
+`GcsTransformer` in
+[`gcs.py`](https://github.com/aidh-ms/WeavEHR/blob/main/src/weavehr/steps/concept/transformer/gcs.py).
 
-Each component's latest numeric value remains current for six hours, including
-the boundary. The mapping's `kwargs.window` controls this lookback. Missing
-components contribute their normal maxima: eye 4, motor 6 and verbal 5.
-Null entries neither refresh values nor generate new assessments.
+## Inputs and parameters
 
-Output preserves source timestamps. A recorded `gcs_total` takes precedence
-at its own timestamp; newer component measurements reconstruct the total from
-the current components. MIMIC-IV uses the reconstructed total, since it has no
-recorded-total mapping. CNS SOFA consumes `gcs` with its own one-hour alignment
-window.
+| Input concept | Role | Bundled for |
+| --- | --- | --- |
+| `gcs_eye`, `gcs_motor`, `gcs_verbal` | Components; each is carried forward for `window` | MIMIC-IV, eICU |
+| `gcs_total` | A total recorded by the source; wins at its own timestamp | eICU |
+| `gcs_unable` | Correction flag: `1` sets the total to 15, `0` clears it | MIMIC-IV |
 
-`gcs_unable` is a separate boolean concept indicating when to apply the total
-correction to 15. Each dataset defines its own source events or flags through
-one or more mappings and includes `gcs_unable.1.0.0` in its `gcs` dependencies.
-The latest non-null flag uses the same lookback (`kwargs.window`, six hours by
-default, inclusive): **1 applies the correction; 0 clears it**. A current 1
-overrides both the component sum and recorded totals. If conflicting flags
-share a timestamp, 1 wins. Null flags do not clear or refresh the correction.
-GCS component measurements do not change the flag; each dataset must supply
-its own clearing values. When combining multiple reasons, the dataset's
-mapping must define when the overall correction no longer applies. Datasets
-without a `gcs_unable` mapping retain the usual calculation.
+| Parameter (`kwargs`) | Default | Meaning |
+| --- | --- | --- |
+| `window` | `6h` | How long a component value or correction flag stays current, boundary inclusive |
 
-MIMIC-IV maps verbal item 223900 to 1 for `No Response-ETT`, including entries
-without a numeric verbal value, and to 0 for other numeric verbal assessments.
-Other null-valued entries produce no flag. `gcs_verbal` keeps the original
-numeric value and text, including verbal 1 or null. MIMIC-IV 3.1 and the 2.2
-demo inherit this mapping. No correction mapping is currently supplied for
-eICU; RASS and ventilation status are not interpreted by `GcsTransformer`.
+## How the total is formed
 
-Only numeric GCS components or recorded totals generate assessments. Flags
-and expiry alone create no assessment; they take effect at the next numeric
-GCS input. A patient with no numeric GCS observations has no GCS timeline;
-total SOFA treats a missing CNS component as zero.
+At every numeric component or recorded-total observation, the transformer
+takes the latest value of each input within `window` and emits a total:
 
-Six-hour component carry-forward and normal-value imputation follow
-[ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L362).
-The recency rule differs from ricu's preference for any still-current
-recorded total. Setting the total to 15 for an explicit ETT marker follows the
-default correction in ricu and
-[mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/gcs.sql#L66).
-Leaving the recorded verbal value unchanged follows
-[ricu's MIMIC-IV verbal mapping](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6603);
-the correction is applied only to the computed GCS total.
-Carrying the latest correction flag for six hours is WeavEHR's timing rule,
-rather than either reference's exact propagation. In particular,
-[ricu's MIMIC ETT mapping](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L2696)
-uses one-minute windows expanded onto its time grid.
+1. If the latest `gcs_unable` flag is `1`, the total is **15**, whatever the
+   components or recorded total say.
+2. Otherwise, if a `gcs_total` was recorded at this exact timestamp, that
+   value is used.
+3. Otherwise the total is the sum of the current components, with a missing
+   component imputed at its normal maximum (eye 4, motor 6, verbal 5).
 
-`gcs_total` and `gcs_unable` retain source-table provenance; computed `gcs` retains
-dataset provenance. After changing these mappings, regenerate GCS and dependent CNS, SOFA, and
-sepsis outputs.
+A recorded total only wins at its own timestamp; a component measured later
+reconstructs the total again from the components. MIMIC-IV has no
+recorded-total mapping, so its totals are always reconstructed. Downstream,
+CNS SOFA consumes `gcs` with its own one-hour window.
 
-See [sources and credit](../sources.md) for upstream provenance.
+| Situation | Rule |
+| --- | --- |
+| Two values of one input at the same timestamp | Minimum (for `gcs_unable`, `1` wins over `0`) |
+| Null or non-finite value | Ignored: it neither refreshes the carried value nor triggers an assessment |
+| Only a flag arrives, or a value expires | No assessment; the flag or expiry takes effect at the next numeric input |
+| Patient with no numeric GCS at all | No `gcs` timeline; total SOFA then treats CNS as 0 |
+
+## The correction flag
+
+`gcs_unable` is a separate boolean concept so that each dataset can decide
+what "unable to assess" means. The dataset mapping must supply both the `1`
+events and the `0` events that clear them: component measurements never
+clear the flag on their own. Datasets without a `gcs_unable` mapping get the
+plain calculation.
+
+MIMIC-IV maps verbal item 223900: `No Response-ETT` (including entries with
+no numeric verbal value) becomes `1`, any other numeric verbal assessment
+becomes `0`, and other null-valued entries produce no flag. `gcs_verbal`
+itself keeps the charted value, verbal 1 or null included; the correction is
+applied only to the total. MIMIC-IV 3.1 and the 2.2 demo inherit this. eICU
+has no correction mapping yet; RASS and ventilation status are not read.
+
+## Compared with the references
+
+| Rule | ricu | mimic-code | WeavEHR |
+| --- | --- | --- | --- |
+| Component carry-forward | 6h, on an hourly grid ([callback-cncpt.R#L362](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L362)) | — | 6h, at source timestamps |
+| Missing component | Normal maximum | — | Normal maximum |
+| Recorded total vs. components | Any still-current recorded total is preferred | — | Recorded total wins only at its own timestamp |
+| ETT correction | Total set to 15 | Total set to 15 ([gcs.sql#L66](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/gcs.sql#L66)) | Total set to 15 while the latest flag within 6h is `1` |
+| Flag propagation | One-minute windows expanded onto the grid ([concept-dict.json#L2696](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L2696)) | — | Latest flag carried 6h (WeavEHR's own timing rule) |
+| Charted verbal value under ETT | Kept as charted ([concept-dict.json#L6603](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6603)) | — | Kept as charted |
+
+`gcs_total` and `gcs_unable` keep source-table provenance; the computed `gcs`
+keeps dataset provenance. If you change any of these mappings, rerun GCS and
+everything downstream of it (CNS SOFA, total SOFA, sepsis).
