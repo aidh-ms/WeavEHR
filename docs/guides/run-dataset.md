@@ -1,6 +1,6 @@
 # Run a downloaded dataset
 
-You need an installed checkout, the dataset's files on disk, and its exact
+You need an [installed package](../getting_started/installation.md), the dataset's files on disk, and its exact
 name and version from the [dataset reference](../reference/datasets.md). The
 example below is MIMIC-IV 3.1, but the two step configs look the same for any
 bundled source.
@@ -69,7 +69,7 @@ with WeavEHRProject(config_dir / "output") as project:
     ConceptStep.load(project, config_dir / "concept.yml").run()
 ```
 
-Run it in the WeavEHR environment with `uv run --no-dev python /path/to/run.py`.
+Run it in the WeavEHR environment with `python /path/to/run.py`.
 Start with a demo or a small table selection before processing a full database.
 
 ```python

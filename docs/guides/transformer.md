@@ -15,7 +15,7 @@ it directly on small Polars frames.
 Run it from the repository root:
 
 ```bash
-uv run --no-dev python example/quickstart/transformer.py
+python example/quickstart/transformer.py
 ```
 
 The expected numeric values are **80, 90, 110, 140**. At 09:00, the 08:00 observation

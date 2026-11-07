@@ -6,25 +6,26 @@ change the mapping that produced them. Nothing here needs dataset
 credentials, a database, or patient data, and the whole thing takes about
 ten minutes.
 
-## 1. Install a checkout
+## 1. Install and get the example files
 
-You need Git and [uv](https://docs.astral.sh/uv/getting-started/installation/);
-uv will fetch Python 3.13 for you if it is missing.
+Use Python 3.13 or newer and Git. Install WeavEHR from PyPI, then clone the
+repository for the synthetic data, script and tutorial configurations:
 
 ```bash
+pip install weavehr
 git clone https://github.com/aidh-ms/WeavEHR.git
 cd WeavEHR
-uv sync --frozen --no-dev
 ```
 
-Everything below is run from the repository root. If you would rather install
-into an environment you already have, see [installation](installation.md),
-but note that the example files live in the checkout, not in the wheel.
+Run the commands below from the repository root, using the Python environment
+where WeavEHR was installed. The example files live in the checkout; the
+installed package supplies WeavEHR itself. See [installation](installation.md)
+for version pinning.
 
 ## 2. Run the example
 
 ```bash
-uv run --no-dev python example/quickstart/run.py
+python example/quickstart/run.py
 ```
 
 The script loads a tiny set of tutorial configs and runs both extraction and
@@ -54,7 +55,7 @@ are preserved exactly; WeavEHR does not bin to the hour.
 
 ## 3. Read the result
 
-Start Python with `uv run --no-dev python` and read the concept file like any
+Start Python with `python` and read the concept file like any
 other Parquet file:
 
 ```python
@@ -107,7 +108,7 @@ Now remove `|PULSE` from the mapping's `code` and run again, into a fresh
 output directory:
 
 ```bash
-uv run --no-dev python example/quickstart/run.py --output output/quickstart-hr-only
+python example/quickstart/run.py --output output/quickstart-hr-only
 ```
 
 Two heart-rate events this time. Put `|PULSE` back when you are done.

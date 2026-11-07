@@ -1,4 +1,4 @@
-"""Run from the repository root: uv run python example/quickstart/run.py."""
+"""Run from the repository root: python example/quickstart/run.py."""
 
 import argparse
 from pathlib import Path
