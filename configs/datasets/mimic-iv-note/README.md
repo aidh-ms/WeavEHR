@@ -1,7 +1,7 @@
 # MIMIC-IV-Note
 
-Configurations for [MIMIC-IV](https://physionet.org/content/mimic-iv-note/), the
-critical care database from the Beth Israel Deaconess Medical Center
+Configurations for [MIMIC-IV-Note](https://physionet.org/content/mimic-iv-note/), the
+de-identified free-text clinical notes that accompany MIMIC-IV
 (requires credentialed PhysioNet access).
 
 ## Versions
@@ -9,7 +9,6 @@ critical care database from the Beth Israel Deaconess Medical Center
 - `2.2/` — **reference configuration**: 2 table configs (`tables/`,
   covering notes) and the per-dataset concept
   mappings (`mappings/`) for the shared dictionary in `configs/concepts/`.
-  This is the most complete dataset configuration in WeavEHR.
 
 ## Layout
 

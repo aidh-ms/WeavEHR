@@ -1,5 +1,6 @@
 """Build reference inventories from effective configs, including inheritance."""
 
+import re
 from pathlib import Path
 
 import mkdocs_gen_files
@@ -26,6 +27,25 @@ def config_sources(version_dir: Path, kind: str, name: str) -> str:
     return " + ".join(links)
 
 
+def readme_intro(dataset_dir: Path) -> tuple[str, str]:
+    """Return the dataset README's title and first paragraph, with links made absolute."""
+    readme = dataset_dir / "README.md"
+    if not readme.is_file():
+        return dataset_dir.name, ""
+    title, paragraph, collecting = dataset_dir.name, [], False
+    for line in readme.read_text().splitlines():
+        if line.startswith("# "):
+            title = line[2:].strip()
+            collecting = True
+        elif collecting and line.strip():
+            paragraph.append(line.strip())
+        elif collecting and paragraph:
+            break
+    intro = " ".join(paragraph)
+    intro = re.sub(r"\]\((?!https?://)([^)]+)\)", lambda m: f"]({REPO.replace('/blob/', '/tree/')}{(readme.parent / m.group(1)).resolve().relative_to(ROOT).as_posix()}/)", intro)
+    return title, intro
+
+
 def write(path: str, content: str, edit_path: Path | None = None) -> None:
     with mkdocs_gen_files.open(path, "w") as file:
         file.write(content)
@@ -36,70 +56,90 @@ auto_load_configs(CONFIGS)
 concepts = sorted(concept_config_registry.values(), key=lambda c: c.name.lower())
 concept_paths = {yaml.safe_load(p.read_text())["name"]: p for p in (CONFIGS / "concepts").rglob("*.yml")}
 versions = sorted(p for p in (CONFIGS / "datasets").glob("*/*") if p.is_dir())
-index = [
+datasets = sorted({p.parent for p in versions}, key=lambda d: d.name)
+overview = [
     "# Dataset reference\n",
-    "Configured datasets and mappings, including inherited definitions. "
-    "Open a dataset/version to see its expected files and concept mappings.\n",
-    "Counts include non-empty mappings. Actual output depends on the available source files "
-    "and matching observations; check coverage in your cohort after running the pipeline.\n",
-    "Use these exact names and quoted version strings in your step configs. "
-    "See [running a dataset](../guides/run-dataset.md) and [identity and time conventions](dataset-notes.md).\n",
-    "| Dataset | Version | Tables | Non-empty concept mappings |",
+    "Every dataset WeavEHR ships configs for, generated from the configs themselves "
+    "(inheritance included). Use the exact name and quoted version string in your step "
+    "configs; see [running a dataset](../guides/run-dataset.md) and "
+    "[identity and time](dataset-notes.md).\n",
+    "Mapping counts are the number of concepts with a non-empty mapping. What you actually "
+    "get out depends on which source files are present and which observations match; check "
+    "coverage in your cohort after a run.\n",
+    "| Dataset | Versions | Tables | Non-empty concept mappings |",
     "| --- | --- | ---: | ---: |",
 ]
-for version_dir in versions:
-    dataset, version = version_dir.parent.name, version_dir.name
-    tables = sorted(dataset_config_registry.filter(dataset, version), key=lambda t: t.name)
-    mappings = []
-    for concept in concepts:
-        mapping = concept.get_dataset_concept(dataset, version)
-        if mapping is not None and (mapping.type != "simple" or mapping.mappings):
-            mappings.append((concept, mapping))
-    page = f"datasets/{dataset}-{version}.md"
-    index.append(f"| [{dataset}]({page}) | `{version}` | {len(tables)} | {len(mappings)} |")
-    chain = " → ".join(f"`{p.parent.name}/{p.name}`" for p in resolve_version_chain(version_dir))
-    lines = [
-        f"# {dataset} {version}\n",
-        f'**Step selection:** `name: {dataset}`, `version: "{version}"`.\n',
-        f"**Inheritance (base → selected):** {chain}.\n",
-        "Generated from effective configs. Counts describe configured extraction and mapping, "
-        "not the data actually present in a run.\n",
-        "[Run this dataset](../../guides/run-dataset.md) · "
-        "[Identity and time](../dataset-notes.md) · [All datasets](../datasets.md)\n",
-    ]
-    readme = version_dir.parent / "README.md"
-    if readme.is_file():
-        lines.append(source_link(readme, "Dataset-specific source notes") + "\n")
-    lines += [
-        "## Expected source files\n",
-        "Paths are relative to the raw-data root. Join files are required by the tables using them.\n",
-        "| Table | Source path | Events | Config layers |",
-        "| --- | --- | --- | --- |",
-    ]
-    for table in tables:
-        events = ", ".join(f"`{event.name}`" for event in table.events)
-        lines.append(
-            f"| `{table.name}` | `{table.path}` | {events} | {config_sources(version_dir, 'tables', table.name)} |"
-        )
-    joins = sorted({join.path for table in tables for join in table.join})
-    if joins:
-        lines += ["\n### Join files\n", *[f"- `{path}`" for path in joins]]
-    lines += [
-        "\n## Configured concepts\n",
-        "Empty simple mappings are excluded. A complex mapping may still lack usable input data; "
-        "inspect its dependencies and the [clinical method](../clinical/index.md). "
-        "Multiple config links mean inheritance layers, applied from left to right.\n",
-        "| Concept | Type | Mapping layers |",
-        "| --- | --- | --- |",
-    ]
-    for concept, mapping in mappings:
-        lines.append(
-            f"| {source_link(concept_paths[concept.name], concept.name)} | {mapping.type} | "
-            f"{config_sources(version_dir, 'mappings', concept.name)} |"
-        )
-    if not mappings:
-        lines.append("\nNo non-empty concept mappings are bundled for this dataset/version.")
-    write(f"reference/{page}", "\n".join(lines) + "\n")
+sections: list[str] = []
+for dataset_dir in datasets:
+    dataset = dataset_dir.name
+    title, intro = readme_intro(dataset_dir)
+    rows = []
+    for version_dir in sorted(p for p in versions if p.parent == dataset_dir):
+        version = version_dir.name
+        tables = sorted(dataset_config_registry.filter(dataset, version), key=lambda t: t.name)
+        mappings = []
+        for concept in concepts:
+            mapping = concept.get_dataset_concept(dataset, version)
+            if mapping is not None and (mapping.type != "simple" or mapping.mappings):
+                mappings.append((concept, mapping))
+        page = f"datasets/{dataset}-{version}.md"
+        chain = resolve_version_chain(version_dir)
+        inherits = " → ".join(f"`{p.parent.name}/{p.name}`" for p in chain[:-1]) or "—"
+        rows.append((version, page, len(tables), len(mappings), inherits))
+        lines = [
+            f"# {title} {version}\n",
+            intro + "\n" if intro else "",
+            f'**Step selection:** `name: {dataset}`, `version: "{version}"`.\n',
+            f"**Inheritance (base → selected):** {' → '.join(f'`{p.parent.name}/{p.name}`' for p in chain)}.\n",
+            "Generated from the effective configs. Counts describe what is configured, "
+            "not what a particular run produced.\n",
+            "[Run this dataset](../../guides/run-dataset.md) · "
+            "[Identity and time](../dataset-notes.md) · [All datasets](../datasets.md)\n",
+        ]
+        readme = dataset_dir / "README.md"
+        if readme.is_file():
+            lines.append(source_link(readme, "Full dataset notes (README)") + "\n")
+        lines += [
+            "## Expected source files\n",
+            "Paths are relative to the raw-data root. Join files are required by the tables using them.\n",
+            "| Table | Source path | Events | Config layers |",
+            "| --- | --- | --- | --- |",
+        ]
+        for table in tables:
+            events = ", ".join(f"`{event.name}`" for event in table.events)
+            lines.append(
+                f"| `{table.name}` | `{table.path}` | {events} | {config_sources(version_dir, 'tables', table.name)} |"
+            )
+        joins = sorted({join.path for table in tables for join in table.join})
+        if joins:
+            lines += ["\n### Join files\n", *[f"- `{path}`" for path in joins]]
+        lines += [
+            "\n## Configured concepts\n",
+            "Empty simple mappings are excluded. A complex mapping may still lack usable input data; "
+            "inspect its dependencies and the [clinical method](../clinical/index.md). "
+            "Multiple config links mean inheritance layers, applied from left to right.\n",
+            "| Concept | Type | Mapping layers |",
+            "| --- | --- | --- |",
+        ]
+        for concept, mapping in mappings:
+            lines.append(
+                f"| {source_link(concept_paths[concept.name], concept.name)} | {mapping.type} | "
+                f"{config_sources(version_dir, 'mappings', concept.name)} |"
+            )
+        if not mappings:
+            lines.append("\nNo non-empty concept mappings are bundled for this dataset/version.")
+        write(f"reference/{page}", "\n".join(line for line in lines if line is not None) + "\n")
+    anchor = title.lower()
+    anchor = re.sub(r"[^a-z0-9 -]", "", anchor).replace(" ", "-")
+    overview.append(
+        f"| [{title}](#{anchor}) | "
+        + ", ".join(f"[`{v}`]({page})" for v, page, *_ in rows)
+        + f" | {rows[-1][2]} | {rows[-1][3]} |"
+    )
+    sections += [f"\n## {title}\n", (intro + "\n") if intro else "", "| Version | Tables | Non-empty concept mappings | Inherits from |", "| --- | ---: | ---: | --- |"]
+    sections += [f"| [`{v}`]({page}) | {n_tables} | {n_mappings} | {inherits} |" for v, page, n_tables, n_mappings, inherits in rows]
+    sections.append("")
+index = overview + sections
 write("reference/datasets.md", "\n".join(index) + "\n")
 
 lines = [
