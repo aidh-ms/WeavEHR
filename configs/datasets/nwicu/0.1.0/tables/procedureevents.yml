@@ -1,7 +1,6 @@
 path: data/nw_icu/procedureevents.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
   - name: hadm_id
@@ -13,7 +12,6 @@ columns:
   - name: linkorderid
     type: int64
 
-  # db fields - times
   - name: starttime
     type: datetime
     params:
@@ -27,7 +25,6 @@ columns:
     params:
       strict: false
 
-  # db fields - values
   - name: itemid
     type: int64
   - name: value

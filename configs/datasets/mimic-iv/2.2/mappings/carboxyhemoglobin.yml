@@ -1,4 +1,3 @@
-# Source: mimic-code/measurement/bg.sql; see configs/SOURCES.md.
 # Retain the shared concept's existing unspecified unit (None); the source hint is %.
 # Preserve the original source code/unit through dataset extension_columns; see the coverage guide.
 type: simple

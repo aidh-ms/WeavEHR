@@ -1,80 +1,71 @@
-# Comments, docstrings, and attribution
+# Comments, docstrings, and credit
 
-A useful comment preserves information a future reader cannot reliably recover
-from the code: **why a choice exists, what an assumption means, or where a borrowed
-rule came from**.
+A comment earns its place when it tells a reader something they cannot get
+back from the code: why a choice was made, what an assumption means, or where
+a borrowed rule came from. Everything else is noise, and noise in a config
+file is worse than noise in Python because the file is supposed to be read
+by clinicians as well as engineers.
 
-## What belongs where
+## What gets a comment
 
-| Information | Home |
+Put a comment next to the line it explains, not at the top of the file, and
+keep it to a sentence or two.
+
+| Worth a comment | Example |
 | --- | --- |
-| Non-obvious conversion, source anomaly, boundary, or invariant | Short comment next to the affected expression |
-| Public callable's inputs, output, side effects, and failure contract | Docstring |
-| Clinical definition, evidence window, missingness, upstream differences | Clinical method reference; local comment for the particular surprising choice |
-| Shared upstream revision and mapping scope | `configs/SOURCES.md` |
-| Exact upstream algorithm used by one module | One module/class source pointer, with the pinned source in the index |
-| Required copyright, licence, or attribution notice | Preserve in its required location; a source index is not a replacement |
-| Change rationale, experiments, review discussion | PR description or linked issue |
-| How to install or operate the package | User documentation |
+| A multiplier whose units are not obvious | `# µmol/L → mg/dL` above `col(numeric_value) * 0.058467` |
+| An item that was deliberately left out, or an odd one that was kept | `# Item 6812, which ricu uses, is left out: its values do not fit µmol/L.` |
+| A source quirk the mapping works around | `# A zero offset means "not recorded" and is dropped.` |
+| An opaque identifier | `# 3027018 = Heart rate` next to the regex that matches it |
+| A threshold or window that is a choice rather than a definition | `# 48h: rounds above the longest linked episode in the demo (40.6h).` |
+| A deviation from the reference implementation | `# ricu also applies a 30-minute minimum duration; we do not.` |
 
-## Write the reason beside the choice
+What does not get a comment: section banners (`# db fields - values`), a
+restatement of the next line (`# multiply by 2.54`), item IDs that already
+appear in the regex, commented-out code, and change history. If the only
+thing a comment says is "same as ricu", either state the rule or delete the
+comment.
 
-Prefer one or two sentences immediately above the relevant line. Explain the
-source and target unit when a multiplier is otherwise opaque. For example:
+Do not remove a comment just to make a file shorter if it records a
+threshold, an exclusion, a limitation, or an uncertain interpretation. Those
+are the comments a reviewer of a clinical mapping actually needs.
 
-```python
-# Invalidate completion before mutating output so a crash forces recomputation.
-completion_marker.unlink(missing_ok=True)
-```
+## Where credit lives
 
-```yaml
-# The source stores height in inches; the shared concept is in centimetres.
-numeric_value: col(numeric_value) * 2.54
-```
+Credit is recorded once, at the level where it is true, and not repeated in
+every file it applies to.
 
-Avoid narrating the operation (`# Multiply by 2.54`), repeating item IDs already
-visible in a regex, decorative section banners, commented-out code, and paragraphs
-of commit history. A comment saying "same as ricu" is insufficient: state the
-actual rule and point to a source when its origin matters.
+| Level | Home |
+| --- | --- |
+| The project is inspired by ricu and builds on mimic-code and others | README and the landing page |
+| A group of mappings follows a pinned upstream file | [`configs/SOURCES.md`](../reference/sources.md): upstream project, revision, file, the local files covered, and what differs |
+| A Python module adapts a specific upstream algorithm | One line in the module docstring naming the upstream file, with the pinned revision in the index |
+| A mapping file | No provenance comment at all; the index is the only place it is recorded |
+| A required licence or attribution notice | Wherever its licence says it must stay; the index does not replace it |
 
-Do not remove unusual thresholds, inclusion/exclusion rationales, limitations,
-uncertain source interpretations, or differences from a reference merely to shorten
-a file. Such details may be essential to scientific review.
+Be precise about what was taken. Consulting a reference for which items to
+select is not the same as adapting its algorithm, and neither is copying its
+code. Do not invent a revision for old provenance; write "upstream revision:
+unrecorded" and let someone pin it later. When code is copied or adapted,
+check the licence and keep whatever notice it requires.
 
-## Give credit at the right level
+A scientific threshold should cite the method that defines it (the KDIGO
+guideline, the Sepsis-3 paper) on the clinical reference page, not just the
+package we first saw it in.
 
-A project-wide acknowledgment recognises architectural inspiration. A grouped
-source-index entry records the upstream repository, revision, file, local scope,
-and what was reused. Add a short local pointer where a mapping or algorithm would
-otherwise be hard to trace. Do not repeat a full commit SHA in dozens of files.
+## Docstrings
 
-Distinguish **inspiration**, **item selection / unit convention**, and **adapted
-algorithm or copied code**. Do not imply code was copied when the evidence only
-supports consulting a reference. Do not invent a revision for old provenance;
-mark it unrecorded. When copying/adapting code, review and retain the applicable
-notices. Existing legal notices are outside routine comment cleanup.
+A docstring describes a contract: what the callable takes, what it returns,
+what it mutates or writes, and how it fails. Open with one line that says what
+it does. Only document a parameter when its meaning is not obvious from the
+name and type. Mention units, time scope, and missingness rules when they
+affect the result. Keep the algorithm narrative on the clinical reference
+page and link to it; do not paste the method into every class that uses it.
+The repository uses Google-style docstrings with type annotations.
 
-For a new source entry, record:
+## Reviewing a comment-only change
 
-- upstream project and immutable file/revision when known;
-- the local files or unambiguous group covered;
-- what was used, and material differences;
-- any retained notice or licence location relevant to copied material.
-
-The [source index](../reference/sources.md) is the model. Per-line citations are
-reserved for a local choice that needs its own evidence. Scientific thresholds
-should cite the defining method in the method reference, not only another package.
-
-## Docstrings describe contracts
-
-Lead with a short action statement. Add parameters only when their meaning is not
-clear from the signature. Document return shape, units, time/episode scope,
-mutation and I/O, missingness, and important exceptions where relevant. Keep
-algorithm background in method docs; do not copy the whole guide into each method.
-Use the repository's Google-style format and type annotations.
-
-## Review a comment-only change
-
-Check that executable Python and parsed YAML values are unchanged. Preserve source
-traceability and notices. Check that shortened prose still explains every unusual
-choice. Keep clinical rules and validation statements unchanged in comment-only edits.
+Parse the YAML before and after and check the values are identical; a few
+lines of `yaml.safe_load` over `git show` output is enough. Check that no
+threshold, exclusion or limitation was dropped with the prose around it, and
+that every pinned revision that was removed from a file is in the index.

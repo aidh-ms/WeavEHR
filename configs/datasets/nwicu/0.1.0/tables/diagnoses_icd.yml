@@ -1,15 +1,12 @@
 path: data/nw_hosp/diagnoses_icd.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
   - name: hadm_id
     type: int64
 
-  # db fields - times
 
-  # db fields - values
   - name: seq_num
     type: int64
   - name: icd_code

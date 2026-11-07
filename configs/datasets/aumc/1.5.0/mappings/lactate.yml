@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3047181 = Lactate [Moles/volume] in Blood
-#   3014111 = Lactate [Moles/volume] in Serum or Plasma
+# 3047181 = Lactate [Moles/volume] in Blood
+# 3014111 = Lactate [Moles/volume] in Serum or Plasma
 type: simple
 mappings:
   - pattern:

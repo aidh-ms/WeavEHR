@@ -1,17 +1,14 @@
 path: intakeOutput.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: patientunitstayid
     type: int64
   - name: intakeoutputid
     type: int64
-  # db fields - times
   - name: intakeoutputoffset
     type: int64
   - name: intakeoutputentryoffset
     type: int64
-  # db fields - values
   - name: intaketotal
     type: float32
   - name: outputtotal

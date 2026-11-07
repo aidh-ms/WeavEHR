@@ -1,4 +1,3 @@
-# Source: mimic-code/measurement/enzyme.sql; see configs/SOURCES.md.
 type: simple
 mappings:
   - pattern:

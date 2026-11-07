@@ -1,7 +1,6 @@
 path: data/nw_hosp/prescriptions.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
   - name: hadm_id
@@ -15,7 +14,6 @@ columns:
   - name: order_provider_id
     type: string
 
-  # db fields - times
   - name: starttime
     type: datetime
     params:
@@ -25,7 +23,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
 
-  # db fields - values
   - name: doses_per_24_hrs
     type: float32
   - name: dose_unit_rx

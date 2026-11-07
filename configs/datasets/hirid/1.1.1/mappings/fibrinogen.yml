@@ -5,5 +5,6 @@ mappings:
       event: OBSERVATION
       code: "^(24000536)(//.*)?$"
     columns:
+      # g/L → mg/dL
       numeric_value: col(numeric_value) * 100
       text_value: col(text_value)

@@ -5,4 +5,5 @@ mappings:
       event: WEIGHT
       code: "^(weight)(//.*)?$"
     columns:
+      # g → kg
       numeric_value: col(numeric_value) * 0.001

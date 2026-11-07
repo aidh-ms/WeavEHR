@@ -1,7 +1,6 @@
 path: device_exposure.parquet
 
 columns:
-  # subject_id and extensions
   - name: person_id
     type: int64
   - name: device_exposure_id
@@ -10,7 +9,6 @@ columns:
     type: int64
   - name: provider_id
     type: int64
-  # db fields - times
   - name: device_exposure_start_date
     type: datetime
     params:
@@ -31,7 +29,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: device_concept_id
     type: int64
   - name: device_source_value

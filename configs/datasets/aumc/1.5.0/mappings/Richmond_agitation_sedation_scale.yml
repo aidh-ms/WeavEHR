@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   36684829 = Richmond Agitation-Sedation Scale
+# 36684829 = Richmond Agitation-Sedation Scale
 type: simple
 mappings:
   - pattern:

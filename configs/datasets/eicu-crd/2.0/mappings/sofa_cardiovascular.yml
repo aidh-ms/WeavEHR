@@ -10,5 +10,5 @@ kwargs:
   window: 1h
   # Provisional observation timeout based on eICU demo 2.0 recording gaps:
   # 666 gaps after positive mapped rates; 95th percentile 5.99h, 32 exceed 6h.
-  # Clinical validation pending. See docs/user_guide/concepts.md.
+  # Clinical validation pending. See docs/reference/clinical/sofa.md.
   pressor_window: 6h

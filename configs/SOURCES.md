@@ -16,13 +16,14 @@ these mappings unless overridden. They do not reproduce the upstream SQL pipelin
 source observations are retained subject to the local mapping and concept limits;
 upstream aggregation and value-cleaning rules are not generally copied.
 
-The local filenames below omit `.yml`.
+The local filenames below omit `.yml`. The mapping files themselves carry no
+provenance comment; this table is the one place that records it.
 
 | Upstream file | Local mappings |
 | --- | --- |
 | [measurement/bg.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/bg.sql) | `CO2_partial_pressure`, `O2_partial_pressure`, `alveolar_arterial_oxygen_gradient`, `base_excess`, `calcium_ionized`, `carboxyhemoglobin`, `lactate`, `methemoglobin`, `pH_of_blood`, `totcal_CO2` |
 | [measurement/blood_differential.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/blood_differential.sql) | `atypical_lymphocytes`, `band_form_neutrophils`, `basophils`, `basophils_absolute`, `eosinophils`, `eosinophils_absolute`, `immature_granulocytes`, `lymphocytes_absolute`, `metamyelocytes`, `monocytes`, `monocytes_absolute`, `neutrophils`, `neutrophils_absolute`, `nucleated_red_blood_cells` |
-| [measurement/cardiac_marker.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/cardiac_marker.sql) | `nt_pro_bnp` |
+| [measurement/cardiac_marker.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/cardiac_marker.sql) | `nt_pro_bnp`; `creatine_kinase_MB` (with `enzyme.sql`) |
 | [measurement/chemistry.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/chemistry.sql) | `albumin`, `anion_gap`, `blood_urea_nitrogen`, `calcium`, `creatinine`, `globulin`, `total_protein` |
 | [measurement/coagulation.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/coagulation.sql) | `d_dimer`, `fibrinogen`, `partial_thromboplastin_time`, `prothrombin_time_international_normalized_ratio`, `prothrombine_time`, `thrombin_time` |
 | [measurement/complete_blood_count.sql](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/complete_blood_count.sql) | `erythrocyte_distribution_width`, `erythrocyte_distribution_width_sd`, `mean_corpuscular_hemoglobin`, `mean_corpuscular_hemoglobin_concentration`, `mean_corpuscular_volume`, `platelet_count`, `red_blood_cell_count` |

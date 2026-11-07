@@ -1,15 +1,12 @@
 path: lab.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: patientunitstayid
     type: int64
   - name: labid
     type: int64
-  # db columns - times
   - name: labresultoffset
     type: int64
-  # db columns - values
   - name: labname
     type: str
   - name: labmeasurenamesystem
@@ -28,19 +25,16 @@ join:
   - name: patient
     path: patient.csv.gz
     columns:
-      # subject_id and extentions
       - name: patienthealthsystemstayid
         type: int64
       - name: patientunitstayid
         type: int64
-      # db columns - times
       - name: hospitaladmitoffset
         type: int64
       - name: hospitaladmittime24
         type: string
       - name: hospitaldischargeyear
         type: int64
-      # db columns - values
     both_on:
       - patientunitstayid
     callbacks:

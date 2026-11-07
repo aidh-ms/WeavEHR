@@ -1,4 +1,3 @@
-# Source: mimic-code/measurement/complete_blood_count.sql; see configs/SOURCES.md.
 type: simple
 mappings:
   - pattern:

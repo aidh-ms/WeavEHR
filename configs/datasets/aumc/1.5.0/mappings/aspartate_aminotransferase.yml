@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3013721 = Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma
+# 3013721 = Aspartate aminotransferase [Enzymatic activity/volume] in Serum or Plasma
 type: simple
 mappings:
   - pattern:

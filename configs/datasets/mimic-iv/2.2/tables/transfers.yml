@@ -1,14 +1,12 @@
 path: hosp/transfers.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: subject_id
     type: int64
   - name: hadm_id
     type: int64
   - name: transfer_id
     type: int64
-  # db fields - times
   - name: intime
     type: datetime
     params:
@@ -17,7 +15,6 @@ columns:
     type: datetime
     params:
       format: "%Y-%m-%d %H:%M:%S"
-  # db fields - values
   - name: eventtype
     type: string
   - name: careunit

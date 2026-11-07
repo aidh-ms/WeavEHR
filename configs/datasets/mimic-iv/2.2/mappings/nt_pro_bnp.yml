@@ -1,4 +1,3 @@
-# Source: mimic-code/measurement/cardiac_marker.sql; see configs/SOURCES.md.
 type: simple
 mappings:
   - pattern:

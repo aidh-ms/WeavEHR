@@ -5,5 +5,6 @@ mappings:
       event: OBSERVATION
       code: "^(20004100)(//.*)?$"
     columns:
+      # urea mmol/L → BUN mg/dL (1 mmol/L urea = 2.8 mg/dL urea nitrogen)
       numeric_value: col(numeric_value) * 2.8
       text_value: col(text_value)

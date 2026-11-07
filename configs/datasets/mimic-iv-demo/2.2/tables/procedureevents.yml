@@ -5,7 +5,6 @@
 # inherited from the mimic-iv/2.2 reference config.
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
   - name: hadm_id
@@ -18,7 +17,6 @@ columns:
     type: int64
   - name: linkorderid
     type: int64
-  # db fields - times
   - name: starttime
     type: datetime
     params:
@@ -31,7 +29,6 @@ columns:
     type: datetime
     params:
       strict: false
-  # db fields - values
   - name: itemid
     type: int64
   - name: value

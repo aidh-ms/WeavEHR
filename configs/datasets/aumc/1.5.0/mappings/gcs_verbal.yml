@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3009094 = Glasgow coma score verbal
-#   3013144 = Glasgow coma score verbal at First encounter
+# 3009094 = Glasgow coma score verbal
+# 3013144 = Glasgow coma score verbal at First encounter
 type: simple
 mappings:
   - pattern:

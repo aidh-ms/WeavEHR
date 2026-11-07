@@ -1,13 +1,10 @@
 path: diagnosis.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: patientunitstayid
     type: int64
-  # db fields - times
   - name: diagnosisoffset
     type: int64
-  # db fields - values
   - name: diagnosisstring
     type: string
   - name: icd9code

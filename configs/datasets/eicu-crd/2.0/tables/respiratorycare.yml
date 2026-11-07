@@ -1,21 +1,18 @@
 path: respiratoryCare.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: patientunitstayid
     type: int64
   - name: respcareid
     type: int64
   - name: currenthistoryseqnum
     type: int64
-  # db fields - times
   - name: respcarestatusoffset
     type: int64
   - name: ventstartoffset
     type: int64
   - name: ventendoffset
     type: int64
-  # db fields - values
   - name: airwaytype
     type: string
   - name: airwaysize

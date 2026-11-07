@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3016335 = Glasgow coma score eye opening
-#   3026019 = Glasgow coma score eye opening at First encounter
+# 3016335 = Glasgow coma score eye opening
+# 3026019 = Glasgow coma score eye opening at First encounter
 type: simple
 mappings:
   - pattern:

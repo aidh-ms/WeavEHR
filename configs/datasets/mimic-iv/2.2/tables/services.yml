@@ -1,17 +1,14 @@
 path: hosp/services.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: subject_id
     type: int64
   - name: hadm_id
     type: int64
-  # db fields - times
   - name: transfertime
     type: datetime
     params:
       format: "%Y-%m-%d %H:%M:%S"
-  # db fields - values
   - name: prev_service
     type: string
   - name: curr_service

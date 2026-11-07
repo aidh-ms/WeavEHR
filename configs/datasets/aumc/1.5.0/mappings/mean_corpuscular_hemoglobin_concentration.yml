@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   40762530 = MCHC [Moles/volume]
+# 40762530 = MCHC [Moles/volume]
 type: simple
 mappings:
   - pattern:

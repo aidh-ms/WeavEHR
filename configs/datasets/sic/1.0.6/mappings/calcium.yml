@@ -5,5 +5,6 @@ mappings:
       event: LAB
       code: "^(457)(//.*)?$"
     columns:
+      # mmol/L → mg/dL
       numeric_value: col(numeric_value) * 4.008
       text_value: col(text_value)

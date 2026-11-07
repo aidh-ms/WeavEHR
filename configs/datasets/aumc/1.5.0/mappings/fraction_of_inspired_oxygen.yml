@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3025408 = Oxygen/Inspired gas Respiratory system by O2 Analyzer --on ventilator
-#   3020716 = Inhaled oxygen concentration
+# 3025408 = Oxygen/Inspired gas Respiratory system by O2 Analyzer --on ventilator
+# 3020716 = Inhaled oxygen concentration
 type: simple
 mappings:
   - pattern:
