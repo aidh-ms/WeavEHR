@@ -24,8 +24,8 @@ class BaseConfig(BaseModel, metaclass=ABCMeta):
     Attributes:
         name: Human-readable name of the configuration
         version: Version string for the configuration
-        identifier: Computed hierarchical identifier (e.g., "WeavEHR.config.classname.version.name")
-        identifier_tuple: Tuple of (class_name, version, name)
+        identifier: Computed hierarchical identifier (e.g., "weavehr.config.<type>.<name>.<version>")
+        identifier_tuple: Tuple of (config_type, name, version)
         uuid: UUID generated from the identifier
     """
 
@@ -53,7 +53,7 @@ class BaseConfig(BaseModel, metaclass=ABCMeta):
         """Generate a hierarchical identifier string.
 
         Creates a unique identifier in the format:
-        "WeavEHR.config.{classname}.{version}.{name}" (all lowercase)
+        "weavehr.config.{config_type}.{name}.{version}" (all lowercase)
 
         Returns:
             A dot-separated hierarchical identifier string
@@ -66,7 +66,7 @@ class BaseConfig(BaseModel, metaclass=ABCMeta):
         """Get the components used to build the identifier.
 
         Returns:
-            Tuple of (class_name, version, name)
+            Tuple of (config_type, name, version)
         """
         return self.__weavehr_config_type__, self.name, self.version
 
@@ -130,7 +130,7 @@ class BaseConfig(BaseModel, metaclass=ABCMeta):
 
         Args:
             file_path: Path to the YAML configuration file
-            **kwargs: Additional keyword arguments for configuration initialization
+            **kwargs (Any): Additional keyword arguments for configuration initialization
 
         Returns:
             Configuration instance populated from the YAML file
@@ -183,7 +183,7 @@ class BaseDatasetConfig(BaseConfig):
 
         Args:
             file_path: Path to the YAML configuration file
-            **kwargs: Additional keyword arguments for configuration initialization
+            **kwargs (Any): Additional keyword arguments for configuration initialization
 
         Returns:
             Configuration instance populated from the YAML file

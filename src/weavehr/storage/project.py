@@ -74,9 +74,9 @@ class WeavEHRProject(FileStorage):
         """Exit context manager.
 
         Args:
-            exc_type: Exception type if an exception occurred
-            exc_value: Exception value if an exception occurred
-            traceback: Traceback if an exception occurred
+            exc_type (object): Exception type if an exception occurred
+            exc_value (object): Exception value if an exception occurred
+            traceback (object): Traceback if an exception occurred
         """
         pass
 

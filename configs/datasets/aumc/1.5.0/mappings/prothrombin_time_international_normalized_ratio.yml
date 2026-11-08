@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3032080 = INR in Blood by Coagulation assay
+# 3032080 = INR in Blood by Coagulation assay
 type: simple
 mappings:
   - pattern:

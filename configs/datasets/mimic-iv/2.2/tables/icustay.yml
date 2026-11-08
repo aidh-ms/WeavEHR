@@ -1,14 +1,12 @@
 path: icu/icustays.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: hadm_id
     type: int64
   - name: stay_id
     type: int64
   - name: subject_id
     type: int64
-  # db fields - times
   - name: intime
     type: datetime
     params:
@@ -17,7 +15,6 @@ columns:
     type: datetime
     params:
       format: "%Y-%m-%d %H:%M:%S"
-  # db fields - values
   - name: first_careunit
     type: string
   - name: last_careunit

@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3008223 = Glasgow coma score motor
-#   3026549 = Glasgow coma score motor at First encounter
+# 3008223 = Glasgow coma score motor
+# 3026549 = Glasgow coma score motor at First encounter
 type: simple
 mappings:
   - pattern:

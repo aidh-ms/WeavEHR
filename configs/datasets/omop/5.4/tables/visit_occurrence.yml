@@ -3,7 +3,6 @@
 # Lists replace rather than merge, so the changed lists are restated in full.
 
 columns:
-  # subject_id and extensions
   - name: person_id
     type: int64
   - name: visit_occurrence_id
@@ -12,7 +11,6 @@ columns:
     type: int64
   - name: care_site_id
     type: int64
-  # db fields - times
   - name: visit_start_date
     type: datetime
     params:
@@ -33,7 +31,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: visit_concept_id
     type: int64
   - name: visit_source_value

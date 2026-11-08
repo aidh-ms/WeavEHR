@@ -12,10 +12,8 @@
 path: raw_stage/observation_tables/parquet/*.parquet
 
 columns:
-  # subject_id and extensions
   - name: patientid
     type: int64
-  # db fields - times
   - name: datetime
     type: datetime
     params:
@@ -26,7 +24,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: variableid
     type: int64
   - name: value

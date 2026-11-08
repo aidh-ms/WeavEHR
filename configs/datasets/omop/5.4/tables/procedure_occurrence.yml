@@ -2,7 +2,6 @@
 # Lists replace rather than merge, so the changed lists are restated in full.
 
 columns:
-  # subject_id and extensions
   - name: person_id
     type: int64
   - name: procedure_occurrence_id
@@ -11,7 +10,6 @@ columns:
     type: int64
   - name: provider_id
     type: int64
-  # db fields - times
   - name: procedure_date
     type: datetime
     params:
@@ -32,7 +30,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: procedure_concept_id
     type: int64
   - name: procedure_source_value

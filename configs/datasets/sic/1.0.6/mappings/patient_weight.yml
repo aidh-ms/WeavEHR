@@ -1,4 +1,3 @@
-# SICdb v1.0.6 -- cases WEIGHT event [ricu weight]; converts to the concept unit (* 0.001)
 type: simple
 mappings:
   - pattern:
@@ -6,4 +5,5 @@ mappings:
       event: WEIGHT
       code: "^(weight)(//.*)?$"
     columns:
+      # g → kg
       numeric_value: col(numeric_value) * 0.001

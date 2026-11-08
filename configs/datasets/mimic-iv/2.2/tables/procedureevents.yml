@@ -1,7 +1,6 @@
 path: icu/procedureevents.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: subject_id
     type: int64
   - name: hadm_id
@@ -14,7 +13,6 @@ columns:
     type: int64
   - name: linkorderid
     type: int64
-  # db fields - times
   - name: starttime
     type: datetime
     params:
@@ -27,7 +25,6 @@ columns:
     type: datetime
     params:
       strict: false
-  # db fields - values
   - name: itemid
     type: int64
   - name: value
@@ -60,9 +57,6 @@ join:
   - name: d_items
     path: icu/d_items.csv.gz
     columns:
-      # subject_id and extensions
-      # db fields - times
-      # db fields - values
       - name: itemid
         type: int64
       - name: label

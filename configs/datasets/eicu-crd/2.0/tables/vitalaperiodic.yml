@@ -1,17 +1,14 @@
 path: vitalAperiodic.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: patientunitstayid
     type: int64
   - name: vitalaperiodicid
     type: int64
 
-  # db fields - times
   - name: observationoffset
     type: int64
 
-  # db fields - values
   - name: noninvasivesystolic
     type: float32
   - name: noninvasivediastolic
@@ -38,13 +35,11 @@ join:
     path: patient.csv.gz
 
     columns:
-      # subject_id and join keys
       - name: patienthealthsystemstayid
         type: int64
       - name: patientunitstayid
         type: int64
 
-      # db fields - times
       - name: hospitaladmitoffset
         type: int64
       - name: hospitaladmittime24

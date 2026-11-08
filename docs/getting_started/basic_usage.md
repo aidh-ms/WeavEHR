@@ -1,111 +1,128 @@
-# Basic Usage
+# Your first pipeline
 
-This walkthrough extracts MIMIC-IV into MEDS format and harmonises it into clinical concepts. It assumes you have [installed WeavEHR](installation.md), cloned the repository (for the bundled configs in `configs/`), and downloaded MIMIC-IV 3.1 from PhysioNet.
+In this tutorial you will turn four synthetic observations into three
+harmonised heart-rate events, look at every file the pipeline wrote, and
+change the mapping that produced them. Nothing here needs dataset
+credentials, a database, or patient data, and the whole thing takes about
+ten minutes.
 
-A complete, runnable version of this walkthrough is in [`example/pipeline.ipynb`](https://github.com/aidh-ms/WeavEHR/blob/main/example/pipeline.ipynb).
+## 1. Install and get the example files
 
-## 1. Configure the extraction step
+Use Python 3.13 or newer and Git. Install WeavEHR from PyPI, then clone the
+repository for the synthetic data, script and tutorial configurations:
 
-Create `config/extraction.yml` in your working directory. It tells WeavEHR which table configurations to load and where your raw data lives:
-
-```yaml
-name: Extraction
-version: 1.0.0
-
-config_files:
-  - path: /path/to/WeavEHR/configs/datasets/mimic-iv/3.1/tables/
-
-config:
-  data:
-    - name: mimic-iv
-      path: /path/to/physionet.org/files/mimiciv/3.1
+```bash
+pip install weavehr
+git clone https://github.com/aidh-ms/WeavEHR.git
+cd WeavEHR
 ```
 
-- `config_files` points at directories of table configurations (here: the bundled MIMIC-IV ones). You can list several directories to process multiple datasets in one run, and restrict which configs are loaded with `includes:` / `excludes:` lists of config identifiers.
-- `config.data` maps each dataset name to the local root of its raw files. The name must match the `dataset` referenced by the table configs (the bundled ones use `mimic-iv`, `eicu-crd`, `nwicu`).
+Run the commands below from the repository root, using the Python environment
+where WeavEHR was installed. The example files live in the checkout; the
+installed package supplies WeavEHR itself. See [installation](installation.md)
+for version pinning.
 
-## 2. Configure the concept step
+## 2. Run the example
 
-Create `config/concept.yml`:
-
-```yaml
-name: Concept
-version: 1.0.0
-
-config_files:
-  - path: /path/to/WeavEHR/configs/concepts
-
-config:
-  extraction_step: Extraction
-  dataset_configs:
-    - name: mimic-iv
-      path: /path/to/WeavEHR/configs/datasets/mimic-iv/3.1/mappings/
+```bash
+python example/quickstart/run.py
 ```
 
-- `config_files` points at the dataset-agnostic concept dictionary.
-- `extraction_step` names the extraction step whose output should be used as input.
-- `dataset_configs` points at the per-dataset concept mappings.
+The script loads a tiny set of tutorial configs and runs both extraction and
+harmonisation:
 
-## 3. Run the pipeline
+```python
+with WeavEHRProject(output) as project:
+    ExtractionStep.load(project, HERE / "extraction.yml").run()
+    ConceptStep.load(project, HERE / "concept.yml").run()
+```
+
+(The full script, with imports and the `--output` flag, is
+[`example/quickstart/run.py`](https://github.com/aidh-ms/WeavEHR/blob/main/example/quickstart/run.py).)
+It prints the result:
+
+| subject_id | time | code | numeric_value |
+| --- | --- | --- | --- |
+| 1 | 2024-01-01 08:00:00 | `heart_rate//bpm` | 80 |
+| 1 | 2024-01-01 08:05:00 | `heart_rate//bpm` | 82 |
+| 2 | 2024-01-02 10:00:00 | `heart_rate//bpm` | 90 |
+
+Three things to notice. The source charted heart rate under two labels, `HR`
+and `PULSE`, and both became `heart_rate//bpm`. The fourth source row, a
+temperature, is not here: it was extracted but nothing maps it to a concept,
+so it stays behind. And the five minutes between the first two measurements
+are preserved exactly; WeavEHR does not bin to the hour.
+
+## 3. Read the result
+
+Start Python with `python` and read the concept file like any
+other Parquet file:
 
 ```python
 from pathlib import Path
-
-from weavehr import WeavEHRProject, ExtractionStep, ConceptStep
-
-config_path = Path.cwd() / "config"
-project_path = Path.cwd() / "output" / "project"
-
-with WeavEHRProject(project_path) as project:
-    extraction_step = ExtractionStep.load(project, config_path / "extraction.yml")
-    extraction_step.run()
-
-    concept_step = ConceptStep.load(project, config_path / "concept.yml")
-    concept_step.run()
-```
-
-By default a step is **skipped** if an earlier run of it completed, so re-running the script is cheap; an interrupted step runs again from scratch. Set `overwrite: true` in a step's YAML to force re-computation.
-
-To see what is happening during a run, enable logging:
-
-```python
-from weavehr.logging import configure_logging
-
-configure_logging(level="INFO")  # or "DEBUG"
-```
-
-## 4. Explore the output
-
-The project directory now contains one MEDS dataset per step:
-
-```
-output/project/
-├── configs/        # snapshot of every config used in this project
-├── workspace/      # intermediate per-step files
-└── datasets/
-    ├── extraction/
-    │   ├── data/mimic-iv/3.1/<table>/<EVENT>.parquet
-    │   └── metadata/{dataset.json, codes.parquet}
-    └── concept/
-        ├── data/<concept>/<concept version>/<dataset>/<dataset version>.parquet
-        └── metadata/{dataset.json, codes.parquet}
-```
-
-All data files share the MEDS event schema — `subject_id`, `time`, `code`, `numeric_value`, `text_value` — plus any extension columns the configs define (e.g. `hadm_id`, `stay_id`). Read them with any Parquet-capable tool:
-
-```python
 import polars as pl
 
-heart_rate = pl.scan_parquet(
-    project_path / "datasets" / "concept" / "data" / "heart_rate" / "1.0.0" / "mimic-iv.parquet"
-).collect()
+output = Path("output/quickstart")
+heart_rate = pl.read_parquet(
+    output / "datasets/concept/data/heart_rate/1.0.0/tutorial/1.0.parquet"
+)
+print(heart_rate.sort(["subject_id", "time"]))
 ```
 
-`metadata/codes.parquet` lists every distinct code in a dataset — useful for discovering what was extracted and for building concept mappings of your own.
+`subject_id`, `time`, `code`, `numeric_value` and `text_value` are the MEDS
+event columns. This example also keeps `dataset` and `table` as provenance.
+`text_value` is null because the source only has numbers.
 
-## Next steps
+| Below `output/quickstart/` | What it is |
+| --- | --- |
+| `datasets/extraction/data/tutorial/1.0/observations/OBSERVATION.parquet` | All four source observations, with source codes |
+| `datasets/concept/data/heart_rate/1.0.0/tutorial/1.0.parquet` | The three harmonised heart rates |
+| `datasets/concept/metadata/codes.parquet` | The output vocabulary (here, one code) |
+| `configs/` | Snapshots of the configs the run used |
 
-- [The pipeline in depth](../user_guide/pipeline.md) — projects, steps, registries, and the output layout
-- [Extraction configuration](../user_guide/extraction.md) — add or adapt source tables and events
-- [Concept configuration](../user_guide/concepts.md) — define and map clinical concepts
-- [Expression language](../user_guide/expressions.md) — the callback expressions used throughout the configs
+Open the extraction file too: that is where the temperature went, and where
+you would go first when a value you expected is missing from a concept.
+With source codes such as `OBSERVATION//HR//bpm`, this file is already a MEDS
+event stream for model training; the concept step produces a second output
+with shared clinical codes.
+
+## 4. Change the mapping
+
+Three files decide what happened above. The table config tells extraction how
+to read `observations.csv`; the concept definition names the output and its
+unit; and the mapping connects the two for this dataset:
+
+```yaml
+--8<-- "example/quickstart/configs/datasets/tutorial/1.0/mappings/heart_rate.yml"
+```
+
+`table` and `event` say which extracted file to look in, `code` is a regular
+expression over the source codes, and the expression under `columns` passes
+the value through unchanged. The concept definition it feeds is just as small:
+
+```yaml
+--8<-- "example/quickstart/configs/concepts/heart_rate.yml"
+```
+
+Now remove `|PULSE` from the mapping's `code` and run again, into a fresh
+output directory:
+
+```bash
+python example/quickstart/run.py --output output/quickstart-hr-only
+```
+
+Two heart-rate events this time. Put `|PULSE` back when you are done.
+
+The fresh directory matters: a step that already completed in an output
+directory is skipped on the next run, even if you changed its config. That
+is deliberate, so that a crash or a tweak to a later step never silently
+re-extracts a full database. [Rerunning a
+pipeline](../guides/rerun.md) explains how to force a step.
+
+## Where next
+
+You have now seen the whole pipeline at its smallest. If you have a dataset
+downloaded, [run it](../guides/run-dataset.md); the two step configs are the
+same shape as the tutorial's. If you would like the vocabulary first (tables,
+mappings, concepts, registries, projects), read
+[how it fits together](overview.md).

@@ -1,19 +1,16 @@
 path: mimic-cxr-2.0.0-metadata.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: subject_id
     type: int64
   - name: study_id
     type: int64
   - name: dicom_id
     type: string
-  # db fields - times
   - name: StudyDate
     type: string
   - name: StudyTime
     type: float64
-  # db fields - values
   - name: ProcedureCodeSequence_CodeMeaning
     type: string
   - name: ViewCodeSequence_CodeMeaning

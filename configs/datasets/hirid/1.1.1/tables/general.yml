@@ -10,13 +10,11 @@ columns:
   # subject_id
   - name: patientid
     type: int64
-  # db fields - times
   - name: admissiontime
     type: datetime
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: sex
     type: str
   - name: age

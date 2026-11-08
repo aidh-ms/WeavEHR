@@ -1,7 +1,6 @@
 path: hosp/emar.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: subject_id
     type: int64
   - name: hadm_id
@@ -16,7 +15,6 @@ columns:
     type: string
   - name: enter_provider_id
     type: string
-  # db fields - times
   - name: charttime
     type: datetime
     params:
@@ -29,7 +27,6 @@ columns:
     type: datetime
     params:
       format: "%Y-%m-%d %H:%M:%S"
-  # db fields - values
   - name: event_txt
     type: string
   - name: medication

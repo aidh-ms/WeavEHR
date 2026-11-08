@@ -6,7 +6,6 @@ columns:
     type: int64
   - name: patientunitstayid
     type: int64
-  # db fields - times
   - name: hospitaladmitoffset
     type: int64
   - name: hospitaladmittime24
@@ -21,7 +20,6 @@ columns:
     type: int64
   - name: unitdischargetime24
     type: string
-  # db fields - values
   - name: admissionheight
     type: float32 # decimal(x,y) # decimal(10,2)
   - name: admissionweight

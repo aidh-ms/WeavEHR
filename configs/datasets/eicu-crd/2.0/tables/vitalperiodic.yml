@@ -1,15 +1,12 @@
 path: vitalPeriodic.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: patientunitstayid
     type: int64
   - name: vitalperiodicid
     type: int64
-  # db fields - times
   - name: observationoffset
     type: int64
-  # db fields - values
   - name: cvp
     type: int64
   - name: etco2 # etCo2
@@ -51,19 +48,16 @@ join:
   - name: patient
     path: patient.csv.gz
     columns:
-      # subject_id and extentions
       - name: patienthealthsystemstayid
         type: int64
       - name: patientunitstayid
         type: int64
-      # db fields - times
       - name: hospitaladmitoffset
         type: int64
       - name: hospitaladmittime24
         type: string
       - name: hospitaldischargeyear
         type: int64
-      # db fields - values
     both_on:
       - patientunitstayid
     callbacks:

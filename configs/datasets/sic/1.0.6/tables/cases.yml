@@ -9,17 +9,14 @@
 path: cases.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: PatientID
     type: int64
   - name: CaseID
     type: int64
-  # db fields - times
   - name: AdmissionYear
     type: int64
   - name: OffsetAfterFirstAdmission
     type: int64
-  # db fields - values
   - name: Sex
     type: int64
   - name: AgeOnAdmission

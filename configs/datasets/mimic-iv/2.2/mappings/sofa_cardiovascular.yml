@@ -10,5 +10,5 @@ kwargs:
   window: 1h
   # Provisional missing-stop fallback based on MIMIC-IV demo 2.2 durations:
   # longest linked start/stop episode 40.57h; longest rate segment 31.9h.
-  # Clinical validation pending. See docs/user_guide/concepts.md.
+  # Clinical validation pending. See docs/reference/clinical/sofa.md.
   pressor_window: 48h

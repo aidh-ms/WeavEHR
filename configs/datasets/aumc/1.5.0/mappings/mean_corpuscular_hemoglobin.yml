@@ -1,5 +1,4 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   40762531 = MCH [Entitic substance]
+# 40762531 = MCH [Entitic substance]
 type: simple
 mappings:
   - pattern:

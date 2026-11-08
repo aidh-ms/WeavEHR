@@ -1,7 +1,6 @@
 path: icu/outputevents.csv.gz
 
 columns:
-  # subject_id and extentions
   - name: subject_id
     type: int64
   - name: hadm_id
@@ -10,7 +9,6 @@ columns:
     type: int64
   - name: caregiver_id
     type: int64
-  # db fields - times
   - name: charttime
     type: datetime
     params:
@@ -19,7 +17,6 @@ columns:
     type: datetime
     params:
       format: "%Y-%m-%d %H:%M:%S"
-  # db fields - values
   - name: itemid
     type: int64
   - name: value
@@ -31,9 +28,6 @@ join:
   - name: d_items
     path: icu/d_items.csv.gz
     columns:
-      # db fields - times
-      # db fields - values
-      # subject_id and extentions
       - name: itemid
         type: int64
       - name: label

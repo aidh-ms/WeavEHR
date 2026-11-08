@@ -1,6 +1,5 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3013290 = Carbon dioxide [Partial pressure] in Blood
-#   3027946 = Carbon dioxide [Partial pressure] in Arterial blood
+# 3013290 = Carbon dioxide [Partial pressure] in Blood
+# 3027946 = Carbon dioxide [Partial pressure] in Arterial blood
 # Stored in mmHg, except for PCO2 (bloed) - kPa, which is converted to mmHg (1 kPa = 7.50062 mmHg).
 type: simple
 mappings:

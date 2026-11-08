@@ -1,7 +1,6 @@
 path: measurement.parquet
 
 columns:
-  # subject_id and extensions
   - name: person_id
     type: int64
   - name: measurement_id
@@ -10,7 +9,6 @@ columns:
     type: int64
   - name: provider_id
     type: int64
-  # db fields - times
   - name: measurement_date
     type: datetime
     params:
@@ -21,7 +19,6 @@ columns:
     params:
       format: "%Y-%m-%d %H:%M:%S"
       strict: false
-  # db fields - values
   - name: measurement_concept_id
     type: int64
   - name: measurement_source_value

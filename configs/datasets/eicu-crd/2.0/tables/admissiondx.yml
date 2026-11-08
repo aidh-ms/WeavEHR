@@ -1,15 +1,12 @@
 path: admissionDx.csv.gz
 
 columns:
-  # subject_id and extensions
   - name: patientunitstayid
     type: int64
 
-  # db fields - times
   - name: admitdxenteredoffset
     type: int64
 
-  # db fields - values
   - name: admitdxpath
     type: string
   - name: admitdxname

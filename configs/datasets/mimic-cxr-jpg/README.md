@@ -1,4 +1,4 @@
-# MIMIC-CXR
+# MIMIC-CXR-JPG
 
 Configurations for [MIMIC-CXR-JPG](https://physionet.org/content/mimic-cxr-jpg/), the
 critical care database from the Beth Israel Deaconess Medical Center containing
@@ -10,7 +10,6 @@ Chest X-Rays
 - `2.0/` — **reference configuration**: 3 table configs (`tables/`,
   covering notes) and the per-dataset concept
   mappings (`mappings/`) for the shared dictionary in `configs/concepts/`.
-  This is the most complete dataset configuration in WeavEHR.
 - `2.1/` — **extends `2.0`** (see `2.1/extends.yml`)
 
 ## Layout
