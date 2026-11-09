@@ -323,7 +323,6 @@ def test_aumc_inherits_omop_tables() -> None:
     assert measurement.events  # inherited from omop
 
 
-
 AUMC_MEDICALLY_REVIEWED_INCLUDE_SOURCES = {
     "methemoglobin": {"3007930"},
     "mean_corpuscular_hemoglobin_concentration": {"40762530"},
@@ -386,16 +385,8 @@ def test_aumc_medically_reviewed_include_sources(
     assert pattern.fullmatch("999999999") is None
 
 
-
-
-def test_aumc_lymphocyte_ratio_sources_and_complex_mapping() -> None:
-    """AUMC lymphocyte percentages retain direct and derived source semantics.
-
-    Medical review established that percentage and absolute-count lymphocyte
-    measurements are distinct raw measurements. The canonical percentage
-    concept therefore keeps the direct percentage source while deriving
-    additional percentages from absolute lymphocytes and WBC explicitly.
-    """
+def test_aumc_lymphocyte_ratio_sources_and_derived_mapping() -> None:
+    """AUMC preserves direct percentages and derives additional percentages."""
     mapping_dir = CONFIG_ROOT / "datasets" / "aumc" / "1.5.0" / "mappings"
 
     direct = yaml.safe_load((mapping_dir / "lymphocyte_percentage.yml").read_text())
@@ -405,39 +396,40 @@ def test_aumc_lymphocyte_ratio_sources_and_complex_mapping() -> None:
 
     assert direct["type"] == "simple"
     assert re.compile(direct["mappings"][0]["pattern"]["code"]).fullmatch("3002030//review-source")
-    assert re.compile(direct["mappings"][0]["pattern"]["code"]).fullmatch("3019198//review-source") is None
+    assert not re.compile(direct["mappings"][0]["pattern"]["code"]).fullmatch("3019198//review-source")
 
     assert absolute["type"] == "simple"
     assert re.compile(absolute["mappings"][0]["pattern"]["code"]).fullmatch("3019198//review-source")
-    assert re.compile(absolute["mappings"][0]["pattern"]["code"]).fullmatch("3002030//review-source") is None
+    assert not re.compile(absolute["mappings"][0]["pattern"]["code"]).fullmatch("3002030//review-source")
 
     assert re.compile(wbc["mappings"][0]["pattern"]["code"]).fullmatch("3010813//review-source")
 
-    assert final["type"] == "complex"
-    assert (
-        final["concept_transformer"]
-        == "weavehr.steps.concept.transformer.hematology.BloodCellPercentageTransformer"
-    )
-    assert set(final["concepts"]) == {
-        "lymphocyte_percentage.1.0.0",
-        "absolute_lymphocyte_count.1.0.0",
-        "white_blood_cell_count.1.0.0",
-    }
-    assert final["kwargs"] == {
-        "direct_concept": "lymphocyte_percentage",
-        "count_concept": "absolute_lymphocyte_count",
-        "reference_count_concept": "white_blood_cell_count",
-    }
+    assert final["type"] == "derived"
+    assert final["table"]["concept"] == "absolute_lymphocyte_count.1.0.0"
+    assert final["table"]["row_index_by"] == ["subject_id", "time"]
 
-    direct_concept = yaml.safe_load(
-        (CONFIG_ROOT / "concepts" / "hematology" / "lymphocyte_percentage.yml").read_text()
-    )
+    assert len(final["join"]) == 1
+    join = final["join"][0]
+    assert join["concept"] == "white_blood_cell_count.1.0.0"
+    assert join["row_index_by"] == ["subject_id", "time"]
+    assert join["both_on"] == ["subject_id", "time", "row_id"]
+    assert join["how"] == "inner"
+
+    assert len(final["append"]) == 1
+    assert final["append"][0]["concept"] == "lymphocyte_percentage.1.0.0"
+    assert "text_value" not in final["append"][0]["columns"]
+
+    assert final["event"]["numeric_value"] == ("100 * col(numeric_value) / col(numeric_value_wbc)")
+    assert "col(numeric_value_wbc) > 0" in final["filters"]
+
+    direct_concept = yaml.safe_load((CONFIG_ROOT / "concepts" / "hematology" / "lymphocyte_percentage.yml").read_text())
     absolute_concept = yaml.safe_load(
         (CONFIG_ROOT / "concepts" / "hematology" / "absolute_lymphocyte_count.yml").read_text()
     )
 
     assert direct_concept["unit"] == "%"
     assert absolute_concept["unit"] == "K/uL"
+
 
 def test_mimic_versions_inherit_reference_configs() -> None:
     """mimic-iv 3.1 and the demo must inherit the 2.2 reference configs.

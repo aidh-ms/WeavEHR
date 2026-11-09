@@ -657,6 +657,23 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             for expr in table.callbacks:
                 lf = lf.with_columns(parse_expr(lf, expr))
 
+            for expr in table.pre_filters:
+                lf = lf.filter(parse_expr(lf, expr))
+
+
+            if table.row_index_by:
+                lf = (
+                    lf.sort(
+                        [*table.row_index_by, *table.row_index_order_by],
+                        maintain_order=True,
+                    )
+                    .with_columns(
+                        pl.int_range(pl.len())
+                        .over(table.row_index_by)
+                        .alias("row_id")
+                    )
+                )
+
             return lf
 
         lf = _read_table(dataset_concept.table)
@@ -715,6 +732,52 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             ]
             + [pl.col(col).cast(pl.String) for col in extension.keys()]
         )
+
+        if dataset_concept.append:
+            frames = [lf]
+
+            for table in dataset_concept.append:
+                appended = _read_table(table)
+
+                for expr in table.post_callbacks:
+                    appended = appended.with_columns(parse_expr(appended, expr))
+
+                # Apply the target concept's extension columns.
+                for col_name, col_expr in extension.items():
+                    appended = appended.with_columns(
+                        parse_expr(appended, col_expr).alias(col_name)
+                    )
+
+                schema = appended.collect_schema()
+
+                if "numeric_value" not in schema:
+                    appended = appended.with_columns(
+                        pl.lit(None, dtype=pl.Float32).alias("numeric_value")
+                    )
+
+                if "text_value" not in schema:
+                    appended = appended.with_columns(
+                        pl.lit(None, dtype=pl.String).alias("text_value")
+                    )
+
+                appended = appended.with_columns(
+                    pl.lit(concept.code).alias("code")
+                )
+
+                appended = appended.select(
+                    [
+                        pl.col("subject_id").cast(pl.Int64),
+                        pl.col("time").cast(pl.Datetime(time_unit="us")),
+                        pl.col("code").cast(pl.String),
+                        pl.col("numeric_value").cast(pl.Float32),
+                        pl.col("text_value").cast(pl.String),
+                    ]
+                    + [pl.col(col).cast(pl.String) for col in extension.keys()]
+                )
+
+                frames.append(appended)
+
+            lf = pl.concat(frames, how="vertical")
 
         return lf
 

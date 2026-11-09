@@ -3,19 +3,64 @@
 #   3002030 = direct lymphocyte percentage
 #   3019198 = absolute lymphocyte count
 #
-# The canonical `lymphocytes` concept remains a percentage. Direct percentages
-# are retained as measured, while absolute counts are converted to percentages
-# using the white blood cell count measured at the exact same MEDS timestamp.
+# Derive percentages only when absolute lymphocyte counts and WBC have
+# exactly matching timestamps. Pair simultaneous observations by row index
+# to avoid a many-to-many join.
 #
-# Direct and derived percentage events are intentionally not coalesced when they
-# occur simultaneously.
-type: complex
-concept_transformer: weavehr.steps.concept.transformer.hematology.BloodCellPercentageTransformer
-concepts:
-  - lymphocyte_percentage.1.0.0
-  - absolute_lymphocyte_count.1.0.0
-  - white_blood_cell_count.1.0.0
-kwargs:
-  direct_concept: lymphocyte_percentage
-  count_concept: absolute_lymphocyte_count
-  reference_count_concept: white_blood_cell_count
+# Preserve directly measured percentages as separate events, including
+# when a derived observation exists at the same timestamp.
+type: derived
+
+table:
+  concept: absolute_lymphocyte_count.1.0.0
+  columns:
+    - subject_id
+    - time
+    - numeric_value
+    - dataset
+    - table
+  row_index_by:
+    - subject_id
+    - time
+  row_index_order_by:
+    - numeric_value
+
+join:
+  - concept: white_blood_cell_count.1.0.0
+    columns:
+      - subject_id
+      - time
+      - numeric_value
+    row_index_by:
+      - subject_id
+      - time
+    row_index_order_by:
+      - numeric_value
+    both_on:
+      - subject_id
+      - time
+      - row_id
+    how: inner
+    suffix: "_wbc"
+    pre_filters:
+      - drop_na(numeric_value)
+      - col(numeric_value) > 0
+
+event:
+  numeric_value: 100 * col(numeric_value) / col(numeric_value_wbc)
+
+filters:
+  - drop_na(numeric_value)
+  - drop_na(numeric_value_wbc)
+  - col(numeric_value_wbc) > 0
+
+append:
+  - concept: lymphocyte_percentage.1.0.0
+    pre_filters:
+      - drop_na(numeric_value)
+    columns:
+      - subject_id
+      - time
+      - numeric_value
+      - dataset
+      - table

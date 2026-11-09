@@ -39,7 +39,8 @@ for that clinical concept.
 
 ### Coverage
 
-Currently mapped (all `simple`, all from the OMOP `measurement` table): the
+Currently mapped (primarily `simple` mappings from the OMOP
+`measurement` table, plus a `derived` lymphocyte mapping): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
 respiratory numerics (SpO2, respiratory rate, FiO2) and urine output.
 
@@ -95,10 +96,13 @@ is retained as the directly measured lymphocyte percentage, while `3019198`
 is represented separately as an absolute lymphocyte count (`K/uL`). The
 canonical `lymphocytes` percentage concept additionally derives
 `100 * absolute_lymphocyte_count / white_blood_cell_count` when OMOP concept
-`3010813` is available at the exact same MEDS timestamp. Multiple WBC records
-at one exact timestamp use their median as the denominator, while distinct
-absolute-count events and simultaneous direct/derived percentage events remain
-separate events.
+`3010813` is available at the exact same MEDS timestamp.
+Simultaneous absolute lymphocyte and WBC observations
+are ordered by numeric value and paired using a zero-based row index within
+each subject/timestamp group. This prevents many-to-many expansion but does not
+establish clinical sample identity. Unmatched observations are excluded by the
+inner join; simultaneous direct and derived percentage events remain separate.
+The previous median-denominator behavior is no longer used.
 
 This deliberately preserves the clinical distinction identified by medical
 review instead of treating absolute counts as raw percentages. It also keeps

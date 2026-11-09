@@ -19,6 +19,19 @@ class BaseConceptTable(BaseModel):
         default_factory=list, description="The list of column names to include in the concept table."
     )
 
+    pre_filters: list[str] = Field(
+        default_factory=list,
+        description="Filters applied before row indexing and joining.",
+    )
+    row_index_by: list[str] = Field(
+        default_factory=list,
+        description="Columns defining groups for optional zero-based row indexing.",
+    )
+    row_index_order_by: list[str] = Field(
+        default_factory=list,
+        description="Columns defining deterministic row-index ordering.",
+    )
+
 
 class JoinConceptTable(BaseConceptTable, JoinConfig):
     """A concept table joined onto the main concept table of a derived concept.
@@ -34,7 +47,9 @@ class JoinConceptTable(BaseConceptTable, JoinConfig):
         "full",
         description="Type of join to be performed (inner, left, right, full, semi, anti).",
     )
-    suffix: str = Field("_right", description="Suffix to be added to overlapping column names during the join operation.")
+    suffix: str = Field(
+        "_right", description="Suffix to be added to overlapping column names during the join operation."
+    )
 
 
 class ConceptTable(BaseConceptTable):
@@ -73,6 +88,10 @@ class DerivedDatasetConceptConfig(BaseDatasetConfig):
     filters: list[str] = Field(
         default_factory=list, description="The list of filter configurations for the derived concept."
     )
+    append: list[ConceptTable] = Field(
+        default_factory=list,
+        description="Additional concept event streams to append to the derived output.",
+    )
 
     @computed_field
     @property
@@ -84,7 +103,9 @@ class DerivedDatasetConceptConfig(BaseDatasetConfig):
         """
         from weavehr.steps.concept.config.concept import ConceptConfig  # Avoid circular import
 
-        deps = {ConceptConfig.ensure_prefix(join_table.concept) for join_table in self.join} | {
-            ConceptConfig.ensure_prefix(self.table.concept)
-        }
+        deps = (
+            {ConceptConfig.ensure_prefix(join_table.concept) for join_table in self.join}
+            | {ConceptConfig.ensure_prefix(self.table.concept)}
+            | {ConceptConfig.ensure_prefix(table.concept) for table in self.append}
+        )
         return deps
