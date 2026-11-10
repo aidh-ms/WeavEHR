@@ -1,0 +1,18 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: PATIENTS.csv
+join:
+- path: ADMISSIONS.csv
+  csv_header_case: lower
+  columns:
+  - name: subject_id
+    type: int64
+  - name: deathtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - subject_id
+  filters:
+  - drop_na(deathtime)
+  - first_distinct(subject_id, order_by=[deathtime])

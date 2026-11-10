@@ -1,0 +1,3 @@
+# The official PhysioNet subset retains III's schema, including empty MV tables.
+dataset: mimic-iii
+version: "1.4"

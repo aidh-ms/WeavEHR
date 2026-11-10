@@ -1,0 +1,6 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.aki.AkiTransformer
+concepts:
+- aki_urine_output.1.0.0
+- aki_creatinine.1.0.0

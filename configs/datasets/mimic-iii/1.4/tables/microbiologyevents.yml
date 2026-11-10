@@ -1,0 +1,88 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: MICROBIOLOGYEVENTS.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: chartdate
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: charttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: spec_itemid
+  type: int64
+- name: spec_type_desc
+  type: string
+- name: org_itemid
+  type: int64
+- name: org_name
+  type: string
+- name: isolate_num
+  type: int64
+- name: ab_itemid
+  type: int64
+- name: ab_name
+  type: string
+- name: dilution_text
+  type: string
+- name: dilution_comparison
+  type: string
+- name: dilution_value
+  type: float32
+- name: interpretation
+  type: string
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    hadm_id: col(hadm_id)
+    row_id: col(row_id)
+callbacks:
+- add_offset(chartdate, 1, offset_unit="days", output=chartdate_plus1)
+events:
+- name: MICROBIOLOGY_SPECIMEN
+  columns:
+    time: first_not_null(charttime, chartdate_plus1, output=time)
+    code:
+    - col(spec_itemid)
+    - col(spec_type_desc)
+    extension:
+      available_time: first_not_null(charttime, chartdate_plus1, output=time)
+  filters:
+  - drop_na(time)
+  - first_distinct(subject_id, hadm_id, time, spec_itemid)
+- name: MICROBIOLOGY_ORGANISM
+  columns:
+    time: first_not_null(charttime, chartdate_plus1, output=time)
+    code:
+    - col(org_itemid)
+    - col(org_name)
+    extension:
+      available_time: first_not_null(charttime, chartdate_plus1, output=time)
+      isolate_num: col(isolate_num)
+  filters:
+  - drop_na(time)
+  - drop_na(org_itemid) or drop_na(org_name)
+- name: MICROBIOLOGY_SUSCEPTIBILITY
+  columns:
+    time: first_not_null(charttime, chartdate_plus1, output=time)
+    code:
+    - col(ab_itemid)
+    - col(ab_name)
+    numeric_value: col(dilution_value)
+    text_value: col(interpretation)
+    extension:
+      available_time: first_not_null(charttime, chartdate_plus1, output=time)
+      dilution_text: col(dilution_text)
+      dilution_comparison: col(dilution_comparison)
+  filters:
+  - drop_na(time)
+  - drop_na(interpretation)

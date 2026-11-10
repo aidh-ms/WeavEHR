@@ -1,0 +1,72 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: PRESCRIPTIONS.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: icustay_id
+  type: int64
+- name: startdate
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: enddate
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: drug_type
+  type: string
+- name: drug
+  type: string
+- name: drug_name_poe
+  type: string
+- name: drug_name_generic
+  type: string
+- name: formulary_drug_cd
+  type: string
+- name: gsn
+  type: string
+- name: ndc
+  type: string
+- name: prod_strength
+  type: string
+- name: dose_val_rx
+  type: string
+- name: dose_unit_rx
+  type: string
+- name: form_val_disp
+  type: string
+- name: form_unit_disp
+  type: string
+- name: route
+  type: string
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    hadm_id: col(hadm_id)
+    stay_id: col(icustay_id)
+    row_id: col(row_id)
+events:
+- name: MEDICATION_ORDER
+  columns:
+    time: col(startdate)
+    code:
+    - col(drug)
+    text_value: col(prod_strength)
+    extension:
+      available_time: col(startdate)
+      prescribed_start: col(startdate)
+      prescribed_end: col(enddate)
+      drug_type: col(drug_type)
+      ndc: col(ndc)
+      dose: col(dose_val_rx)
+      dose_uom: col(dose_unit_rx)
+      route: col(route)
+  filters:
+  - drop_na(time)

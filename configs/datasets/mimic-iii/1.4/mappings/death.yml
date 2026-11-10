@@ -1,0 +1,8 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: simple
+mappings:
+- pattern:
+    table: patients
+    event: MEDS_DEATH
+    code: ^MEDS_DEATH$
+  columns: {}

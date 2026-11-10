@@ -1,0 +1,55 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: DIAGNOSES_ICD.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: seq_num
+  type: int64
+- name: icd9_code
+  type: string
+join:
+- path: D_ICD_DIAGNOSES.csv.gz
+  csv_header_case: lower
+  columns:
+  - name: icd9_code
+    type: string
+  - name: long_title
+    type: string
+  both_on:
+  - icd9_code
+- path: ADMISSIONS.csv.gz
+  csv_header_case: lower
+  columns:
+  - name: hadm_id
+    type: int64
+  - name: dischtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - hadm_id
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    hadm_id: col(hadm_id)
+    row_id: col(row_id)
+events:
+- name: DIAGNOSIS
+  columns:
+    time: col(dischtime)
+    code:
+    - const("ICD")
+    - const("9")
+    - col(icd9_code)
+    - col(long_title)
+    extension:
+      available_time: col(dischtime)
+      seq_num: col(seq_num)
+  filters:
+  - drop_na(time)

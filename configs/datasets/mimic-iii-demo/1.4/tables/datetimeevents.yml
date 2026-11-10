@@ -1,0 +1,12 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: DATETIMEEVENTS.csv
+join:
+- path: D_ITEMS.csv
+  csv_header_case: lower
+  columns:
+  - name: itemid
+    type: int64
+  - name: label
+    type: string
+  both_on:
+  - itemid

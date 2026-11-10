@@ -1,0 +1,10 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: simple
+mappings:
+- pattern:
+    table: labevents
+    event: LAB
+    code: ^(?:[A-Z_]+//)?(?:50889)(?:$|//)
+  columns:
+    numeric_value: replace(str_contains(code, "(?i)//mg/dl$"), col(numeric_value) * 10, col(numeric_value))
+    text_value: col(text_value)

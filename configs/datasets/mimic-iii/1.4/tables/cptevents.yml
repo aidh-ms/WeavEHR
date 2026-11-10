@@ -1,0 +1,61 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: CPTEVENTS.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: costcenter
+  type: string
+- name: chartdate
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cpt_cd
+  type: string
+- name: cpt_number
+  type: int64
+- name: cpt_suffix
+  type: string
+- name: ticket_id_seq
+  type: int64
+- name: sectionheader
+  type: string
+- name: subsectionheader
+  type: string
+- name: description
+  type: string
+join:
+- path: ADMISSIONS.csv.gz
+  csv_header_case: lower
+  columns:
+  - name: hadm_id
+    type: int64
+  - name: dischtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - hadm_id
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    hadm_id: col(hadm_id)
+    row_id: col(row_id)
+events:
+- name: CPT
+  columns:
+    time: first_not_null(chartdate, dischtime, output=time)
+    code:
+    - const("CPT")
+    - col(cpt_cd)
+    text_value: col(description)
+    extension:
+      available_time: first_not_null(chartdate, dischtime, output=time)
+  filters:
+  - drop_na(time)

@@ -1,0 +1,80 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: PATIENTS.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: gender
+  type: string
+- name: dob
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dod
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dod_hosp
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dod_ssn
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: expire_flag
+  type: int64
+join:
+- path: ADMISSIONS.csv.gz
+  csv_header_case: lower
+  columns:
+  - name: subject_id
+    type: int64
+  - name: deathtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - subject_id
+  filters:
+  - drop_na(deathtime)
+  - first_distinct(subject_id, order_by=[deathtime])
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    row_id: col(row_id)
+events:
+- name: MEDS_BIRTH
+  columns:
+    time: col(dob)
+    code:
+    - const("MEDS_BIRTH")
+    extension:
+      available_time: col(dob)
+  filters:
+  - drop_na(time)
+- name: GENDER
+  columns:
+    time: col(dob)
+    code:
+    - col(gender)
+    extension:
+      available_time: col(dob)
+  filters:
+  - drop_na(time)
+- name: MEDS_DEATH
+  columns:
+    time: first_not_null(deathtime, dod_hosp, dod, dod_ssn, output=time)
+    code:
+    - const("MEDS_DEATH")
+    extension:
+      available_time: first_not_null(deathtime, dod_hosp, dod, dod_ssn, output=time)
+  filters:
+  - drop_na(time)

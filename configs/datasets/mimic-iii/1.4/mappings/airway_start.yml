@@ -1,0 +1,61 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: simple
+mappings:
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_START
+    code: ^(?:[A-Z_]+//)?(?:224385)(?:$|//)
+  level: endotracheal_tube
+  columns:
+    extension:
+      stay_id: col(stay_id)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  level: endotracheal_tube
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) == "Endotracheal tube"
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_START
+    code: ^(?:[A-Z_]+//)?(?:225448|226237)(?:$|//)
+  level: tracheostomy
+  columns:
+    extension:
+      stay_id: col(stay_id)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  level: tracheostomy
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^(Tracheostomy tube|Trach mask)$")
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:224829)(?:$|//)
+  level: tracheostomy
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:227130)(?:$|//)
+  level: tracheostomy
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) == "1"

@@ -1,0 +1,94 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: CALLOUT.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: submit_wardid
+  type: int64
+- name: submit_careunit
+  type: string
+- name: curr_wardid
+  type: int64
+- name: curr_careunit
+  type: string
+- name: callout_wardid
+  type: int64
+- name: callout_service
+  type: string
+- name: request_tele
+  type: int64
+- name: request_resp
+  type: int64
+- name: request_cdiff
+  type: int64
+- name: request_mrsa
+  type: int64
+- name: request_vre
+  type: int64
+- name: callout_status
+  type: string
+- name: callout_outcome
+  type: string
+- name: discharge_wardid
+  type: int64
+- name: acknowledge_status
+  type: string
+- name: createtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: updatetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: acknowledgetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: outcometime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: firstreservationtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: currentreservationtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    hadm_id: col(hadm_id)
+    row_id: col(row_id)
+events:
+- name: CALLOUT_REQUEST
+  columns:
+    time: col(createtime)
+    code:
+    - col(callout_service)
+    extension:
+      available_time: col(createtime)
+  filters:
+  - drop_na(time)
+- name: CALLOUT_OUTCOME
+  columns:
+    time: col(outcometime)
+    code:
+    - col(callout_outcome)
+    extension:
+      available_time: col(outcometime)
+  filters:
+  - drop_na(time)

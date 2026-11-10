@@ -1,0 +1,24 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: PROCEDURES_ICD.csv
+join:
+- path: D_ICD_PROCEDURES.csv
+  csv_header_case: lower
+  columns:
+  - name: icd9_code
+    type: string
+  - name: long_title
+    type: string
+  both_on:
+  - icd9_code
+- path: ADMISSIONS.csv
+  csv_header_case: lower
+  columns:
+  - name: hadm_id
+    type: int64
+  - name: dischtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - hadm_id

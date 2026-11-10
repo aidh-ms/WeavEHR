@@ -6,7 +6,7 @@ callback transformations, join specifications, and event extraction rules.
 
 from abc import ABCMeta
 from enum import StrEnum, auto
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from polars.datatypes import DataTypeClass
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
@@ -84,6 +84,10 @@ class BaseTableConfig(BaseModel, metaclass=ABCMeta):
     columns: list[ColumnConfig] = Field(
         default_factory=list,
         description="The list of column configurations for the table.",
+    )
+    csv_header_case: Literal["lower", "upper"] | None = Field(
+        None,
+        description="Optional CSV header normalisation before applying column types; also applies to join tables.",
     )
     pre_callbacks: list[str] = Field(
         default_factory=list,

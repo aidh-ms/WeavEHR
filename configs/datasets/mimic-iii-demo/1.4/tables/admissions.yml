@@ -1,0 +1,15 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: ADMISSIONS.csv
+join:
+- path: PATIENTS.csv
+  csv_header_case: lower
+  columns:
+  - name: subject_id
+    type: int64
+  - name: dob
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - subject_id

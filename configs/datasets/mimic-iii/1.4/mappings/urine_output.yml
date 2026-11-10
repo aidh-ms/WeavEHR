@@ -1,0 +1,31 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: simple
+mappings:
+- pattern:
+    table: outputevents
+    event: FLUID_OUTPUT
+    code: ^(?:[A-Z_]+//)?(?:226557|226558|226559|226560|226561|226563|226564|226565|226566|226567|226584)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+- pattern:
+    table: outputevents
+    event: FLUID_OUTPUT
+    code: ^(?:[A-Z_]+//)?(?:40055|40056|40057|40065|40069|40085|40086|40094|40096|40405|40428|40473|40715|43175|227510)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+- pattern:
+    table: outputevents
+    event: FLUID_OUTPUT
+    code: ^(?:[A-Z_]+//)?(?:40651|227489)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+- pattern:
+    table: outputevents
+    event: FLUID_OUTPUT
+    code: ^(?:[A-Z_]+//)?(?:227488)(?:$|//)
+  columns:
+    numeric_value: replace(col(numeric_value) > 0, -col(numeric_value), col(numeric_value))
+    text_value: col(text_value)

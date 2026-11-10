@@ -1,0 +1,17 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: simple
+mappings:
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:190|3420|3422|223835)(?:$|//)
+  columns:
+    numeric_value: replace((col(numeric_value) >= 0.2) & (col(numeric_value) <= 1), col(numeric_value) * 100, col(numeric_value))
+    text_value: col(text_value)
+- pattern:
+    table: labevents
+    event: LAB
+    code: ^(?:[A-Z_]+//)?(?:50816)(?:$|//)
+  columns:
+    numeric_value: replace((col(numeric_value) >= 0.2) & (col(numeric_value) <= 1), col(numeric_value) * 100, col(numeric_value))
+    text_value: col(text_value)

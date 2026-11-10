@@ -1,0 +1,890 @@
+{
+  "validated_at": "2026-11-10",
+  "weavehr_base": "c9187df215214b61b228c3ce357fb7cf091025fe",
+  "datasets": {
+    "mimic-iii-demo": {
+      "extracted_events": 944507,
+      "concept_outputs": 149,
+      "concepts_with_observations": 140,
+      "harmonised_events": 340479,
+      "empty_concepts": [
+        "crrt_citrate",
+        "crrt_postfilter_replacement_rate",
+        "crrt_prefilter_replacement_rate",
+        "discharge_note",
+        "endtidal_CO2",
+        "intracranial_pressure",
+        "monocytes_absolute",
+        "radiology_note",
+        "ventilator_flow_rate"
+      ]
+    },
+    "mimic-iv-demo": {
+      "extracted_events": 930905,
+      "concept_outputs": 150,
+      "concepts_with_observations": 147,
+      "harmonised_events": 303677,
+      "empty_concepts": [
+        "dextrose_as_D10",
+        "erythrocyte_distribution_width_sd",
+        "troponin_I"
+      ]
+    }
+  },
+  "ricu": {
+    "reference_commit": "c0efac720dbe72caaf63b361b6978a24383835bf",
+    "concepts_checked": 67,
+    "rows_compared": 187968,
+    "checks": {
+      "CO2_partial_pressure": [
+        {
+          "table": "labevents",
+          "rows": 1166
+        }
+      ],
+      "C_reactive_protein": [
+        {
+          "table": "labevents",
+          "rows": 3
+        }
+      ],
+      "Hemoglobin_A1C": [
+        {
+          "table": "labevents",
+          "rows": 23
+        }
+      ],
+      "O2_partial_pressure": [
+        {
+          "table": "labevents",
+          "rows": 1166
+        }
+      ],
+      "Richmond_agitation_sedation_scale": [
+        {
+          "table": "chartevents",
+          "rows": 133
+        }
+      ],
+      "alanine_aminotransferase": [
+        {
+          "table": "labevents",
+          "rows": 609
+        }
+      ],
+      "albumin": [
+        {
+          "table": "labevents",
+          "rows": 414
+        }
+      ],
+      "alkaline_phosphatase": [
+        {
+          "table": "labevents",
+          "rows": 592
+        }
+      ],
+      "arterial_oxygen_saturation": [
+        {
+          "table": "chartevents",
+          "rows": 221
+        },
+        {
+          "table": "labevents",
+          "rows": 343
+        }
+      ],
+      "aspartate_aminotransferase": [
+        {
+          "table": "labevents",
+          "rows": 603
+        }
+      ],
+      "band_form_neutrophils": [
+        {
+          "table": "labevents",
+          "rows": 231
+        }
+      ],
+      "base_excess": [
+        {
+          "table": "labevents",
+          "rows": 1166
+        }
+      ],
+      "basophils": [
+        {
+          "table": "labevents",
+          "rows": 547
+        }
+      ],
+      "bicarbonate": [
+        {
+          "table": "labevents",
+          "rows": 2151
+        }
+      ],
+      "bilirubin_direct": [
+        {
+          "table": "labevents",
+          "rows": 60
+        }
+      ],
+      "blood_urea_nitrogen": [
+        {
+          "table": "labevents",
+          "rows": 2158
+        }
+      ],
+      "calcium": [
+        {
+          "table": "labevents",
+          "rows": 1757
+        }
+      ],
+      "calcium_ionized": [
+        {
+          "table": "labevents",
+          "rows": 558
+        }
+      ],
+      "chloride": [
+        {
+          "table": "labevents",
+          "rows": 2160
+        }
+      ],
+      "creatine_kinase": [
+        {
+          "table": "labevents",
+          "rows": 334
+        }
+      ],
+      "creatine_kinase_MB": [
+        {
+          "table": "labevents",
+          "rows": 319
+        }
+      ],
+      "creatinine": [
+        {
+          "table": "labevents",
+          "rows": 2175
+        }
+      ],
+      "diastolic_blood_pressure": [
+        {
+          "table": "chartevents",
+          "rows": 15628
+        }
+      ],
+      "endtidal_CO2": [
+        {
+          "table": "chartevents",
+          "rows": 0
+        }
+      ],
+      "eosinophils": [
+        {
+          "table": "labevents",
+          "rows": 547
+        }
+      ],
+      "erythrocyte_distribution_width": [
+        {
+          "table": "labevents",
+          "rows": 2005
+        }
+      ],
+      "erythrocyte_sedimentation_rate": [
+        {
+          "table": "labevents",
+          "rows": 3
+        }
+      ],
+      "fibrinogen": [
+        {
+          "table": "labevents",
+          "rows": 130
+        }
+      ],
+      "fraction_of_inspired_oxygen": [
+        {
+          "table": "chartevents",
+          "rows": 1215
+        },
+        {
+          "table": "labevents",
+          "rows": 338
+        }
+      ],
+      "gcs_eye": [
+        {
+          "table": "chartevents",
+          "rows": 4004
+        }
+      ],
+      "gcs_motor": [
+        {
+          "table": "chartevents",
+          "rows": 3977
+        }
+      ],
+      "gcs_total": [
+        {
+          "table": "chartevents",
+          "rows": 1951
+        }
+      ],
+      "gcs_verbal": [
+        {
+          "table": "chartevents",
+          "rows": 3992
+        }
+      ],
+      "glucose": [
+        {
+          "table": "labevents",
+          "rows": 2404
+        }
+      ],
+      "heart_rate": [
+        {
+          "table": "chartevents",
+          "rows": 15489
+        }
+      ],
+      "hematocrit": [
+        {
+          "table": "labevents",
+          "rows": 2317
+        }
+      ],
+      "hemoglobin": [
+        {
+          "table": "labevents",
+          "rows": 2024
+        }
+      ],
+      "lactate": [
+        {
+          "table": "labevents",
+          "rows": 578
+        }
+      ],
+      "lymphocytes": [
+        {
+          "table": "labevents",
+          "rows": 547
+        }
+      ],
+      "magnesium": [
+        {
+          "table": "labevents",
+          "rows": 1918
+        }
+      ],
+      "mean_arterial_pressure": [
+        {
+          "table": "chartevents",
+          "rows": 15889
+        }
+      ],
+      "mean_corpuscular_hemoglobin": [
+        {
+          "table": "labevents",
+          "rows": 2007
+        }
+      ],
+      "mean_corpuscular_hemoglobin_concentration": [
+        {
+          "table": "labevents",
+          "rows": 2008
+        }
+      ],
+      "mean_corpuscular_volume": [
+        {
+          "table": "labevents",
+          "rows": 2007
+        }
+      ],
+      "methemoglobin": [
+        {
+          "table": "labevents",
+          "rows": 5
+        }
+      ],
+      "neutrophils": [
+        {
+          "table": "labevents",
+          "rows": 547
+        }
+      ],
+      "oxygen_saturation": [
+        {
+          "table": "chartevents",
+          "rows": 16109
+        }
+      ],
+      "pH_of_blood": [
+        {
+          "table": "labevents",
+          "rows": 1230
+        }
+      ],
+      "partial_thromboplastin_time": [
+        {
+          "table": "labevents",
+          "rows": 1419
+        }
+      ],
+      "patient_height": [
+        {
+          "table": "chartevents",
+          "rows": 81
+        }
+      ],
+      "patient_weight": [
+        {
+          "table": "chartevents",
+          "rows": 161
+        }
+      ],
+      "phosphate": [
+        {
+          "table": "labevents",
+          "rows": 1748
+        }
+      ],
+      "platelet_count": [
+        {
+          "table": "labevents",
+          "rows": 2088
+        }
+      ],
+      "potassium": [
+        {
+          "table": "labevents",
+          "rows": 2279
+        }
+      ],
+      "prothrombin_time_international_normalized_ratio": [
+        {
+          "table": "labevents",
+          "rows": 1378
+        }
+      ],
+      "prothrombine_time": [
+        {
+          "table": "labevents",
+          "rows": 1378
+        }
+      ],
+      "red_blood_cell_count": [
+        {
+          "table": "labevents",
+          "rows": 2007
+        }
+      ],
+      "respiratory_rate": [
+        {
+          "table": "chartevents",
+          "rows": 17574
+        }
+      ],
+      "sodium": [
+        {
+          "table": "labevents",
+          "rows": 2185
+        }
+      ],
+      "systolic_blood_pressure": [
+        {
+          "table": "chartevents",
+          "rows": 15658
+        }
+      ],
+      "temperature": [
+        {
+          "table": "chartevents",
+          "rows": 2709
+        },
+        {
+          "table": "chartevents",
+          "rows": 6213
+        }
+      ],
+      "total_bilirubin": [
+        {
+          "table": "labevents",
+          "rows": 629
+        }
+      ],
+      "totcal_CO2": [
+        {
+          "table": "labevents",
+          "rows": 1166
+        }
+      ],
+      "troponin_I": [
+        {
+          "table": "labevents",
+          "rows": 14
+        }
+      ],
+      "troponin_t": [
+        {
+          "table": "labevents",
+          "rows": 288
+        }
+      ],
+      "urine_output": [
+        {
+          "table": "outputevents",
+          "rows": 9214
+        }
+      ],
+      "white_blood_cell_count": [
+        {
+          "table": "labevents",
+          "rows": 2021
+        }
+      ]
+    },
+    "scope": "item selection and numeric conversions; no R runtime or ricu scores"
+  },
+  "mimic_code": {
+    "reference_commit": "303d26c623dcc9c49cc0f204468d4acc2f063797",
+    "queries_executed": 4,
+    "comparisons": {
+      "heart_rate": {
+        "stays": 132,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "systolic_blood_pressure": {
+        "stays": 132,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "diastolic_blood_pressure": {
+        "stays": 132,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "mean_arterial_pressure": {
+        "stays": 132,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "respiratory_rate": {
+        "stays": 132,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "temperature": {
+        "stays": 132,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "oxygen_saturation": {
+        "stays": 132,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "glucose": {
+        "stays": 130,
+        "statistics": [
+          "min",
+          "max",
+          "mean"
+        ]
+      },
+      "urine_output": {
+        "stays": 130,
+        "statistics": [
+          "sum"
+        ]
+      },
+      "lab/anion_gap": {
+        "stays": 135,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/albumin": {
+        "stays": 56,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/band_form_neutrophils": {
+        "stays": 15,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/bicarbonate": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/total_bilirubin": {
+        "stays": 70,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/creatinine": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/chloride": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/glucose": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/hematocrit": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/hemoglobin": {
+        "stays": 135,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/lactate": {
+        "stays": 95,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/platelet_count": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/potassium": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/partial_thromboplastin_time": {
+        "stays": 124,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/prothrombin_time_international_normalized_ratio": {
+        "stays": 125,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/prothrombine_time": {
+        "stays": 125,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/sodium": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/blood_urea_nitrogen": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "lab/white_blood_cell_count": {
+        "stays": 136,
+        "statistics": [
+          "min",
+          "max"
+        ]
+      },
+      "blood_gas/alveolar_arterial_oxygen_gradient": {
+        "assessments": 29,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/base_excess": {
+        "assessments": 311,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/bicarbonate": {
+        "assessments": 14,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/totcal_CO2": {
+        "assessments": 311,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/carboxyhemoglobin": {
+        "assessments": 3,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/calcium_ionized": {
+        "assessments": 129,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/lactate": {
+        "assessments": 253,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/methemoglobin": {
+        "assessments": 1,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/oxygen_flow_rate": {
+        "assessments": 15,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/fraction_of_inspired_oxygen": {
+        "assessments": 85,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/arterial_oxygen_saturation": {
+        "assessments": 95,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/CO2_partial_pressure": {
+        "assessments": 311,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/positive_end_expiratory_pressure": {
+        "assessments": 50,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/pH_of_blood": {
+        "assessments": 322,
+        "statistics": [
+          "max per timestamp"
+        ]
+      },
+      "blood_gas/O2_partial_pressure": {
+        "assessments": 311,
+        "statistics": [
+          "max per timestamp"
+        ]
+      }
+    }
+  },
+  "weavehr_mimic_iv": {
+    "concepts_checked": 118,
+    "rows_compared": 219102,
+    "rows_by_concept": {
+      "CO2_partial_pressure": 889,
+      "O2_partial_pressure": 889,
+      "alveolar_arterial_oxygen_gradient": 28,
+      "base_excess": 889,
+      "calcium_ionized": 509,
+      "carboxyhemoglobin": 7,
+      "fraction_of_inspired_oxygen": 1883,
+      "lactate": 758,
+      "methemoglobin": 6,
+      "pH_of_blood": 966,
+      "totcal_CO2": 889,
+      "C_reactive_protein": 44,
+      "alanine_aminotransferase": 1163,
+      "albumin": 625,
+      "alkaline_phosphatase": 1138,
+      "amylase": 41,
+      "anion_gap": 2860,
+      "aspartate_aminotransferase": 1165,
+      "bicarbonate": 2863,
+      "bilirubin_direct": 53,
+      "bilirubin_indirect": 47,
+      "blood_urea_nitrogen": 2974,
+      "calcium": 2377,
+      "chloride": 2981,
+      "creatine_kinase": 200,
+      "creatine_kinase_MB": 187,
+      "creatinine": 3003,
+      "gamma_glutamyl_transferase": 4,
+      "globulin": 163,
+      "glucose": 2973,
+      "lactate_dehydrogenase": 663,
+      "magnesium": 2470,
+      "nt_pro_bnp": 76,
+      "phosphate": 2337,
+      "potassium": 3022,
+      "sodium": 3007,
+      "total_bilirubin": 1164,
+      "total_protein": 181,
+      "troponin_t": 133,
+      "patient_admission_type": 275,
+      "patient_age": 275,
+      "patient_height": 71,
+      "patient_sex": 100,
+      "patient_weight": 129,
+      "Hemoglobin_A1C": 117,
+      "atypical_lymphocytes": 404,
+      "band_form_neutrophils": 395,
+      "basophils": 943,
+      "d_dimer": 1,
+      "eosinophils": 943,
+      "erythrocyte_distribution_width": 2760,
+      "erythrocyte_sedimentation_rate": 19,
+      "fibrinogen": 166,
+      "hematocrit": 2913,
+      "hemoglobin": 2787,
+      "lymphocytes": 943,
+      "lymphocytes_absolute": 569,
+      "mean_corpuscular_hemoglobin": 2760,
+      "mean_corpuscular_hemoglobin_concentration": 2760,
+      "mean_corpuscular_volume": 2760,
+      "metamyelocytes": 397,
+      "monocytes": 943,
+      "neutrophils": 943,
+      "nucleated_red_blood_cells": 115,
+      "partial_thromboplastin_time": 1500,
+      "platelet_count": 2827,
+      "prothrombin_time_international_normalized_ratio": 1481,
+      "prothrombine_time": 1481,
+      "red_blood_cell_count": 2760,
+      "thrombin_time": 1,
+      "white_blood_cell_count": 2760,
+      "antibiotics": 2025,
+      "insulin": 284,
+      "body_fluid_sampling": 1336,
+      "Richmond_agitation_sedation_scale": 2751,
+      "gcs_eye": 3274,
+      "gcs_motor": 3251,
+      "gcs_unable": 3266,
+      "gcs_verbal": 3266,
+      "intracranial_pressure": 313,
+      "urine_output": 7286,
+      "crrt_access_pressure": 426,
+      "crrt_blood_flow": 435,
+      "crrt_citrate": 275,
+      "crrt_current_goal": 442,
+      "crrt_dialysate_rate": 440,
+      "crrt_effluent_pressure": 425,
+      "crrt_filter_pressure": 426,
+      "crrt_heparin_dose": 217,
+      "crrt_hourly_patient_fluid_removal": 449,
+      "crrt_postfilter_replacement_rate": 439,
+      "crrt_prefilter_replacement_rate": 440,
+      "crrt_replacement_rate": 440,
+      "crrt_return_pressure": 425,
+      "crrt_ultrafiltrate_output": 441,
+      "airway_end": 50,
+      "airway_start": 1397,
+      "arterial_oxygen_saturation": 327,
+      "oxygen_flow_rate": 1103,
+      "oxygen_flow_rate_additional": 145,
+      "oxygen_saturation": 13540,
+      "positive_end_expiratory_pressure": 1447,
+      "respiratory_rate": 17359,
+      "respiratory_support": 2911,
+      "ventilation_end": 73,
+      "ventilation_start": 73,
+      "ventilator_flow_rate": 330,
+      "ventilator_minute_volume": 1359,
+      "ventilator_plateau_pressure": 510,
+      "ventilator_tidal_volume_observed": 1331,
+      "ventilator_tidal_volume_set": 769,
+      "ventilator_tidal_volume_spontaneous": 661,
+      "diastolic_blood_pressure": 13873,
+      "endtidal_CO2": 202,
+      "heart_rate": 13913,
+      "mean_arterial_pressure": 14390,
+      "systolic_blood_pressure": 13872,
+      "temperature": 3770
+    }
+  },
+  "test_suite": {
+    "passed": 1981,
+    "coverage_percent": 94.14,
+    "python": "3.13.5",
+    "command": "uv run --locked pytest . -q"
+  },
+  "other_checks": {
+    "ruff": "passed",
+    "ty": "passed",
+    "mkdocs_build": "passed"
+  }
+}

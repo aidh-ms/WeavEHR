@@ -1,0 +1,13 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.mimic.MimicInfusionTransformer
+concepts:
+- patient_weight.1.0.0
+kwargs:
+  itemids:
+    inputevents_cv:
+    - 30051
+    inputevents_mv:
+    - 222315
+  mode: rate
+  unit: units/min

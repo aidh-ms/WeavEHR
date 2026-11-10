@@ -1,0 +1,15 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: simple
+mappings:
+- pattern:
+    table: patients
+    event: GENDER
+    code: ^F$
+  columns:
+    text_value: const("Female")
+- pattern:
+    table: patients
+    event: GENDER
+    code: ^M$
+  columns:
+    text_value: const("Male")

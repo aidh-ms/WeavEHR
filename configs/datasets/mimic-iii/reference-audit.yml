@@ -1,0 +1,182 @@
+# Pinned reference concepts used by scripts/validate_mimic_iii.py.
+ricu_commit: c0efac720dbe72caaf63b361b6978a24383835bf
+mimic_code_commit: 303d26c623dcc9c49cc0f204468d4acc2f063797
+ricu_concepts:
+  CO2_partial_pressure:
+    key: pco2
+  C_reactive_protein:
+    key: crp
+  Hemoglobin_A1C:
+    key: hba1c
+  O2_partial_pressure:
+    key: po2
+  Richmond_agitation_sedation_scale:
+    key: rass
+  alanine_aminotransferase:
+    key: alt
+  albumin:
+    key: alb
+  alkaline_phosphatase:
+    key: alp
+  antibiotics:
+    key: abx
+  arterial_oxygen_saturation:
+    key: sao2
+  aspartate_aminotransferase:
+    key: ast
+  band_form_neutrophils:
+    key: bnd
+  base_excess:
+    key: be
+  basophils:
+    key: basos
+  bicarbonate:
+    key: bicar
+  bilirubin_direct:
+    key: bili_dir
+  blood_urea_nitrogen:
+    key: bun
+  body_fluid_sampling:
+    key: samp
+  calcium:
+    key: ca
+  calcium_ionized:
+    key: cai
+  chloride:
+    key: cl
+  creatine_kinase:
+    key: ck
+  creatine_kinase_MB:
+    key: ckmb
+  creatinine:
+    key: crea
+  dextrose_as_D10:
+    key: dex
+  diastolic_blood_pressure:
+    key: dbp
+  dobutamine_duration:
+    key: dobu_dur
+  dobutamine_rate:
+    key: dobu_rate
+  dopamine_duration:
+    key: dopa_dur
+  dopamine_rate:
+    key: dopa_rate
+  endtidal_CO2:
+    key: etco2
+  eosinophils:
+    key: eos
+  epinephrine_duration:
+    key: epi_dur
+  epinephrine_rate:
+    key: epi_rate
+  erythrocyte_distribution_width:
+    key: rdw
+  erythrocyte_sedimentation_rate:
+    key: esr
+  fibrinogen:
+    key: fgn
+  fraction_of_inspired_oxygen:
+    key: fio2
+  gcs_eye:
+    key: egcs
+  gcs_motor:
+    key: mgcs
+  gcs_total:
+    key: tgcs
+  gcs_verbal:
+    key: vgcs
+  glucose:
+    key: glu
+  heart_rate:
+    key: hr
+  hematocrit:
+    key: hct
+  hemoglobin:
+    key: hgb
+  insulin:
+    key: ins
+  lactate:
+    key: lact
+  lymphocytes:
+    key: lymph
+  magnesium:
+    key: mg
+  mean_arterial_pressure:
+    key: map
+  mean_corpuscular_hemoglobin:
+    key: mch
+  mean_corpuscular_hemoglobin_concentration:
+    key: mchc
+  mean_corpuscular_volume:
+    key: mcv
+  methemoglobin:
+    key: methb
+  neutrophils:
+    key: neut
+  norepinephrine_duration:
+    key: norepi_dur
+  norepinephrine_rate:
+    key: norepi_rate
+  oxygen_saturation:
+    key: spo2
+  pH_of_blood:
+    key: ph
+  partial_thromboplastin_time:
+    key: ptt
+  patient_admission_type:
+    key: adm
+  patient_age:
+    key: age
+  patient_height:
+    key: height
+  patient_sex:
+    key: sex
+  patient_weight:
+    key: weight
+  phenylephrine_rate:
+    key: phn_rate
+  phosphate:
+    key: phos
+  platelet_count:
+    key: plt
+  potassium:
+    key: k
+  prothrombin_time_international_normalized_ratio:
+    key: inr_pt
+  prothrombine_time:
+    key: pt
+  red_blood_cell_count:
+    key: rbc
+  respiratory_rate:
+    key: resp
+  sodium:
+    key: na
+  systolic_blood_pressure:
+    key: sbp
+  temperature:
+    key: temp
+  total_bilirubin:
+    key: bili
+  totcal_CO2:
+    key: tco2
+  troponin_I:
+    key: tri
+  troponin_t:
+    key: tnt
+  urine_output:
+    key: urine
+  vasopressin_rate:
+    key: adh_rate
+  ventilation_end:
+    key: vent_end
+  ventilation_start:
+    key: vent_start
+  white_blood_cell_count:
+    key: wbc
+missing_iv_concepts:
+- basophils_absolute
+- erythrocyte_distribution_width_sd
+- immature_granulocytes
+- in_hospital_mortality
+- neutrophils_absolute

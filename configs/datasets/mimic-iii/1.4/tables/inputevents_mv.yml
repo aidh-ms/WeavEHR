@@ -1,0 +1,155 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: INPUTEVENTS_MV.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: icustay_id
+  type: int64
+- name: starttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: endtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: itemid
+  type: int64
+- name: amount
+  type: float32
+- name: amountuom
+  type: string
+- name: rate
+  type: float32
+- name: rateuom
+  type: string
+- name: storetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cgid
+  type: int64
+- name: orderid
+  type: int64
+- name: linkorderid
+  type: int64
+- name: ordercategoryname
+  type: string
+- name: secondaryordercategoryname
+  type: string
+- name: ordercomponenttypedescription
+  type: string
+- name: ordercategorydescription
+  type: string
+- name: patientweight
+  type: float32
+- name: totalamount
+  type: float32
+- name: totalamountuom
+  type: string
+- name: isopenbag
+  type: int64
+- name: continueinnextdept
+  type: int64
+- name: cancelreason
+  type: int64
+- name: statusdescription
+  type: string
+- name: comments_editedby
+  type: string
+- name: comments_canceledby
+  type: string
+- name: comments_date
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: originalamount
+  type: float32
+- name: originalrate
+  type: float32
+join:
+- path: D_ITEMS.csv.gz
+  csv_header_case: lower
+  columns:
+  - name: itemid
+    type: int64
+  - name: label
+    type: string
+  both_on:
+  - itemid
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    hadm_id: col(hadm_id)
+    stay_id: col(icustay_id)
+    caregiver_id: col(cgid)
+    row_id: col(row_id)
+    orderid: col(orderid)
+    linkorderid: col(linkorderid)
+filters:
+- not (statusdescription == "Rewritten") or statusdescription == None
+events:
+- name: INFUSION_START
+  columns:
+    time: col(starttime)
+    code:
+    - col(itemid)
+    - col(label)
+    extension:
+      available_time: max(storetime, starttime, output=available_time)
+      ordercategoryname: col(ordercategoryname)
+      secondaryordercategoryname: col(secondaryordercategoryname)
+      ordercomponenttypedescription: col(ordercomponenttypedescription)
+      ordercategorydescription: col(ordercategorydescription)
+      originalamount: col(originalamount)
+      amountuom: col(amountuom)
+      originalrate: col(originalrate)
+      rateuom: col(rateuom)
+      totalamount: col(totalamount)
+      totalamountuom: col(totalamountuom)
+      isopenbag: col(isopenbag)
+      cancelreason: col(cancelreason)
+      patientweight: col(patientweight)
+  filters:
+  - drop_na(time)
+- name: INFUSION_END
+  columns:
+    time: col(endtime)
+    code:
+    - col(itemid)
+    - col(label)
+    text_value: col(statusdescription)
+    extension:
+      available_time: max(storetime, endtime, output=available_time)
+      rate: col(rate)
+      rateuom: col(rateuom)
+      amount: col(amount)
+      amountuom: col(amountuom)
+      continueinnextdept: col(continueinnextdept)
+      duration_minutes: cast(endtime - starttime, "int64") / 60000000
+      cancelreason: col(cancelreason)
+      patientweight: col(patientweight)
+  filters:
+  - drop_na(time)
+- name: SUBJECT_WEIGHT_AT_INFUSION
+  columns:
+    time: col(starttime)
+    code:
+    - const(kg)
+    numeric_value: col(patientweight)
+    extension:
+      available_time: col(storetime)
+      cancelreason: col(cancelreason)
+      patientweight: col(patientweight)
+  filters:
+  - first_distinct(subject_id, time, order_by=[available_time])
+  - drop_na(time)

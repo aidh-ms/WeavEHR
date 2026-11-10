@@ -1,0 +1,9 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: simple
+mappings:
+- pattern:
+    table: noteevents
+    event: NOTE
+    code: ^Radiology(?:$|//)
+  columns:
+    text_value: col(text_value)

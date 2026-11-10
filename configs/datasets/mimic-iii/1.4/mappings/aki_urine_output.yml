@@ -1,0 +1,6 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.aki.AkiUrineOutputTransformer
+concepts:
+- urine_output.1.0.0
+- patient_weight.1.0.0

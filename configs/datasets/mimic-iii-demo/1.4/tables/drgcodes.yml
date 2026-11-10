@@ -1,0 +1,15 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: DRGCODES.csv
+join:
+- path: ADMISSIONS.csv
+  csv_header_case: lower
+  columns:
+  - name: hadm_id
+    type: int64
+  - name: dischtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - hadm_id

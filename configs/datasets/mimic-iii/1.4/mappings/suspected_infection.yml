@@ -1,0 +1,6 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.AntibioticsWithCultureTransformer
+concepts:
+- antibiotics.1.0.0
+- body_fluid_sampling.1.0.0

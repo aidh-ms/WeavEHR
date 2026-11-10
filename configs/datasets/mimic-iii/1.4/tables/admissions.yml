@@ -1,0 +1,187 @@
+# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+path: ADMISSIONS.csv.gz
+csv_header_case: lower
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: admittime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dischtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: deathtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: admission_type
+  type: string
+- name: admission_location
+  type: string
+- name: discharge_location
+  type: string
+- name: insurance
+  type: string
+- name: language
+  type: string
+- name: religion
+  type: string
+- name: marital_status
+  type: string
+- name: ethnicity
+  type: string
+- name: edregtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: edouttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: diagnosis
+  type: string
+- name: hospital_expire_flag
+  type: int64
+- name: has_chartevents_data
+  type: int64
+join:
+- path: PATIENTS.csv.gz
+  csv_header_case: lower
+  columns:
+  - name: subject_id
+    type: int64
+  - name: dob
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - subject_id
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    hadm_id: col(hadm_id)
+    row_id: col(row_id)
+events:
+- name: HOSPITAL_ADMISSION
+  columns:
+    time: col(admittime)
+    code:
+    - col(admission_type)
+    - col(admission_location)
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: HOSPITAL_DISCHARGE
+  columns:
+    time: col(dischtime)
+    code:
+    - col(discharge_location)
+    extension:
+      available_time: col(dischtime)
+  filters:
+  - drop_na(time)
+- name: PATIENT_AGE
+  columns:
+    time: col(admittime)
+    code:
+    - const("PATIENT_AGE")
+    numeric_value: datetime_diff(dob, admittime, unit="years")
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: ADMISSION_TYPE
+  columns:
+    time: col(admittime)
+    code:
+    - col(admission_type)
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: ED_REGISTRATION
+  columns:
+    time: col(edregtime)
+    code:
+    - const("ED_REGISTRATION")
+    extension:
+      available_time: col(edregtime)
+  filters:
+  - drop_na(time)
+- name: ED_OUT
+  columns:
+    time: col(edouttime)
+    code:
+    - const("ED_OUT")
+    extension:
+      available_time: col(edouttime)
+  filters:
+  - drop_na(time)
+- name: INSURANCE
+  columns:
+    time: col(admittime)
+    code:
+    - col(insurance)
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: LANGUAGE
+  columns:
+    time: col(admittime)
+    code:
+    - col(language)
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: MARITAL_STATUS
+  columns:
+    time: col(admittime)
+    code:
+    - col(marital_status)
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: ETHNICITY
+  columns:
+    time: col(admittime)
+    code:
+    - col(ethnicity)
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: RELIGION
+  columns:
+    time: col(admittime)
+    code:
+    - col(religion)
+    extension:
+      available_time: col(admittime)
+  filters:
+  - drop_na(time)
+- name: IN_HOSPITAL_MORTALITY
+  columns:
+    time: col(dischtime)
+    code:
+    - const("IN_HOSPITAL_MORTALITY")
+    numeric_value: col(hospital_expire_flag)
+    extension:
+      available_time: col(dischtime)
+  filters:
+  - drop_na(time)
