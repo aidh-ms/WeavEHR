@@ -11,7 +11,8 @@ columns:
 - name: chartdate
   type: datetime
   params:
-    format: '%Y-%m-%d %H:%M:%S'
+    format: '%Y-%m-%d'
+    exact: false
     strict: false
 - name: charttime
   type: datetime
@@ -45,6 +46,9 @@ event_defaults:
   extension:
     hadm_id: col(hadm_id)
     row_id: col(row_id)
+    time_precision: replace(charttime == None, const(day), const(second))
+    time_lower_bound: first_not_null(charttime, chartdate)
+    time_upper_bound: first_not_null(charttime, chartdate_plus1)
 callbacks:
 - add_offset(chartdate, 1, offset_unit="days", output=chartdate_plus1)
 events:
@@ -66,7 +70,7 @@ events:
     - col(org_itemid)
     - col(org_name)
     extension:
-      available_time: first_not_null(charttime, chartdate_plus1, output=time)
+      available_time: cast(None, "datetime")
       isolate_num: col(isolate_num)
   filters:
   - drop_na(time)
@@ -80,7 +84,7 @@ events:
     numeric_value: col(dilution_value)
     text_value: col(interpretation)
     extension:
-      available_time: first_not_null(charttime, chartdate_plus1, output=time)
+      available_time: cast(None, "datetime")
       dilution_text: col(dilution_text)
       dilution_comparison: col(dilution_comparison)
   filters:

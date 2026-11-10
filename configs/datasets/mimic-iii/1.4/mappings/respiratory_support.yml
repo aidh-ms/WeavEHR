@@ -101,7 +101,7 @@ mappings:
     extension:
       stay_id: col(stay_id)
   filters:
-  - str_contains(strip_str(text_value), "^(CPAP|BIPAP|BiPAP).*")
+  - str_contains(strip_str(text_value), "(?i)^(CPAP|BIPAP).*")
   level: noninvasive
 - pattern:
     table: chartevents
@@ -115,3 +115,14 @@ mappings:
   - str_contains(strip_str(text_value), "^(Cannula|Nasal Cannula|Face Tent|Aerosol-Cool|Trach Mask|Hi Flow Neb|Non-Rebreather|Venti
     Mask|Medium Conc Mask|Vapotherm|T-Piece|Hood|Hut|TranstrachealCat|Heated Neb|Ultrasonic Neb)$")
   level: oxygen
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:467)(?:$|//)
+  level: none
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) == "None"

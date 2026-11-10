@@ -41,7 +41,7 @@ event_defaults:
     stay_id: col(icustay_id)
     row_id: col(row_id)
 events:
-- name: TRANSFER_IN
+- name: TRANSFER_TO
   columns:
     time: col(intime)
     code:
@@ -49,15 +49,6 @@ events:
     - col(curr_careunit)
     extension:
       available_time: col(intime)
-  filters:
-  - drop_na(time)
-- name: TRANSFER_OUT
-  columns:
-    time: col(outtime)
-    code:
-    - col(eventtype)
-    - col(prev_careunit)
-    extension:
-      available_time: col(outtime)
+      location_end: col(outtime)
   filters:
   - drop_na(time)

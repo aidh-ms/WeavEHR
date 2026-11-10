@@ -1,6 +1,7 @@
 """Regression cases for MIMIC-III's two acquisition systems and public demo."""
 
 import gzip
+import random
 from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -55,7 +56,7 @@ def mapped(name: str, table: str, item: int, value: float | None, text: str | No
                 event_name=mapping.pattern.event or "",
             ).collect()
         )
-    return pl.concat(frames, how="diagonal")
+    return pl.concat(frames, how="diagonal") if frames else source.head(0).collect()
 
 
 @pytest.mark.parametrize(
@@ -284,6 +285,7 @@ def test_rate_changes_are_not_cessations_and_stops_need_no_weight() -> None:
             infusions(
                 [
                     {"event": "INFUSION_END", "status": "ChangeDose/Rate"},
+                    {"event": "INFUSION_END", "status": "Changed"},
                     {"event": "INFUSION_END", "status": "FinishedRunning"},
                     {"status": "Stopped"},
                     {"status": "D/C'd"},
@@ -311,6 +313,215 @@ def test_carevue_durations_require_a_closed_segment_and_do_not_bridge_orders() -
     )
     result = infusion_transformer(mode="duration").transform_infusions(source).collect()
     assert sorted(result["numeric_value"].to_list()) == [30.0, 60.0, 60.0]
+
+
+def test_carevue_amount_rows_do_not_shorten_durations_or_depend_on_input_order() -> None:
+    rows = [
+        {"time": START + timedelta(hours=h), "rate": rate, "status": status}
+        for h, rate, status in [
+            (0, 8.0, None),
+            (0, None, None),
+            (1, 16.0, None),
+            (1, None, None),
+            (2, None, None),  # amount-only update carries the preceding rate
+            (3, None, "Stopped"),
+            (3, 16.0, None),
+            (4, None, None),  # a stop must not be forward-filled as active
+        ]
+    ]
+    transformer = infusion_transformer(mode="duration")
+    for seed in range(20):
+        random.Random(seed).shuffle(rows)
+        actual = transformer.transform_infusions(infusions(rows)).collect().sort("time")
+        assert actual["time"].to_list() == [START + timedelta(hours=h) for h in [1, 2, 3]]
+        assert actual["numeric_value"].to_list() == [60.0, 60.0, 60.0]
+
+
+@pytest.mark.parametrize(
+    ("name", "table", "item", "text"),
+    [
+        ("oxygen_saturation", "chartevents", 226253, None),
+        ("mean_arterial_pressure", "chartevents", 6072, None),
+        ("urine_output", "outputevents", 227510, None),
+        ("urine_output", "outputevents", 40065, None),
+        ("temperature", "chartevents", 224027, "Warm"),
+        ("temperature", "chartevents", 677, None),
+        ("temperature", "chartevents", 679, None),
+        ("bicarbonate", "labevents", 50803, None),
+        ("glucose", "chartevents", 807, None),
+    ],
+)
+def test_alarm_settings_other_substances_and_derived_duplicates_are_excluded(
+    name: str, table: str, item: int, text: str | None
+) -> None:
+    assert mapped(name, table, item, 85, text).is_empty()
+
+
+def test_milrinone_is_not_dopamine() -> None:
+    for name in ["dopamine_rate", "dopamine_duration"]:
+        config = yaml.safe_load((DATASET / "mappings" / f"{name}.yml").read_text())
+        assert config["kwargs"]["itemids"]["inputevents_cv"] == [30043, 30307]
+
+
+def test_absolute_lymphocytes_convert_cells_per_microlitre_to_thousands() -> None:
+    assert mapped("lymphocytes_absolute", "labevents", 51133, 1550)["numeric_value"].to_list() == pytest.approx([1.55])
+
+
+@pytest.mark.parametrize(
+    ("name", "item"),
+    [
+        ("crrt_access_pressure", 29),
+        ("crrt_effluent_pressure", 173),
+        ("crrt_filter_pressure", 192),
+        ("crrt_return_pressure", 624),
+        ("crrt_blood_flow", 79),
+        ("crrt_current_goal", 142),
+        ("crrt_dialysate_rate", 146),
+        ("crrt_replacement_rate", 611),
+        ("crrt_hourly_patient_fluid_removal", 5683),
+        ("intracranial_pressure", 226),
+    ],
+)
+def test_carevue_dialysis_and_icp(name: str, item: int) -> None:
+    assert mapped(name, "chartevents", item, 12)["numeric_value"].to_list() == [12]
+
+
+@pytest.mark.parametrize(
+    ("item", "text", "expected"),
+    [
+        (467, "Bipap Mask", "noninvasive"),
+        (467, "BiPAP Mask", "noninvasive"),
+        (467, "BIPAP", "noninvasive"),
+        (467, "None", "none"),
+        (226732, "None", "none"),
+    ],
+)
+def test_respiratory_support_carevue_capitalisation_and_none(item: int, text: str, expected: str) -> None:
+    assert mapped("respiratory_support", "chartevents", item, None, text)["code"].to_list() == [
+        f"respiratory_support//{expected}"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("item", "text"),
+    [
+        (467, "Ventilator"),
+        (467, "None"),
+        (467, "Other/Remarks"),
+        (226732, "Endotracheal tube"),
+        (226732, "None"),
+        (226732, "Other/Remarks"),
+        (469, "None"),
+    ],
+)
+def test_ambiguous_device_charting_does_not_end_ventilation(item: int, text: str) -> None:
+    assert mapped("ventilation_end", "chartevents", item, None, text).is_empty()
+
+
+@pytest.mark.parametrize(
+    ("item", "text", "expected"),
+    [
+        (60, "5", 1),
+        (720, "Assist Control", 1),
+        (720, "Other/Remarks", 0),
+        (223848, "Other", 0),
+        (223848, "CMV", 1),
+        (223849, "SIMV", 1),
+    ],
+)
+def test_ventilation_start_has_one_rule_per_source_row(item: int, text: str, expected: int) -> None:
+    result = mapped("ventilation_start", "chartevents", item, None, text)
+    assert result.height == expected
+    if expected:
+        assert result["stay_id"].to_list() == ["10"]
+
+
+def extract_rows(tmp_path: Path, table: str, rows: list[dict]) -> dict[str, pl.DataFrame]:
+    config = TableConfig.load(DATASET / "tables" / f"{table}.yml")
+    frame = pl.DataFrame(rows)
+    # Write the actual full-release uppercase CSV schema, including empty fields.
+    frame = frame.with_columns(
+        [pl.lit(None).cast(c.dtype).alias(c.name) for c in config.columns if c.name not in frame.columns]
+    ).select([c.name for c in config.columns])
+    frame.columns = [c.upper() for c in frame.columns]
+    (tmp_path / config.path).write_bytes(gzip.compress(frame.write_csv().encode()))
+    lf = ExtractionStep.build_table_frame(config, lambda t: ExtractionStep._scan_table(t, tmp_path))
+    return {e.name: ExtractionStep.build_event_frame(lf, e, True).collect() for e in config.events}
+
+
+@pytest.mark.parametrize("date", ["2140-01-01", "2140-01-01 00:00:00"])
+def test_full_release_note_dates_preserve_discharge_ecg_and_radiology(tmp_path: Path, date: str) -> None:
+    notes = extract_rows(
+        tmp_path,
+        "noteevents",
+        [
+            {
+                "row_id": i,
+                "subject_id": 1,
+                "chartdate": date,
+                "category": category,
+                "charttime": time,
+                "text": "Synthetic test note",
+            }
+            for i, category, time in [
+                (1, "Discharge summary", None),
+                (2, "ECG", None),
+                (3, "Radiology", "2140-01-01 14:30:00"),
+            ]
+        ],
+    )["NOTE"].sort("row_id")
+    assert notes.height == 3
+    assert notes["time"].to_list() == [
+        START + timedelta(days=1),
+        START + timedelta(days=1),
+        START + timedelta(hours=14, minutes=30),
+    ]
+    assert notes["time_precision"].to_list() == ["day", "day", "second"]
+    assert notes["available_time"].null_count() == 3
+
+
+def test_date_only_prescriptions_do_not_claim_midnight_order_knowledge(tmp_path: Path) -> None:
+    orders = extract_rows(
+        tmp_path,
+        "prescriptions",
+        [
+            {
+                "row_id": 1,
+                "subject_id": 1,
+                "startdate": "2140-01-01 00:00:00",
+                "drug": "Vancomycin",
+            }
+        ],
+    )["MEDICATION_ORDER"]
+    assert orders["time"].to_list() == [START + timedelta(days=1)]
+    assert orders["available_time"].null_count() == 1
+    assert orders["time_precision"].to_list() == ["day"]
+    assert orders["time_lower_bound"].to_list() == [START]
+
+
+def test_culture_results_do_not_claim_specimen_time_availability(tmp_path: Path) -> None:
+    events = extract_rows(
+        tmp_path,
+        "microbiologyevents",
+        [
+            {
+                "row_id": 1,
+                "subject_id": 1,
+                "chartdate": "2140-01-01",
+                "spec_itemid": 70012,
+                "org_itemid": 80001,
+                "org_name": "Synthetic organism",
+                "ab_itemid": 90001,
+                "interpretation": "S",
+            }
+        ],
+    )
+    for event, frame in events.items():
+        assert frame.height == 1
+        assert frame["time"].to_list() == [START + timedelta(days=1)]
+        assert frame["time_precision"].to_list() == ["day"]
+        if event != "MICROBIOLOGY_SPECIMEN":
+            assert frame["available_time"].null_count() == 1
 
 
 def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:

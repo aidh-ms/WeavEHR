@@ -7,7 +7,6 @@ kwargs:
   itemids:
     inputevents_cv:
     - 30043
-    - 30125
     - 30307
     inputevents_mv:
     - 221662

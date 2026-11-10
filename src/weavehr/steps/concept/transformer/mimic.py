@@ -1,6 +1,6 @@
 """MIMIC-III CareVue and MetaVision infusion observations.
 
-Item selection follows ricu 0.6.3; unit conversions are explicit. Output is
+Item selection is checked against the source dictionary and mimic-code; unit conversions are explicit. Output is
 charted observations, not ricu's resampled hourly series. No default body weight
 or future measurement is used to normalise a rate.
 """
@@ -83,17 +83,23 @@ class MimicInfusionTransformer(BaseConceptTransformer):
             cv = (
                 source.filter(pl.col("event") == "INFUSION_RATE")
                 .drop_nulls(group)
+                # CV records delivered amounts separately from rates, often at
+                # the same timestamp. Collapse these before taking differences;
+                # neither CSV order nor a null amount-row rate can end a run.
+                .group_by(*group, "time", "table")
+                .agg(
+                    rate=pl.col("rate").max(),
+                    stopped=pl.col("status").fill_null("").str.contains(r"^(Stopped|D/C)").any(),
+                )
                 .sort(*group, "time")
+                .with_columns(
+                    rate=pl.when(pl.col("stopped")).then(0.0).otherwise(pl.col("rate")).forward_fill().over(group)
+                )
                 .with_columns(
                     elapsed=pl.col("time").diff().over(group).dt.total_seconds() / 60,
                     previous_rate=pl.col("rate").shift().over(group),
-                    previous_status=pl.col("status").shift().over(group),
                 )
-                .filter(
-                    (pl.col("previous_rate") > 0)
-                    & ~pl.col("previous_status").fill_null("").str.contains(r"^(Stopped|D/C)")
-                    & pl.col("elapsed").is_between(0, 360, closed="right")
-                )
+                .filter((pl.col("previous_rate") > 0) & pl.col("elapsed").is_between(0, 360, closed="right"))
                 .select("subject_id", "time", "table", "stay_id", "linkorderid", numeric_value=pl.col("elapsed"))
             )
             return pl.concat([mv, cv]).filter(pl.col("numeric_value").is_finite() & (pl.col("numeric_value") > 0))
@@ -135,7 +141,7 @@ class MimicInfusionTransformer(BaseConceptTransformer):
                 .then(rate / 60)
             )
         ended = (pl.col("event") == "INFUSION_END") & (
-            pl.col("status").is_not_null() & (pl.col("status") != "ChangeDose/Rate")
+            pl.col("status").is_not_null() & ~pl.col("status").is_in(["Changed", "ChangeDose/Rate"])
         )
         stopped = (pl.col("event") == "INFUSION_RATE") & pl.col("status").fill_null("").str.contains(r"^(Stopped|D/C)")
         return (

@@ -1,4 +1,5 @@
 # MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
+# Evidence of extubation or transition to unassisted oxygen, not arbitrary device charting.
 type: simple
 mappings:
 - pattern:
@@ -22,13 +23,6 @@ mappings:
 - pattern:
     table: chartevents
     event: CHART
-    code: ^(?:[A-Z_]+//)?(?:467|469|226732)(?:$|//)
-  columns:
-    numeric_value: col(numeric_value)
-    text_value: col(text_value)
-- pattern:
-    table: chartevents
-    event: CHART
     code: ^(?:[A-Z_]+//)?(?:640)(?:$|//)
   columns:
     text_value: col(text_value)
@@ -45,5 +39,23 @@ mappings:
     extension:
       stay_id: col(stay_id)
   filters:
-  - str_contains(text_value, "^(Cannula|Nasal Cannula|Face Tent|Aerosol-Cool|Trach Mask|Hi Flow Neb|Non-Rebreather|Venti Mask|Medium
-    Conc Mask|Vapotherm|T-Piece|Hood|Hut|TranstrachealCat|Heated Neb|Ultrasonic Neb)$")
+  - str_contains(text_value, "^(Cannula|Nasal Cannula|Face Tent|Aerosol-Cool|Trach Mask|Hi Flow Neb|Non-Rebreather|Venti Mask|Medium Conc Mask|Vapotherm|T-Piece|Hood|Hut|TranstrachealCat|Heated
+    Neb|Ultrasonic Neb)$")
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^(Nasal cannula|Face tent|Aerosol-cool|Trach mask|High flow neb|Non-rebreather|Venti mask|Medium conc mask|T-piece|High
+    flow nasal cannula|Ultrasonic neb|Vapomist)$")
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_START
+    code: ^(?:[A-Z_]+//)?(?:227194|225468|225477)(?:$|//)
+  columns:
+    extension:
+      stay_id: col(stay_id)

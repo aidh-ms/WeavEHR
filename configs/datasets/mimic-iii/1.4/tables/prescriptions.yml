@@ -13,12 +13,14 @@ columns:
 - name: startdate
   type: datetime
   params:
-    format: '%Y-%m-%d %H:%M:%S'
+    format: '%Y-%m-%d'
+    exact: false
     strict: false
 - name: enddate
   type: datetime
   params:
-    format: '%Y-%m-%d %H:%M:%S'
+    format: '%Y-%m-%d'
+    exact: false
     strict: false
 - name: drug_type
   type: string
@@ -55,12 +57,16 @@ event_defaults:
 events:
 - name: MEDICATION_ORDER
   columns:
-    time: col(startdate)
+    time: add_offset(startdate, 1, offset_unit="days")
     code:
     - col(drug)
     text_value: col(prod_strength)
     extension:
-      available_time: col(startdate)
+      # III records prescription validity dates, not the order-entry time.
+      available_time: cast(None, "datetime")
+      time_precision: const(day)
+      time_lower_bound: col(startdate)
+      time_upper_bound: add_offset(startdate, 1, offset_unit="days")
       prescribed_start: col(startdate)
       prescribed_end: col(enddate)
       drug_type: col(drug_type)

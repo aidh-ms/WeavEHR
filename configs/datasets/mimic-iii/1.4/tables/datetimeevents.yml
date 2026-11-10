@@ -59,14 +59,15 @@ event_defaults:
 filters:
 - not (error == 1) or error == None
 events:
-- name: DATETIME
+- name: TIMESTAMP_OF
   columns:
     time: col(charttime)
     code:
     - col(itemid)
     - col(label)
-    text_value: cast(value, "string")
     extension:
       available_time: col(storetime)
+      datetime_value: col(value)
+      datetime_uom: col(valueuom)
   filters:
   - drop_na(time)

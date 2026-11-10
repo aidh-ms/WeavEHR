@@ -11,7 +11,8 @@ columns:
 - name: chartdate
   type: datetime
   params:
-    format: '%Y-%m-%d %H:%M:%S'
+    format: '%Y-%m-%d'
+    exact: false
     strict: false
 - name: charttime
   type: datetime
@@ -41,15 +42,20 @@ event_defaults:
     row_id: col(row_id)
 filters:
 - not (iserror == "1") or iserror == None
+callbacks:
+- add_offset(chartdate, 1, offset_unit="days", output=chartdate_plus1)
 events:
 - name: NOTE
   columns:
-    time: first_not_null(charttime, chartdate, output=time)
+    time: first_not_null(charttime, chartdate_plus1, output=time)
     code:
     - col(category)
     - col(description)
     text_value: col(text)
     extension:
-      available_time: first_not_null(storetime, charttime, chartdate, output=available_time)
+      available_time: col(storetime)
+      time_precision: replace(charttime == None, const(day), const(second))
+      time_lower_bound: first_not_null(charttime, chartdate)
+      time_upper_bound: first_not_null(charttime, chartdate_plus1)
   filters:
   - drop_na(time)

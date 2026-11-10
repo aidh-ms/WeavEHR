@@ -20,7 +20,10 @@ os.environ["WEAVEHR_AUTO_LOAD_CONFIGS"] = "0"
 from weavehr import ConceptStep, ExtractionStep, WeavEHRProject  # noqa: E402
 from weavehr.config.registry import load_configs  # noqa: E402
 from weavehr.steps.concept.config.concept import ConceptConfig  # noqa: E402
+from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig  # noqa: E402
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig  # noqa: E402
+from weavehr.steps.concept.transformer.mimic import MimicInfusionTransformer  # noqa: E402
+from weavehr.steps.concept.transformer.windowed import ActiveState  # noqa: E402
 from weavehr.steps.concept.registry import concept_config_registry  # noqa: E402
 from weavehr.steps.extraction.config.table import TableConfig  # noqa: E402
 from weavehr.steps.extraction.registry import dataset_config_registry  # noqa: E402
@@ -44,10 +47,11 @@ def equal_values(actual: list, expected: list, label: str) -> None:
 
 
 def check_ricu(raw: Path, output: Path, reference: Path) -> dict:
-    """Compare source item selection/conversions, before ricu's hourly aggregation.
+    """Compare with the unchanged ricu dictionary, reporting every deviation.
 
-    This is a differential check against ricu's JSON and explicit numeric item
-    callback formulas, not execution of the R package or its outcome scores.
+    Reference values retain ricu's units and selected rows. Expected deviations
+    are enumerated independently of the mappings, rather than changing the
+    reference data until they match. Unsupported callbacks are listed explicitly.
     """
     dictionary = json.loads((reference / "inst/extdata/config/concept-dict.json").read_text())
     audit = yaml.safe_load((REPO / "configs/datasets/mimic-iii/reference-audit.yml").read_text())
@@ -56,16 +60,51 @@ def check_ricu(raw: Path, output: Path, reference: Path) -> dict:
         != audit["ricu_commit"]
     ):
         raise ValueError("ricu checkout does not match the pinned reference")
-    raw_tables = {}
-    results = {}
+    # These are source-definition differences, not a blanket concept allowlist.
+    removed = {
+        "mean_arterial_pressure": {6072},
+        "oxygen_saturation": {226253},
+        "temperature": {677, 679, 224027},
+        "urine_output": {40065, 227510},
+    }
+    added = {
+        "chloride": {50806},
+        "diastolic_blood_pressure": {8440},
+        "fraction_of_inspired_oxygen": {190, 3422},
+        "hematocrit": {50810},
+        "hemoglobin": {50811},
+        "mean_arterial_pressure": {6702},
+        "patient_height": {226730},
+        "patient_weight": {763, 3580, 3581, 3582, 3693, 3723, 224639, 226531},
+        "potassium": {50822},
+        "respiratory_rate": {615},
+        "sodium": {50824},
+        "systolic_blood_pressure": {442},
+        "urine_output": {40651, 227488, 227489},
+        "white_blood_cell_count": {51300},
+    }
+    raw_tables, results, skipped = {}, {}, []
     for name, entry in audit["ricu_concepts"].items():
-        checks = []
-        for source in dictionary[entry["key"]]["sources"]["mimic"]:
-            table = source.get("table")
-            if table not in {"chartevents", "labevents", "outputevents"} or "ids" not in source:
+        sources = dictionary[entry["key"]]["sources"]["mimic"]
+        supported = {}
+        for source in sources:
+            table, callback = source.get("table"), source.get("callback", "")
+            ids = source.get("ids", [])
+            ids = ids if isinstance(ids, list) else [ids]
+            if table not in {"chartevents", "labevents", "outputevents"} or not all(isinstance(i, int) for i in ids):
+                skipped.append(
+                    {
+                        "concept": name,
+                        "table": table,
+                        "callback": callback,
+                        "reason": "non-numeric or non-measurement source",
+                    }
+                )
                 continue
-            ids = source["ids"] if isinstance(source["ids"], list) else [source["ids"]]
-            if not all(isinstance(i, int) for i in ids):
+            if callback and not any(c in callback for c in ["fahr_to_cels", "convert_unit"]):
+                skipped.append(
+                    {"concept": name, "table": table, "callback": callback, "reason": "callback not executed"}
+                )
                 continue
             if table not in raw_tables:
                 frame = pl.read_csv(raw / f"{table.upper()}.csv", infer_schema=False)
@@ -80,13 +119,9 @@ def check_ricu(raw: Path, output: Path, reference: Path) -> dict:
             frame = raw_tables[table].filter(pl.col("itemid").is_in(ids))
             value = "value" if table == "outputevents" else "valuenum"
             expression = pl.col(value)
-            callback = source.get("callback", "")
             if "fahr_to_cels" in callback:
                 expression = (expression - 32) * 5 / 9
             elif name == "patient_height":
-                # ricu converts by recorded units. III also has known inch IDs
-                # with null units; mimic-code checks those separately.
-                frame = frame.filter(pl.col("valueuom").is_not_null())
                 expression = (
                     pl.when(pl.col("valueuom").str.to_lowercase().str.starts_with("in"))
                     .then(expression * 2.54)
@@ -98,40 +133,95 @@ def check_ricu(raw: Path, output: Path, reference: Path) -> dict:
                     .then(expression * 10)
                     .otherwise(expression)
                 )
-            elif callback:
-                continue
-            # Both datasets publish FiO2 fractions and percentages. Compare in
-            # the shared concept's declared percent unit, not the raw mixture.
-            if name == "fraction_of_inspired_oxygen":
-                expression = pl.when(expression.is_between(0.2, 1)).then(expression * 100).otherwise(expression)
-            if name == "oxygen_saturation":
-                frame = frame.filter(pl.col(value).is_between(0, 100))
-            if name == "patient_weight":
-                frame = frame.filter(pl.col("itemid") != 4183)  # neonatal kg/g ambiguity checked against mimic-code
-            expected = frame.select("row_id", expected=expression)
-            actual = output_concept(output, name).filter(
-                (pl.col("table") == table)
-                & pl.col("source_code").str.extract(r"^(?:[A-Z_]+//)?(\d+)(?:$|//)", 1).cast(pl.Int64).is_in(ids)
+            supported.setdefault(table, []).append(frame.with_columns(expected=expression))
+        checks = []
+        for table, frames in supported.items():
+            frame = pl.concat(frames)
+            expected = {r["row_id"]: r for r in frame.iter_rows(named=True)}
+            actual = (
+                output_concept(output, name)
+                .filter(pl.col("table") == table)
+                .with_columns(
+                    itemid=pl.col("source_code").str.extract(r"^(?:[A-Z_]+//)?(\d+)(?:$|//)", 1).cast(pl.Int64)
+                )
             )
-            if name == "patient_height":
-                actual = actual.filter(pl.col("source_row_id").is_in(expected["row_id"].implode()))
-            if name == "patient_weight":
-                actual = actual.filter(~pl.col("source_code").str.contains(r"(?:^|//)4183//"))
-            actual = actual.select(pl.col("source_row_id").alias("row_id"), "numeric_value").sort("row_id")
-            expected = expected.sort("row_id")
-            if actual["row_id"].to_list() != expected["row_id"].to_list():
-                raise AssertionError(f"ricu {name}/{table}: source row selection differs")
-            equal_values(actual["numeric_value"].to_list(), expected["expected"].to_list(), f"ricu {name}/{table}")
-            checks.append({"table": table, "rows": expected.height})
+            if actual["source_row_id"].n_unique() != actual.height:
+                raise AssertionError(f"ricu {name}/{table}: duplicate source rows")
+            missing, extra, converted, exact = {}, {}, {}, 0
+            seen = set()
+            for row in actual.iter_rows(named=True):
+                key, item, got = row["source_row_id"], row["itemid"], row["numeric_value"]
+                if key not in expected:
+                    if item not in added.get(name, set()):
+                        raise AssertionError(f"ricu {name}/{table}: unexpected extra item {item}")
+                    extra[str(item)] = extra.get(str(item), 0) + 1
+                    continue
+                seen.add(key)
+                ref = expected[key]
+                want = ref["expected"]
+                if same_value(got, want):
+                    exact += 1
+                    continue
+                reason = None
+                if (
+                    name == "fraction_of_inspired_oxygen"
+                    and want is not None
+                    and 0.2 <= want <= 1
+                    and same_value(got, want * 100)
+                ):
+                    reason = "fraction to percent (reference retained in native units)"
+                elif (
+                    name == "patient_height"
+                    and item in {920, 1394, 3486, 4187, 226707}
+                    and ref["valueuom"] is None
+                    and want is not None
+                    and same_value(got, want * 2.54)
+                ):
+                    reason = "known inch item with missing units"
+                elif (
+                    name == "patient_weight"
+                    and item == 4183
+                    and want is not None
+                    and want > 100
+                    and same_value(got, want / 1000)
+                ):
+                    reason = "neonatal gram conversion"
+                if reason is None:
+                    raise AssertionError(f"ricu {name}/{table}: unexplained value difference for item {item}")
+                converted[reason] = converted.get(reason, 0) + 1
+            for key, row in expected.items():
+                if key not in seen:
+                    item = row["itemid"]
+                    if name == "oxygen_saturation" and row["expected"] is None:
+                        missing["missing_numeric_value"] = missing.get("missing_numeric_value", 0) + 1
+                        continue
+                    if item not in removed.get(name, set()):
+                        raise AssertionError(f"ricu {name}/{table}: unexpected missing item {item}")
+                    missing[str(item)] = missing.get(str(item), 0) + 1
+            checks.append(
+                {
+                    "table": table,
+                    "exact_rows": exact,
+                    "excluded_reference_items": missing,
+                    "additional_source_items": extra,
+                    "unit_differences": converted,
+                }
+            )
         if checks:
             results[name] = checks
     return {
         "reference_commit": audit["ricu_commit"],
-        "concepts_checked": len(results),
-        "rows_compared": sum(c["rows"] for cases in results.values() for c in cases),
+        "concepts_compared": len(results),
         "checks": results,
-        "scope": "item selection and numeric conversions; no R runtime or ricu scores",
+        "skipped_sources": skipped,
+        "scope": "unchanged dictionary and explicit numeric callbacks; no R runtime or hourly scores",
     }
+
+
+def same_value(got: float | None, want: float | None) -> bool:
+    if got is None or want is None:
+        return got is None and want is None
+    return math.isclose(got, want, rel_tol=2e-5, abs_tol=2e-4)
 
 
 def check_mimic_code(raw: Path, output: Path, reference: Path) -> dict:
@@ -143,7 +233,16 @@ def check_mimic_code(raw: Path, output: Path, reference: Path) -> dict:
         raise ValueError("mimic-code checkout does not match the pinned reference")
     db = duckdb.connect()
     db.execute("CREATE SCHEMA mimiciii; CREATE SCHEMA mimiciii_derived")
-    for name in ["icustays", "chartevents", "labevents", "outputevents", "patients"]:
+    for name in [
+        "icustays",
+        "chartevents",
+        "labevents",
+        "outputevents",
+        "patients",
+        "inputevents_cv",
+        "inputevents_mv",
+        "procedureevents_mv",
+    ]:
         db.execute(
             f"CREATE TABLE mimiciii.{name} AS SELECT * FROM read_csv(?, sample_size=-1)",
             [str(raw / f"{name.upper()}.csv")],
@@ -159,7 +258,6 @@ def check_mimic_code(raw: Path, output: Path, reference: Path) -> dict:
         "resprate": ("respiratory_rate", [615, 618, 220210, 224690], "v > 0 AND v < 70"),
         "tempc": ("temperature", [223761, 678, 223762, 676], "v > 10 AND v < 50"),
         "spo2": ("oxygen_saturation", [646, 220277], "v > 0 AND v <= 100"),
-        "glucose": ("glucose", [807, 811, 1529, 3745, 3744, 225664, 220621, 226537], "v > 0"),
     }
     for label, (concept, ids, predicate) in vitals.items():
         db.register("harmonised", output_concept(output, concept).to_arrow())
@@ -247,7 +345,6 @@ def check_mimic_code(raw: Path, output: Path, reference: Path) -> dict:
     gases = {
         "aado2": ("alveolar_arterial_oxygen_gradient", 50801, "l.valuenum > 0"),
         "baseexcess": ("base_excess", 50802, "TRUE"),
-        "bicarbonate": ("bicarbonate", 50803, "l.valuenum > 0"),
         "totalco2": ("totcal_CO2", 50804, "l.valuenum > 0"),
         "carboxyhemoglobin": ("carboxyhemoglobin", 50805, "l.valuenum > 0"),
         "calcium": ("calcium_ionized", 50808, "l.valuenum > 0"),
@@ -276,21 +373,388 @@ def check_mimic_code(raw: Path, output: Path, reference: Path) -> dict:
             raise AssertionError(f"mimic-code gas {concept}: time/stay selection differs")
         equal_values([r[2] for r in actual], [r[2] for r in expected], f"mimic-code gas {concept}")
         results[f"blood_gas/{concept}"] = {"assessments": len(actual), "statistics": ["max per timestamp"]}
+    for name in [
+        "norepinephrine_durations",
+        "epinephrine_durations",
+        "dopamine_durations",
+        "dobutamine_durations",
+        "ventilation_classification",
+        "ventilation_durations",
+    ]:
+        db.execute((reference / f"mimic-iii/concepts_duckdb/durations/{name}.sql").read_text())
+    infusions = check_infusion_durations(raw, output, db)
+    rates = check_metavision_stops(output, db)
+    ventilation = check_ventilation(output, db)
     db.close()
-    return {"reference_commit": expected_sha, "queries_executed": 4, "comparisons": results}
+    return {
+        "reference_commit": expected_sha,
+        "queries_executed": 10,
+        "comparisons": results,
+        "infusion_durations": infusions,
+        "metavision_rate_stops": rates,
+        "ventilation": ventilation,
+    }
+
+
+# Independently reviewed source contracts. Do not derive these from the mappings
+# under test: additions as well as omissions must fail this audit.
+SOURCE_ITEMS = {
+    "temperature": ("chartevents", [676, 678, 223761, 223762]),
+    "oxygen_saturation": ("chartevents", [646, 220277]),
+    "mean_arterial_pressure": ("chartevents", [52, 443, 456, 6702, 220052, 220181, 225312]),
+    "urine_output": (
+        "outputevents",
+        [
+            40055,
+            40056,
+            40057,
+            40069,
+            40085,
+            40086,
+            40094,
+            40096,
+            40405,
+            40428,
+            40473,
+            40651,
+            40715,
+            43175,
+            226557,
+            226558,
+            226559,
+            226560,
+            226561,
+            226563,
+            226564,
+            226565,
+            226566,
+            226567,
+            226584,
+            227488,
+            227489,
+        ],
+    ),
+    "lymphocytes_absolute": ("labevents", [51133]),
+    "bicarbonate": ("labevents", [50882]),
+    "glucose": ("labevents", [50809, 50931]),
+    "intracranial_pressure": ("chartevents", [226, 220765, 227989]),
+    "crrt_access_pressure": ("chartevents", [29, 224149]),
+    "crrt_effluent_pressure": ("chartevents", [173, 224151]),
+    "crrt_filter_pressure": ("chartevents", [192, 224150]),
+    "crrt_return_pressure": ("chartevents", [624, 224152]),
+    "crrt_blood_flow": ("chartevents", [79, 224144]),
+    "crrt_current_goal": ("chartevents", [142, 225183]),
+    "crrt_dialysate_rate": ("chartevents", [146, 224154]),
+    "crrt_replacement_rate": ("chartevents", [611, 224153]),
+    "crrt_hourly_patient_fluid_removal": ("chartevents", [5683, 224191]),
+}
+DRUG_ITEMS = {
+    "norepinephrine": ([30047, 30120], 221906),
+    "epinephrine": ([30044, 30119, 30309], 221289),
+    "dopamine": ([30043, 30307], 221662),
+    "dobutamine": ([30042, 30306], 221653),
+    "phenylephrine": ([30127, 30128], 221749),
+    "vasopressin": ([30051], 222315),
+}
+
+
+def check_source_contracts(raw: Path, output: Path) -> dict:
+    tables, results = {}, {}
+    for name, (table, ids) in SOURCE_ITEMS.items():
+        if table not in tables:
+            frame = pl.read_csv(raw / f"{table.upper()}.csv", infer_schema=False)
+            error = "iserror" if table == "outputevents" else "error"
+            if error in frame.columns:
+                frame = frame.filter(pl.col(error).fill_null("0") != "1")
+            tables[table] = frame.with_columns(pl.col("itemid").cast(pl.Int64))
+        frame = tables[table].filter(pl.col("itemid").is_in(ids)).drop_nulls(["subject_id", "charttime"])
+        value = "value" if table == "outputevents" else "valuenum"
+        frame = frame.with_columns(expected=pl.col(value).cast(pl.Float64, strict=False))
+        if name == "temperature":
+            frame = frame.with_columns(
+                expected=pl.when(pl.col("itemid").is_in([678, 223761]))
+                .then((pl.col("expected") - 32) * 5 / 9)
+                .otherwise(pl.col("expected"))
+            )
+        elif name == "lymphocytes_absolute":
+            frame = frame.with_columns(expected=pl.col("expected") / 1000)
+        elif name == "urine_output":
+            frame = frame.with_columns(
+                expected=pl.when((pl.col("itemid") == 227488) & (pl.col("expected") > 0))
+                .then(-pl.col("expected"))
+                .otherwise(pl.col("expected"))
+            )
+        elif name == "oxygen_saturation":
+            frame = frame.drop_nulls("expected")
+        expected = frame.select("row_id", "expected").sort("row_id")
+        actual = (
+            output_concept(output, name).select(pl.col("source_row_id").alias("row_id"), "numeric_value").sort("row_id")
+        )
+        if expected["row_id"].to_list() != actual["row_id"].to_list():
+            raise AssertionError(f"source contract {name}: full source-row selection differs")
+        equal_values(actual["numeric_value"].to_list(), expected["expected"].to_list(), f"source contract {name}")
+        results[name] = {"rows": actual.height, "itemids": ids}
+    return {
+        "checks": results,
+        "scope": "full output selection and values, including exclusions; no reference plausibility filters",
+    }
+
+
+def infusion_source(raw: pl.DataFrame) -> pl.DataFrame:
+    return raw.select(
+        pl.col("subject_id").cast(pl.Int64),
+        pl.col("charttime").str.to_datetime().alias("time"),
+        pl.col("icustay_id").cast(pl.String).alias("stay_id"),
+        "linkorderid",
+        pl.col("rate").cast(pl.Float64, strict=False),
+        "rateuom",
+        pl.col("stopped").alias("status"),
+        table=pl.lit("inputevents_cv"),
+        event=pl.lit("INFUSION_RATE"),
+        patientweight=pl.lit(None, pl.Float64),
+        duration_minutes=pl.lit(None, pl.Float64),
+    )
+
+
+def check_infusion_durations(raw: Path, output: Path, db) -> dict:
+    """Check exact interval contracts and reproducibility, plus published episodes."""
+    cv = pl.read_csv(raw / "INPUTEVENTS_CV.csv", infer_schema=False)
+    results = {}
+    for drug, (cv_ids, mv_id) in list(DRUG_ITEMS.items())[:4]:
+        source = infusion_source(cv.filter(pl.col("itemid").cast(pl.Int64).is_in(cv_ids)))
+        transformer = object.__new__(MimicInfusionTransformer)
+        transformer._kwargs = {"mode": "duration"}
+        columns = ["subject_id", "time", "stay_id", "linkorderid", "numeric_value"]
+        actual = (
+            output_concept(output, f"{drug}_duration")
+            .filter(pl.col("table") == "inputevents_cv")
+            .select(columns)
+            .sort(columns)
+        )
+        baseline = transformer.transform_infusions(source.lazy()).collect().select(columns).sort(columns)
+        if not baseline.equals(actual, null_equal=True):
+            raise AssertionError(f"{drug}: pipeline versus pure duration output differs")
+        for seed in range(20):
+            shuffled = (
+                transformer.transform_infusions(source.sample(fraction=1, shuffle=True, seed=seed).lazy())
+                .collect()
+                .select(columns)
+                .sort(columns)
+            )
+            if not shuffled.equals(actual, null_equal=True):
+                raise AssertionError(f"{drug}: input order changes duration output")
+        # Independent SQL implementation of the documented same-order, <=6h
+        # interval contract. SQL's MAX ignores amount-only rows' null rates.
+        expected = db.execute(f"""
+            WITH points AS (
+              SELECT subject_id, icustay_id, linkorderid, charttime, MAX(rate) AS rate,
+                BOOL_OR(COALESCE(stopped='Stopped' OR stopped LIKE 'D/C%', FALSE)) AS stopped
+              FROM mimiciii.inputevents_cv WHERE itemid IN ({",".join(map(str, cv_ids))})
+                AND icustay_id IS NOT NULL AND linkorderid IS NOT NULL
+              GROUP BY subject_id, icustay_id, linkorderid, charttime
+            ), carried AS (
+              SELECT *, LAST_VALUE(CASE WHEN stopped THEN 0 ELSE rate END IGNORE NULLS)
+                OVER (PARTITION BY subject_id, icustay_id, linkorderid ORDER BY charttime) AS current_rate FROM points
+            ), gaps AS (
+              SELECT *, LAG(current_rate) OVER w AS previous_rate,
+                DATE_DIFF('SECOND', LAG(charttime) OVER w, charttime) / 60.0 AS minutes
+              FROM carried WINDOW w AS (PARTITION BY subject_id, icustay_id, linkorderid ORDER BY charttime)
+            ) SELECT subject_id, charttime, CAST(icustay_id AS VARCHAR), CAST(linkorderid AS VARCHAR), minutes
+              FROM gaps WHERE previous_rate > 0 AND minutes > 0 AND minutes <= 360
+              ORDER BY subject_id, charttime, icustay_id, linkorderid, minutes
+        """).fetchall()
+        got = actual.rows()
+        if [r[:4] for r in got] != [r[:4] for r in expected]:
+            raise AssertionError(f"{drug}: interval keys differ from independent SQL")
+        equal_values([r[4] for r in got], [r[4] for r in expected], f"{drug} interval minutes")
+        sql = db.execute(
+            f"SELECT SUM(DATE_DIFF('SECOND', v.starttime, v.endtime))/60.0 FROM mimiciii_derived.{drug}_durations v JOIN mimiciii.icustays i USING(icustay_id) WHERE i.dbsource='carevue'"
+        ).fetchall()[0]
+        mv_expected = db.execute(
+            f"SELECT SUM(DATE_DIFF('SECOND', starttime, endtime))/60.0 FROM mimiciii.inputevents_mv WHERE itemid={mv_id} AND statusdescription <> 'Rewritten' AND endtime > starttime"
+        ).fetchall()[0]
+        mv_actual = (
+            output_concept(output, f"{drug}_duration")
+            .filter(pl.col("table") == "inputevents_mv")["numeric_value"]
+            .sum()
+        )
+        equal_values([mv_actual], [mv_expected[0] or 0], f"{drug} MetaVision duration")
+        results[drug] = {
+            "carevue_interval_minutes": actual["numeric_value"].sum(),
+            "mimic_code_carevue_episode_minutes": sql[0],
+            "metavision_segment_minutes": mv_actual,
+            "shuffle_runs": 20,
+            "independent_interval_sql": "exact match",
+            "episode_difference": "mimic-code pools orders and carries across gaps; WeavEHR requires same linked order and gaps <=6h",
+        }
+    return results
+
+
+def check_metavision_stops(output: Path, db) -> dict:
+    results = {}
+    for drug, (_, item) in DRUG_ITEMS.items():
+        actual = (
+            output_concept(output, f"{drug}_rate")
+            .filter((pl.col("table") == "inputevents_mv") & (pl.col("numeric_value") == 0))
+            .select("subject_id", "time", "linkorderid")
+            .sort("subject_id", "time", "linkorderid")
+        )
+        expected = db.execute(f"""
+            SELECT subject_id, starttime AS time, CAST(linkorderid AS VARCHAR) AS linkorderid
+            FROM mimiciii.inputevents_mv WHERE itemid={item} AND originalrate=0
+              AND (statusdescription IS NULL OR statusdescription <> 'Rewritten')
+            UNION ALL
+            SELECT subject_id, endtime AS time, CAST(linkorderid AS VARCHAR) AS linkorderid
+            FROM mimiciii.inputevents_mv WHERE itemid={item} AND statusdescription IS NOT NULL
+              AND statusdescription NOT IN ('Changed', 'ChangeDose/Rate', 'Rewritten')
+            ORDER BY subject_id, time, linkorderid
+        """).fetchall()
+        if actual.rows() != expected:
+            raise AssertionError(f"{drug}: zero rates differ from explicit native cessation/zero set-points")
+        results[drug] = {"zero_rate_events": actual.height, "false_dose_change_stops": 0}
+    return results
+
+
+def check_ventilation(output: Path, db) -> dict:
+    start = output_concept(output, "ventilation_start")
+    end = output_concept(output, "ventilation_end")
+    for name, frame in [("start", start), ("end", end)]:
+        chart = frame.filter(pl.col("table") == "chartevents")
+        if chart["source_row_id"].n_unique() != chart.height:
+            raise AssertionError(f"ventilation_{name}: a source row emitted more than one marker")
+    # These ambiguous devices explicitly cannot be interpreted as cessation.
+    db.register("ventilation_ends", end.to_arrow())
+    false_stops = db.execute("""SELECT COUNT(*) FROM ventilation_ends h JOIN mimiciii.chartevents c
+        ON CAST(h.source_row_id AS BIGINT)=c.row_id WHERE h.table='chartevents'
+        AND c.itemid IN (467,469,226732) AND TRIM(c.value) IN ('Endotracheal tube','None','Other/Remarks','Ventilator')""").fetchall()[
+        0
+    ][0]
+    if false_stops:
+        raise AssertionError("ambiguous oxygen devices still create ventilation stops")
+    gas_rows = db.execute("""SELECT DISTINCT l.subject_id, l.charttime AS time, CAST(i.icustay_id AS VARCHAR) AS __context_stay_id,
+        i.dbsource FROM mimiciii.labevents l JOIN mimiciii.icustays i ON l.subject_id=i.subject_id AND l.hadm_id=i.hadm_id
+        AND l.charttime BETWEEN i.intime AND i.outtime WHERE l.itemid=50821 AND l.valuenum IS NOT NULL""").fetchall()
+    grid = pl.DataFrame(
+        gas_rows,
+        schema={
+            "subject_id": pl.Int64,
+            "time": pl.Datetime("us"),
+            "__context_stay_id": pl.String,
+            "dbsource": pl.String,
+        },
+        orient="row",
+    )
+    markers = pl.concat(
+        [start.with_columns(numeric_value=pl.lit(1.0)), end.with_columns(numeric_value=pl.lit(0.0))],
+        how="diagonal_relaxed",
+    )
+    state = ActiveState("6h", id_column="orderid", stop_when=pl.col("numeric_value") == 0)
+    status = state.align_events(
+        grid.lazy().with_columns(ventilated=pl.lit(None, pl.Float32)), "ventilated", markers.lazy()
+    ).collect()
+    db.register("ventilation_at_gas", status.to_arrow())
+    agreement = db.execute("""SELECT g.dbsource, COUNT(*), SUM(CAST((COALESCE(g.ventilated,0)>0)=
+        EXISTS(SELECT 1 FROM mimiciii_derived.ventilation_durations v WHERE CAST(v.icustay_id AS VARCHAR)=g.__context_stay_id AND g.time BETWEEN v.starttime AND v.endtime) AS INT))
+        FROM ventilation_at_gas g GROUP BY g.dbsource ORDER BY g.dbsource""").fetchall()
+    return {
+        "chart_start_rows": start.filter(pl.col("table") == "chartevents").height,
+        "chart_end_rows": end.filter(pl.col("table") == "chartevents").height,
+        "duplicate_source_rows": 0,
+        "ambiguous_device_stops": 0,
+        "pao2_status_agreement": {
+            name: {"assessments": n, "agree": agree, "fraction": agree / n} for name, n, agree in agreement
+        },
+        "scope": "causal evidence markers with 6h expiry versus retrospective mimic-code episodes; disagreement is reported, not asserted away",
+    }
+
+
+def check_iv_infusion(output: Path, name: str, concept: ConceptConfig, iv: SimpleDatasetConceptConfig) -> dict:
+    """Exercise III's complex pressor converter on native IV infusion rows."""
+    drug = name.removesuffix("_rate")
+    frames, reference_frames = [], []
+    root = output / "mimic-iv-demo/project/datasets/extraction/data/mimic-iv-demo/2.2/inputevents"
+    for event in ["INFUSION_START", "INFUSION_END"]:
+        source = pl.scan_parquet(root / f"{event}.parquet").filter(
+            pl.col("code").str.contains(str(DRUG_ITEMS[drug][1]))
+        )
+        # IV's catecholamine maps accept only this native unit. Other units are
+        # tested independently against the III raw data and synthetic cases.
+        if drug != "vasopressin":
+            source = source.filter(pl.col("rateuom") == "mcg/kg/min")
+        schema = source.collect_schema()
+
+        def number(column):
+            return pl.col(column).cast(pl.Float64, strict=False) if column in schema else pl.lit(None, pl.Float64)
+
+        frames.append(
+            source.select(
+                "subject_id",
+                "time",
+                "stay_id",
+                "linkorderid",
+                "rateuom",
+                pl.col("text_value").alias("status"),
+                rate=number("originalrate") if event == "INFUSION_START" else number("numeric_value"),
+                patientweight=number("patientweight"),
+                duration_minutes=number("duration_minutes"),
+                table=pl.lit("inputevents_mv"),
+                event=pl.lit(event),
+            )
+        )
+        for mapping in iv.mappings:
+            if mapping.pattern.event != event:
+                continue
+            selected = source.filter(pl.col("code").str.contains(mapping.pattern.code))
+            for column, pattern in mapping.pattern.extensions.items():
+                selected = selected.filter(pl.col(column).str.contains(pattern))
+            reference_frames.append(
+                ConceptStep.build_mapping_frame(
+                    selected,
+                    concept,
+                    mapping,
+                    dataset="mimic-iv",
+                    version="2.2",
+                    table="inputevents",
+                    event_name=event,
+                ).select("subject_id", "time", "numeric_value")
+            )
+    transformer = object.__new__(MimicInfusionTransformer)
+    transformer._kwargs = {"mode": "rate", "unit": "units/min" if drug == "vasopressin" else "mcg/kg/min"}
+    columns = ["subject_id", "time", "numeric_value"]
+    actual = transformer.transform_infusions(pl.concat(frames)).select(columns).collect().sort(columns)
+    expected = pl.concat(reference_frames).collect().sort(columns)
+    if drug == "vasopressin":
+        return {
+            "iii_rows": actual.height,
+            "iv_rows": expected.height,
+            "definition_difference": "III uses ordered start rates and cessation markers; IV uses realised mean rates at segment ends. Not numerically equivalent.",
+        }
+    if actual.select("subject_id", "time").rows() != expected.select("subject_id", "time").rows():
+        raise AssertionError(f"IV complex infusion {name}: event times differ")
+    equal_values(actual["numeric_value"].to_list(), expected["numeric_value"].to_list(), f"IV complex infusion {name}")
+    return {"rows": actual.height, "comparison": "exact native-unit ordered rates and cessation markers"}
 
 
 def check_iv(output: Path) -> dict:
     """Apply both sets of mappings to identical IV demo rows for shared sources."""
     mappings = REPO / "configs/datasets"
-    results = {}
+    results, infusions = {}, {}
     for concept_file in sorted((REPO / "configs/concepts").glob("*/*.yml")):
         name = concept_file.stem
+        if name == "lymphocytes_absolute":
+            continue  # III cells/uL versus IV K/uL; checked against each source unit.
         concept = ConceptConfig.load(
             concept_file, dataset_paths=[mappings / "mimic-iv/2.2/mappings", mappings / "mimic-iii/1.4/mappings"]
         )
         iv = concept.get_dataset_concept("mimic-iv", "2.2")
         iii = concept.get_dataset_concept("mimic-iii", "1.4")
+        if (
+            isinstance(iv, SimpleDatasetConceptConfig)
+            and isinstance(iii, ComplexDatasetConceptConfig)
+            and name.removesuffix("_rate") in DRUG_ITEMS
+        ):
+            infusions[name] = check_iv_infusion(output, name, concept, iv)
+            continue
         if not isinstance(iv, SimpleDatasetConceptConfig) or not isinstance(iii, SimpleDatasetConceptConfig):
             continue
         count = 0
@@ -324,6 +788,12 @@ def check_iv(output: Path) -> dict:
             for dataset, group in [("mimic-iii", iii_maps), ("mimic-iv", iv_maps)]:
                 frames = []
                 for mapping in group:
+                    # This cross-dataset comparison checks values and codes.
+                    # III's date-precision metadata has no IV source columns;
+                    # its native extraction is exercised by regression tests.
+                    mapping = mapping.model_copy(
+                        update={"columns": mapping.columns.model_copy(update={"extension": {}})}
+                    )
                     selected = source.filter(matches(mapping))
                     for column, pattern in mapping.pattern.extensions.items():
                         selected = selected.filter(pl.col(column).str.contains(pattern))
@@ -354,7 +824,17 @@ def check_iv(output: Path) -> dict:
             count += actual.height
         if count:
             results[name] = count
-    return {"concepts_checked": len(results), "rows_compared": sum(results.values()), "rows_by_concept": results}
+    return {
+        "concepts_checked": len(results),
+        "rows_compared": sum(results.values()),
+        "rows_by_concept": results,
+        "complex_infusion_checks": infusions,
+        "source_unit_difference": {
+            "lymphocytes_absolute": "III cells/uL; IV K/uL; identical numbers are not equivalent"
+        },
+        "scope": "simple shared-item comparisons plus all six complex pressor mappings; full III selections are audited separately",
+        "metadata_scope": "date precision and availability are checked on native III schemas, not on IV rows",
+    }
 
 
 def run_pipeline(raw: Path, dataset: str, version: str, output: Path) -> dict:
@@ -437,6 +917,7 @@ def main() -> None:
         (args.output / "report.json").write_text(json.dumps(report, indent=2) + "\n")
         print(f"{dataset}: {len(report[dataset]['concept_rows'])} concept outputs", flush=True)
     for name, function in [
+        ("source_contracts", lambda: check_source_contracts(args.mimic_iii, args.output)),
         ("ricu", lambda: check_ricu(args.mimic_iii, args.output, args.ricu)),
         ("mimic_code", lambda: check_mimic_code(args.mimic_iii, args.output, args.mimic_code)),
         ("weavehr_mimic_iv", lambda: check_iv(args.output)),

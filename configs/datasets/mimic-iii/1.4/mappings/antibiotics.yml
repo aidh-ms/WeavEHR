@@ -6,9 +6,13 @@ mappings:
     event: MEDICATION_ORDER
     code: (?i)(aztreonam|bactrim|cephalexin|chloramphenicol|cipro|flagyl|metronidazole|nitrofurantoin|tazobactam|rifampin|sulfadiazine|timentin|trimethoprim|(amika|gentami|vanco)cin|(amoxi|ampi|dicloxa|naf|oxa|peni|pipera)cillin|(azithro|clarithro|erythro|clinda|strepto|tobra|vanco)mycin|cef(azolin|tazidime|adroxil|epime|otetan|otaxime|podoxime|uroxime|triaxone)|(mero|imi|erta)penem|linezolid|daptomycin|(doxy|mino|tetra)cycline|(levofl|moxifl|ofl)oxacin|macro(bid|dantin)|(una|zo)syn)
   columns:
-    time: parse_date_time(prescribed_start, format="%Y-%m-%d %H:%M:%S%.f")
     numeric_value: const(1)
     text_value: col(text_value)
+    extension:
+      available_time: col(available_time)
+      time_precision: col(time_precision)
+      time_lower_bound: col(time_lower_bound)
+      time_upper_bound: col(time_upper_bound)
   filters:
   - drop_na(time)
   - col(drug_type) != "BASE"

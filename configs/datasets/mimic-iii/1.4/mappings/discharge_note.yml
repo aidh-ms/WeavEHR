@@ -7,3 +7,8 @@ mappings:
     code: ^Discharge summary(?:$|//)
   columns:
     text_value: col(text_value)
+    extension:
+      available_time: col(available_time)
+      time_precision: col(time_precision)
+      time_lower_bound: col(time_lower_bound)
+      time_upper_bound: col(time_upper_bound)

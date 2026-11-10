@@ -1,19 +1,19 @@
 {
   "validated_at": "2026-11-10",
   "weavehr_base": "c9187df215214b61b228c3ce357fb7cf091025fe",
+  "corrects_commit": "62bf3f3b129a59673fea4dc46f08e9d4820c820f",
   "datasets": {
     "mimic-iii-demo": {
-      "extracted_events": 944507,
+      "extracted_events": 944112,
       "concept_outputs": 149,
-      "concepts_with_observations": 140,
-      "harmonised_events": 340479,
+      "concepts_with_observations": 141,
+      "harmonised_events": 323986,
       "empty_concepts": [
         "crrt_citrate",
         "crrt_postfilter_replacement_rate",
         "crrt_prefilter_replacement_rate",
         "discharge_note",
         "endtidal_CO2",
-        "intracranial_pressure",
         "monocytes_absolute",
         "radiology_note",
         "ventilator_flow_rate"
@@ -31,431 +31,1037 @@
       ]
     }
   },
+  "source_contracts": {
+    "checks": {
+      "temperature": {
+        "rows": 4695,
+        "itemids": [
+          676,
+          678,
+          223761,
+          223762
+        ]
+      },
+      "oxygen_saturation": {
+        "rows": 15296,
+        "itemids": [
+          646,
+          220277
+        ]
+      },
+      "mean_arterial_pressure": {
+        "rows": 15915,
+        "itemids": [
+          52,
+          443,
+          456,
+          6702,
+          220052,
+          220181,
+          225312
+        ]
+      },
+      "urine_output": {
+        "rows": 9273,
+        "itemids": [
+          40055,
+          40056,
+          40057,
+          40069,
+          40085,
+          40086,
+          40094,
+          40096,
+          40405,
+          40428,
+          40473,
+          40651,
+          40715,
+          43175,
+          226557,
+          226558,
+          226559,
+          226560,
+          226561,
+          226563,
+          226564,
+          226565,
+          226566,
+          226567,
+          226584,
+          227488,
+          227489
+        ]
+      },
+      "lymphocytes_absolute": {
+        "rows": 1,
+        "itemids": [
+          51133
+        ]
+      },
+      "bicarbonate": {
+        "rows": 2151,
+        "itemids": [
+          50882
+        ]
+      },
+      "glucose": {
+        "rows": 2404,
+        "itemids": [
+          50809,
+          50931
+        ]
+      },
+      "intracranial_pressure": {
+        "rows": 19,
+        "itemids": [
+          226,
+          220765,
+          227989
+        ]
+      },
+      "crrt_access_pressure": {
+        "rows": 839,
+        "itemids": [
+          29,
+          224149
+        ]
+      },
+      "crrt_effluent_pressure": {
+        "rows": 838,
+        "itemids": [
+          173,
+          224151
+        ]
+      },
+      "crrt_filter_pressure": {
+        "rows": 839,
+        "itemids": [
+          192,
+          224150
+        ]
+      },
+      "crrt_return_pressure": {
+        "rows": 838,
+        "itemids": [
+          624,
+          224152
+        ]
+      },
+      "crrt_blood_flow": {
+        "rows": 863,
+        "itemids": [
+          79,
+          224144
+        ]
+      },
+      "crrt_current_goal": {
+        "rows": 868,
+        "itemids": [
+          142,
+          225183
+        ]
+      },
+      "crrt_dialysate_rate": {
+        "rows": 871,
+        "itemids": [
+          146,
+          224154
+        ]
+      },
+      "crrt_replacement_rate": {
+        "rows": 871,
+        "itemids": [
+          611,
+          224153
+        ]
+      },
+      "crrt_hourly_patient_fluid_removal": {
+        "rows": 858,
+        "itemids": [
+          5683,
+          224191
+        ]
+      }
+    },
+    "scope": "full output selection and values, including exclusions; no reference plausibility filters"
+  },
   "ricu": {
     "reference_commit": "c0efac720dbe72caaf63b361b6978a24383835bf",
-    "concepts_checked": 67,
-    "rows_compared": 187968,
+    "concepts_compared": 67,
     "checks": {
       "CO2_partial_pressure": [
         {
           "table": "labevents",
-          "rows": 1166
+          "exact_rows": 1166,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "C_reactive_protein": [
         {
           "table": "labevents",
-          "rows": 3
+          "exact_rows": 3,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "Hemoglobin_A1C": [
         {
           "table": "labevents",
-          "rows": 23
+          "exact_rows": 23,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "O2_partial_pressure": [
         {
           "table": "labevents",
-          "rows": 1166
+          "exact_rows": 1166,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "Richmond_agitation_sedation_scale": [
         {
           "table": "chartevents",
-          "rows": 133
+          "exact_rows": 133,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "alanine_aminotransferase": [
         {
           "table": "labevents",
-          "rows": 609
+          "exact_rows": 609,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "albumin": [
         {
           "table": "labevents",
-          "rows": 414
+          "exact_rows": 414,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "alkaline_phosphatase": [
         {
           "table": "labevents",
-          "rows": 592
+          "exact_rows": 592,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "arterial_oxygen_saturation": [
         {
           "table": "chartevents",
-          "rows": 221
+          "exact_rows": 221,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         },
         {
           "table": "labevents",
-          "rows": 343
+          "exact_rows": 343,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "aspartate_aminotransferase": [
         {
           "table": "labevents",
-          "rows": 603
+          "exact_rows": 603,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "band_form_neutrophils": [
         {
           "table": "labevents",
-          "rows": 231
+          "exact_rows": 231,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "base_excess": [
         {
           "table": "labevents",
-          "rows": 1166
+          "exact_rows": 1166,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "basophils": [
         {
           "table": "labevents",
-          "rows": 547
+          "exact_rows": 547,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "bicarbonate": [
         {
           "table": "labevents",
-          "rows": 2151
+          "exact_rows": 2151,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "bilirubin_direct": [
         {
           "table": "labevents",
-          "rows": 60
+          "exact_rows": 60,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "blood_urea_nitrogen": [
         {
           "table": "labevents",
-          "rows": 2158
+          "exact_rows": 2158,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "calcium": [
         {
           "table": "labevents",
-          "rows": 1757
+          "exact_rows": 1757,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "calcium_ionized": [
         {
           "table": "labevents",
-          "rows": 558
+          "exact_rows": 558,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "chloride": [
         {
           "table": "labevents",
-          "rows": 2160
+          "exact_rows": 2160,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "50806": 87
+          },
+          "unit_differences": {}
         }
       ],
       "creatine_kinase": [
         {
           "table": "labevents",
-          "rows": 334
+          "exact_rows": 334,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "creatine_kinase_MB": [
         {
           "table": "labevents",
-          "rows": 319
+          "exact_rows": 319,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "creatinine": [
         {
           "table": "labevents",
-          "rows": 2175
+          "exact_rows": 2175,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "diastolic_blood_pressure": [
         {
           "table": "chartevents",
-          "rows": 15628
+          "exact_rows": 15628,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "8440": 1
+          },
+          "unit_differences": {}
         }
       ],
       "endtidal_CO2": [
         {
           "table": "chartevents",
-          "rows": 0
+          "exact_rows": 0,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "eosinophils": [
         {
           "table": "labevents",
-          "rows": 547
+          "exact_rows": 547,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "erythrocyte_distribution_width": [
         {
           "table": "labevents",
-          "rows": 2005
+          "exact_rows": 2005,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "erythrocyte_sedimentation_rate": [
         {
           "table": "labevents",
-          "rows": 3
+          "exact_rows": 3,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "fibrinogen": [
         {
           "table": "labevents",
-          "rows": 130
+          "exact_rows": 130,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "fraction_of_inspired_oxygen": [
         {
           "table": "chartevents",
-          "rows": 1215
+          "exact_rows": 1215,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "190": 1223
+          },
+          "unit_differences": {}
         },
         {
           "table": "labevents",
-          "rows": 338
+          "exact_rows": 337,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {
+            "fraction to percent (reference retained in native units)": 1
+          }
         }
       ],
       "gcs_eye": [
         {
           "table": "chartevents",
-          "rows": 4004
+          "exact_rows": 4004,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "gcs_motor": [
         {
           "table": "chartevents",
-          "rows": 3977
+          "exact_rows": 3977,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "gcs_total": [
         {
           "table": "chartevents",
-          "rows": 1951
+          "exact_rows": 1951,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "gcs_verbal": [
         {
           "table": "chartevents",
-          "rows": 3992
+          "exact_rows": 3992,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "glucose": [
         {
           "table": "labevents",
-          "rows": 2404
+          "exact_rows": 2404,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "heart_rate": [
         {
           "table": "chartevents",
-          "rows": 15489
+          "exact_rows": 15489,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "hematocrit": [
         {
           "table": "labevents",
-          "rows": 2317
+          "exact_rows": 2317,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "50810": 126
+          },
+          "unit_differences": {}
         }
       ],
       "hemoglobin": [
         {
           "table": "labevents",
-          "rows": 2024
+          "exact_rows": 2024,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "50811": 126
+          },
+          "unit_differences": {}
         }
       ],
       "lactate": [
         {
           "table": "labevents",
-          "rows": 578
+          "exact_rows": 578,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "lymphocytes": [
         {
           "table": "labevents",
-          "rows": 547
+          "exact_rows": 547,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "magnesium": [
         {
           "table": "labevents",
-          "rows": 1918
+          "exact_rows": 1918,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "mean_arterial_pressure": [
         {
           "table": "chartevents",
-          "rows": 15889
+          "exact_rows": 15889,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "6702": 26
+          },
+          "unit_differences": {}
         }
       ],
       "mean_corpuscular_hemoglobin": [
         {
           "table": "labevents",
-          "rows": 2007
+          "exact_rows": 2007,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "mean_corpuscular_hemoglobin_concentration": [
         {
           "table": "labevents",
-          "rows": 2008
+          "exact_rows": 2008,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "mean_corpuscular_volume": [
         {
           "table": "labevents",
-          "rows": 2007
+          "exact_rows": 2007,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "methemoglobin": [
         {
           "table": "labevents",
-          "rows": 5
+          "exact_rows": 5,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "neutrophils": [
         {
           "table": "labevents",
-          "rows": 547
+          "exact_rows": 547,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "oxygen_saturation": [
         {
           "table": "chartevents",
-          "rows": 16109
+          "exact_rows": 15296,
+          "excluded_reference_items": {
+            "226253": 813,
+            "missing_numeric_value": 15
+          },
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "pH_of_blood": [
         {
           "table": "labevents",
-          "rows": 1230
+          "exact_rows": 1230,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "partial_thromboplastin_time": [
         {
           "table": "labevents",
-          "rows": 1419
+          "exact_rows": 1419,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "patient_height": [
         {
           "table": "chartevents",
-          "rows": 81
+          "exact_rows": 130,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "226730": 40
+          },
+          "unit_differences": {}
         }
       ],
       "patient_weight": [
         {
           "table": "chartevents",
-          "rows": 161
+          "exact_rows": 161,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "224639": 97,
+            "763": 94,
+            "226531": 148
+          },
+          "unit_differences": {}
         }
       ],
       "phosphate": [
         {
           "table": "labevents",
-          "rows": 1748
+          "exact_rows": 1748,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "platelet_count": [
         {
           "table": "labevents",
-          "rows": 2088
+          "exact_rows": 2088,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "potassium": [
         {
           "table": "labevents",
-          "rows": 2279
+          "exact_rows": 2279,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "50822": 256
+          },
+          "unit_differences": {}
         }
       ],
       "prothrombin_time_international_normalized_ratio": [
         {
           "table": "labevents",
-          "rows": 1378
+          "exact_rows": 1378,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "prothrombine_time": [
         {
           "table": "labevents",
-          "rows": 1378
+          "exact_rows": 1378,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "red_blood_cell_count": [
         {
           "table": "labevents",
-          "rows": 2007
+          "exact_rows": 2007,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "respiratory_rate": [
         {
           "table": "chartevents",
-          "rows": 17574
+          "exact_rows": 17574,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "615": 988
+          },
+          "unit_differences": {}
         }
       ],
       "sodium": [
         {
           "table": "labevents",
-          "rows": 2185
+          "exact_rows": 2185,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "50824": 107
+          },
+          "unit_differences": {}
         }
       ],
       "systolic_blood_pressure": [
         {
           "table": "chartevents",
-          "rows": 15658
+          "exact_rows": 15658,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "442": 2
+          },
+          "unit_differences": {}
         }
       ],
       "temperature": [
         {
           "table": "chartevents",
-          "rows": 2709
-        },
-        {
-          "table": "chartevents",
-          "rows": 6213
+          "exact_rows": 4695,
+          "excluded_reference_items": {
+            "677": 1659,
+            "679": 1017,
+            "224027": 1551
+          },
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "total_bilirubin": [
         {
           "table": "labevents",
-          "rows": 629
+          "exact_rows": 629,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "totcal_CO2": [
         {
           "table": "labevents",
-          "rows": 1166
+          "exact_rows": 1166,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "troponin_I": [
         {
           "table": "labevents",
-          "rows": 14
+          "exact_rows": 14,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "troponin_t": [
         {
           "table": "labevents",
-          "rows": 288
+          "exact_rows": 288,
+          "excluded_reference_items": {},
+          "additional_source_items": {},
+          "unit_differences": {}
         }
       ],
       "urine_output": [
         {
           "table": "outputevents",
-          "rows": 9214
+          "exact_rows": 9067,
+          "excluded_reference_items": {
+            "40065": 4,
+            "227510": 143
+          },
+          "additional_source_items": {
+            "227488": 97,
+            "227489": 109
+          },
+          "unit_differences": {}
         }
       ],
       "white_blood_cell_count": [
         {
           "table": "labevents",
-          "rows": 2021
+          "exact_rows": 2021,
+          "excluded_reference_items": {},
+          "additional_source_items": {
+            "51300": 1
+          },
+          "unit_differences": {}
         }
       ]
     },
-    "scope": "item selection and numeric conversions; no R runtime or ricu scores"
+    "skipped_sources": [
+      {
+        "concept": "antibiotics",
+        "table": "prescriptions",
+        "callback": "mimic_abx_presc",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "antibiotics",
+        "table": "inputevents_mv",
+        "callback": "transform_fun(set_val(TRUE))",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "body_fluid_sampling",
+        "table": "microbiologyevents",
+        "callback": "mimic_sampling",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dextrose_as_D10",
+        "table": "inputevents_mv",
+        "callback": "combine_callbacks(\n               mimv_rate,\n               dex_to_10(c(228140L, 220952L), c(2, 5))\n             )",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dextrose_as_D10",
+        "table": "inputevents_cv",
+        "callback": "combine_callbacks(\n               grp_mount_to_rate(mins(1L), hours(1L)),\n               dex_to_10(30017L, 2)\n             )",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dobutamine_duration",
+        "table": "inputevents_cv",
+        "callback": "mimic_dur_incv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dobutamine_duration",
+        "table": "inputevents_mv",
+        "callback": "mimic_dur_inmv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dobutamine_rate",
+        "table": "inputevents_cv",
+        "callback": "mimic_rate_cv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dobutamine_rate",
+        "table": "inputevents_mv",
+        "callback": "mimic_rate_mv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dopamine_duration",
+        "table": "inputevents_cv",
+        "callback": "mimic_dur_incv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dopamine_duration",
+        "table": "inputevents_mv",
+        "callback": "mimic_dur_inmv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dopamine_rate",
+        "table": "inputevents_cv",
+        "callback": "mimic_rate_cv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "dopamine_rate",
+        "table": "inputevents_mv",
+        "callback": "mimic_rate_mv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "epinephrine_duration",
+        "table": "inputevents_cv",
+        "callback": "mimic_dur_incv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "epinephrine_duration",
+        "table": "inputevents_mv",
+        "callback": "mimic_dur_inmv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "epinephrine_rate",
+        "table": "inputevents_cv",
+        "callback": "mimic_rate_cv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "epinephrine_rate",
+        "table": "inputevents_mv",
+        "callback": "mimic_rate_mv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "insulin",
+        "table": "inputevents_cv",
+        "callback": "",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "insulin",
+        "table": "inputevents_mv",
+        "callback": "distribute_amount",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "norepinephrine_duration",
+        "table": "inputevents_cv",
+        "callback": "mimic_dur_incv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "norepinephrine_duration",
+        "table": "inputevents_mv",
+        "callback": "mimic_dur_inmv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "norepinephrine_rate",
+        "table": "inputevents_cv",
+        "callback": "mimic_rate_cv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "norepinephrine_rate",
+        "table": "inputevents_mv",
+        "callback": "mimic_rate_mv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "patient_admission_type",
+        "table": "services",
+        "callback": "apply_map(\n            c(MED   = 'med',   SURG  = 'surg', CMED = 'med',  CSURG  = 'surg',\n              VSURG = 'surg',  NSURG = 'surg', NB   = 'other', NMED  = 'med',\n              ORTHO = 'surg',  TRAUM = 'surg', OMED = 'med',   GU    = 'other',\n              NBB   = 'other', TSURG = 'surg', GYN  = 'other', PSURG = 'surg',\n              OBS   = 'other', ENT   = 'surg', DENT = 'surg',  PSYCH = 'other')\n          )",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "patient_age",
+        "table": "patients",
+        "callback": "transform_fun(mimic_age)",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "patient_sex",
+        "table": "patients",
+        "callback": "apply_map(c(M = 'Male', F = 'Female'))",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "phenylephrine_rate",
+        "table": "inputevents_cv",
+        "callback": "combine_callbacks(\n               mimic_kg_rate, mimic_rate_cv)\n             ",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "phenylephrine_rate",
+        "table": "inputevents_cv",
+        "callback": "mimic_rate_cv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "phenylephrine_rate",
+        "table": "inputevents_mv",
+        "callback": "mimic_rate_mv",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "vasopressin_rate",
+        "table": "inputevents_cv",
+        "callback": "combine_callbacks(\n               convert_unit(binary_op(`/`, 60), 'units/min', 'Uhr'),\n               mimic_rate_cv\n             )",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "vasopressin_rate",
+        "table": "inputevents_mv",
+        "callback": "combine_callbacks(\n               convert_unit(binary_op(`/`, 60), 'units/min', 'units/hour'),\n               mimic_rate_mv\n             )",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "ventilation_end",
+        "table": "procedureevents_mv",
+        "callback": "transform_fun(set_val(TRUE))",
+        "reason": "non-numeric or non-measurement source"
+      },
+      {
+        "concept": "ventilation_end",
+        "table": "chartevents",
+        "callback": "transform_fun(set_val(TRUE))",
+        "reason": "callback not executed"
+      },
+      {
+        "concept": "ventilation_start",
+        "table": "chartevents",
+        "callback": "transform_fun(set_val(TRUE))",
+        "reason": "callback not executed"
+      }
+    ],
+    "scope": "unchanged dictionary and explicit numeric callbacks; no R runtime or hourly scores"
   },
   "mimic_code": {
     "reference_commit": "303d26c623dcc9c49cc0f204468d4acc2f063797",
-    "queries_executed": 4,
+    "queries_executed": 10,
     "comparisons": {
       "heart_rate": {
         "stays": 132,
@@ -507,14 +1113,6 @@
       },
       "oxygen_saturation": {
         "stays": 132,
-        "statistics": [
-          "min",
-          "max",
-          "mean"
-        ]
-      },
-      "glucose": {
-        "stays": 130,
         "statistics": [
           "min",
           "max",
@@ -672,12 +1270,6 @@
           "max per timestamp"
         ]
       },
-      "blood_gas/bicarbonate": {
-        "assessments": 14,
-        "statistics": [
-          "max per timestamp"
-        ]
-      },
       "blood_gas/totcal_CO2": {
         "assessments": 311,
         "statistics": [
@@ -750,11 +1342,90 @@
           "max per timestamp"
         ]
       }
+    },
+    "infusion_durations": {
+      "norepinephrine": {
+        "carevue_interval_minutes": 46062.0,
+        "mimic_code_carevue_episode_minutes": 46342.0,
+        "metavision_segment_minutes": 51292.0,
+        "shuffle_runs": 20,
+        "independent_interval_sql": "exact match",
+        "episode_difference": "mimic-code pools orders and carries across gaps; WeavEHR requires same linked order and gaps <=6h"
+      },
+      "epinephrine": {
+        "carevue_interval_minutes": 10.0,
+        "mimic_code_carevue_episode_minutes": 10.0,
+        "metavision_segment_minutes": 0.0,
+        "shuffle_runs": 20,
+        "independent_interval_sql": "exact match",
+        "episode_difference": "mimic-code pools orders and carries across gaps; WeavEHR requires same linked order and gaps <=6h"
+      },
+      "dopamine": {
+        "carevue_interval_minutes": 17775.0,
+        "mimic_code_carevue_episode_minutes": 17775.0,
+        "metavision_segment_minutes": 12544.0,
+        "shuffle_runs": 20,
+        "independent_interval_sql": "exact match",
+        "episode_difference": "mimic-code pools orders and carries across gaps; WeavEHR requires same linked order and gaps <=6h"
+      },
+      "dobutamine": {
+        "carevue_interval_minutes": 235.0,
+        "mimic_code_carevue_episode_minutes": 235.0,
+        "metavision_segment_minutes": 2035.0,
+        "shuffle_runs": 20,
+        "independent_interval_sql": "exact match",
+        "episode_difference": "mimic-code pools orders and carries across gaps; WeavEHR requires same linked order and gaps <=6h"
+      }
+    },
+    "metavision_rate_stops": {
+      "norepinephrine": {
+        "zero_rate_events": 75,
+        "false_dose_change_stops": 0
+      },
+      "epinephrine": {
+        "zero_rate_events": 0,
+        "false_dose_change_stops": 0
+      },
+      "dopamine": {
+        "zero_rate_events": 17,
+        "false_dose_change_stops": 0
+      },
+      "dobutamine": {
+        "zero_rate_events": 4,
+        "false_dose_change_stops": 0
+      },
+      "phenylephrine": {
+        "zero_rate_events": 17,
+        "false_dose_change_stops": 0
+      },
+      "vasopressin": {
+        "zero_rate_events": 8,
+        "false_dose_change_stops": 0
+      }
+    },
+    "ventilation": {
+      "chart_start_rows": 16430,
+      "chart_end_rows": 1470,
+      "duplicate_source_rows": 0,
+      "ambiguous_device_stops": 0,
+      "pao2_status_agreement": {
+        "carevue": {
+          "assessments": 610,
+          "agree": 590,
+          "fraction": 0.9672131147540983
+        },
+        "metavision": {
+          "assessments": 399,
+          "agree": 389,
+          "fraction": 0.974937343358396
+        }
+      },
+      "scope": "causal evidence markers with 6h expiry versus retrospective mimic-code episodes; disagreement is reported, not asserted away"
     }
   },
   "weavehr_mimic_iv": {
-    "concepts_checked": 118,
-    "rows_compared": 219102,
+    "concepts_checked": 117,
+    "rows_compared": 218533,
     "rows_by_concept": {
       "CO2_partial_pressure": 889,
       "O2_partial_pressure": 889,
@@ -812,7 +1483,6 @@
       "hematocrit": 2913,
       "hemoglobin": 2787,
       "lymphocytes": 943,
-      "lymphocytes_absolute": 569,
       "mean_corpuscular_hemoglobin": 2760,
       "mean_corpuscular_hemoglobin_concentration": 2760,
       "mean_corpuscular_volume": 2760,
@@ -874,17 +1544,56 @@
       "mean_arterial_pressure": 14390,
       "systolic_blood_pressure": 13872,
       "temperature": 3770
-    }
+    },
+    "complex_infusion_checks": {
+      "dobutamine_rate": {
+        "rows": 64,
+        "comparison": "exact native-unit ordered rates and cessation markers"
+      },
+      "dopamine_rate": {
+        "rows": 38,
+        "comparison": "exact native-unit ordered rates and cessation markers"
+      },
+      "epinephrine_rate": {
+        "rows": 46,
+        "comparison": "exact native-unit ordered rates and cessation markers"
+      },
+      "norepinephrine_rate": {
+        "rows": 1156,
+        "comparison": "exact native-unit ordered rates and cessation markers"
+      },
+      "phenylephrine_rate": {
+        "rows": 786,
+        "comparison": "exact native-unit ordered rates and cessation markers"
+      },
+      "vasopressin_rate": {
+        "iii_rows": 100,
+        "iv_rows": 55,
+        "definition_difference": "III uses ordered start rates and cessation markers; IV uses realised mean rates at segment ends. Not numerically equivalent."
+      }
+    },
+    "source_unit_difference": {
+      "lymphocytes_absolute": "III cells/uL; IV K/uL; identical numbers are not equivalent"
+    },
+    "scope": "simple shared-item comparisons plus all six complex pressor mappings; full III selections are audited separately",
+    "metadata_scope": "date precision and availability are checked on native III schemas, not on IV rows"
   },
   "test_suite": {
-    "passed": 1981,
+    "passed": 2025,
     "coverage_percent": 94.14,
     "python": "3.13.5",
-    "command": "uv run --locked pytest . -q"
+    "command": "uv run --locked pytest"
   },
   "other_checks": {
     "ruff": "passed",
     "ty": "passed",
-    "mkdocs_build": "passed"
-  }
+    "mkdocs_strict": "fails on eight existing annotation warnings in unchanged modules",
+    "mkdocs_build": "passed with existing annotation warnings"
+  },
+  "limits": [
+    "No credentialed full-release data or real notes processed; note CSV formats tested synthetically.",
+    "R/ricu runtime and hourly score equivalence are not tested.",
+    "SOFA/AKI/Sepsis-3 execution does not establish clinical equivalence.",
+    "Missing order-entry and culture-result knowledge times remain unknown."
+  ]
 }
