@@ -1,0 +1,12 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
+#   3029187 = Natriuretic peptide.B prohormone N-Terminal [Mass/volume] in Serum or Plasma
+# Stored in ng/l, which equals pg/mL.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^3029187(//.*)?$"
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
