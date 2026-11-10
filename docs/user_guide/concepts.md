@@ -250,10 +250,39 @@ The MIMIC-IV mappings select procedure items 225792 and 225794, preserving nativ
 the ventilation level in the code: `ventilation_start//invasive` (225792) or
 `ventilation_start//noninvasive` (225794), and likewise for `ventilation_end`.
 Respiratory SOFA does not use the level, so noninvasive ventilation counts as
-ventilated. The eICU mappings use the existing respiratory-charting `Start` and
-`Off`/`off` markers and preserve `stay_id`; those observations have no shared
-episode identifier and no level, so their codes stay `ventilation_start` and
-`ventilation_end`.
+ventilated.
+
+The eICU mappings treat each recorded sign of ventilation as a start marker:
+
+- the episode start in `respiratoryCare` (`ventstartoffset`); a zero offset means
+  "not recorded" and is dropped during extraction, and repeated reports of the
+  same start within a stay become one marker;
+- `RT Vent On/Off` charted as `Start` or `Continued`;
+- `O2 Device` charted as `Ventilator`, `Bi-PAP` or `CPAP`;
+- the nurse-charted `O2 Admin Device` (free text) naming a ventilator (`ventilator`,
+  `vent`, or a tracheostomy on a ventilator such as `trach to vent`) or BiPAP,
+  CPAP or NIV; `venturi mask` does not count;
+- positive ventilator settings (`PEEP`, `PEEP/CPAP`, `CPAP`, `Pressure Control`,
+  `Pressure Support`, `Tidal Volume (set)`, `Vent Rate`) and measurements
+  (`Exhaled MV`, `Exhaled TV (patient)`, `Exhaled TV (machine)`,
+  `Mean Airway Pressure`, `Peak Insp. Pressure`, `Plateau Pressure`, `B1: IPAP`,
+  `B2: EPAP`).
+
+End markers are `RT Vent On/Off` charted as `Off` or `Suspended` and the episode
+end in `respiratoryCare` (`ventendoffset`, zero dropped). Text values match
+regardless of case. Prior episodes recorded in `respiratoryCare`
+(`priorventstartoffset`, `priorventendoffset`) are not used. The markers preserve
+`stay_id`; they have no shared episode identifier and no level, so their codes
+stay `ventilation_start` and `ventilation_end`.
+
+ricu at c0efac7
+([`vent_start`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6498),
+[`vent_end`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6411))
+also uses the prior episodes, every row in the `respFlowPtVentData` category and
+any value `off` or `Suspended`. The WeavEHR selection is deliberately narrower:
+patient observations such as `RR (patient)` and `SaO2`, FiO2 and oxygen flow
+settings, and oxygen devices other than ventilators, BiPAP and CPAP (including
+high-flow nasal cannula) are not evidence of ventilation.
 
 An end stops its matching episode; overlapping identified episodes keep ventilation
 on until all have ended. Identifiers are scoped to patient and stay. A new stay
@@ -267,6 +296,16 @@ inclusive. Expiry is evaluated at the next input event; it creates no timestamp.
 The default is `null` (no forced expiry), preserving the previous default until a
 ventilation-specific timeout is agreed. `kwargs.ventilation_id_column` can select
 a native linking field other than the default `orderid`.
+
+The eICU mapping sets `ventilation_window: 6h`, so each start marker keeps
+ventilation on for six hours unless an end stops it first. This matches the
+six hours within which
+[ricu's `vent_ind`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L280)
+matches a start to the next end; ricu's additional minimum duration of 30 minutes
+is not applied. In eICU demo 2.0 the median gap between charted ventilation
+markers within a stay is 1.0 hours, the 95th percentile is 4.9 hours, and 3.5% of
+20,240 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
+their procedure episodes are linked by `orderid`.
 
 ### Cardiovascular SOFA
 
@@ -434,6 +473,73 @@ confirming suspicion can occur after the reported onset. Calculations use contin
 and patient timelines. Partial SOFA scores and changes in measurement coverage
 can affect the apparent rise; no additional SOFA completeness or washout rule
 is applied here.
+
+### Respiratory support and airway
+
+`respiratory_support` records each charted oxygen device or ventilator mode as
+an observation of the kind of support at that time. Its levels are:
+
+- `invasive`: an invasive ventilator mode, or ventilation through a tracheostomy;
+- `noninvasive`: a CPAP or BiPAP interface, or a noninvasive ventilator mode;
+- `ventilator`: a ventilator without evidence of the interface, such as a
+  spontaneous mode or an eICU entry that only says "ventilator";
+- `high_flow`: high-flow nasal cannula;
+- `oxygen`: other supplemental oxygen, such as a nasal cannula, a mask, a face
+  tent or a trach collar;
+- `none`: room air.
+
+`airway_start` and `airway_end` record artificial airways, with the levels
+`endotracheal_tube` and `tracheostomy`. A start is an insertion or an airway
+charted in place; an end is a recorded removal. An end without a level records
+that no artificial airway is present.
+
+All three are observations without duration; each row keeps the raw text in
+`text_value` and the `stay_id`. Several observations can share a timestamp, for
+example a nasal cannula charted with a high-flow device. Ranking them and
+deciding how long an observation stays valid is left to the concepts that use
+them. An endotracheal tube on its own is recorded only as an airway, not as
+invasive support: during a T-piece trial the patient is intubated but not
+ventilated. Keeping the airway separate lets a later step resolve `ventilator`
+observations, for example as invasive when a tube is in place. Respiratory SOFA
+does not use these concepts yet; the "advanced ventilatory support" of
+[SOFA-2](https://doi.org/10.1001/jamanetworkopen.2025.45040) corresponds to the
+levels `invasive`, `noninvasive`, `ventilator` and `high_flow`.
+
+The MIMIC-IV mappings use the device and mode lists of
+[mimic-code's `ventilation.sql` at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/treatment/ventilation.sql),
+matched after trimming spaces. They differ from it in that they:
+
+- emit observations rather than episodes;
+- keep device rows even when no oxygen flow is charted at the same time;
+- record the endotracheal tube and tracheostomy devices as airways rather than
+  as invasive ventilation and a separate tracheostomy category;
+- classify Hamilton `SPONT` and the plain `CPAP` mode, which mimic-code leaves
+  out, as `ventilator`.
+
+Airways also come from the intubation, extubation and tracheostomy procedures,
+from Trach Tube Type and from Trach Care when it was done.
+
+The eICU mappings combine respiratory charting (`O2 Device`, `Oxygen Delivery
+Method` and the ventilator and NIV mode fields) with the nurse-charted
+`O2 Admin Device`, which is free text and matched regardless of case. A bare
+"high flow" without a device, T-piece entries, `Other` and plain flow rates are
+not classified. Airways come from `respiratoryCare.airwaytype`, at the time the
+care entry was recorded, and from nurse entries that mention a tracheostomy.
+Some care entries record contradictory airway types at the same time, such as
+`Oral ETT` and `No Artificial Airway`; the row with the highest
+`currenthistoryseqnum`, the latest one, counts. The eICU extraction gains an
+`AIRWAY` event for this; existing extractions need rerunning to expose it.
+
+The AmsterdamUMCdb mappings read the OMOP export: ventilator modes from
+`procedure_occurrence`, and oxygen devices and airways from `device_exposure`.
+The ambiguous modes (PS/CPAP, BIPAP, CPAP, VC and PC) are `ventilator`, and any
+listed mode whose source value contains "NIV" is `noninvasive`. Tube and
+tracheostoma ends recorded in `device_exposure` become `airway_end`, and
+`device_exposure_id` links each end to its start. A Guedel airway and an Ambu
+bag are not supplemental oxygen, and a double-lumen tube records only the
+airway, like every other tube. No high-flow nasal cannula or room-air item is
+mapped yet. Rows keep the source code, concept ID and source value, in
+`text_value`.
 
 ## Output layout
 

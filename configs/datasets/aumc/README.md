@@ -51,6 +51,12 @@ immature granulocytes, globulin, thrombin time, RDW, indirect bilirubin,
 spontaneous tidal volume, or the CRRT citrate, dialysate, heparin and current
 goal values.
 
+Respiratory support and the airway markers (`respiratory_support`,
+`airway_start`, `airway_end`) come from `procedure_occurrence` (ventilator
+modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). On
+AUMCdb 1.5.0 they select the listed items as intended. Whether a heat-moisture
+exchanger (Kunstneus) always means a tracheostomy is still open.
+
 ### Validation against ricu
 
 The AUMC mappings were validated against `ricu` over the first 168 hours of
@@ -94,6 +100,22 @@ the cross-concept `blood_cell_ratio` calculation with white blood cell count.
 Implementing that dependency requires derived/complex concept logic and is
 deferred rather than approximated in a simple mapping.
 
+Per-item distributions on AUMCdb 1.5.0 showed values on the wrong scale in
+several mappings. The corrections below mostly depart from `ricu`'s AUMC
+definitions:
+
+- Hematocrit: some values are already in %, so only fractions (values up to 1)
+  are multiplied by 100.
+- End-tidal CO2: the largest item, EtCO2 (%), is in % and is converted to mmHg
+  with `ricu`'s factor of 7.6. Unlike `ricu`, values above 15 are kept as mmHg,
+  because End Tidal CO2 % also holds mmHg values.
+- HbA1c: the mmol/mol item is converted to %.
+- Direct bilirubin: item `18361` (µmol/l) replaces item `6812`, whose values
+  don't fit µmol/l.
+- pO2 and pCO2: the kPa items are converted to mmHg.
+- Prothrombin time: item `6789` is labelled seconds but mostly holds INR
+  values, so the concept is not mapped (INR is mapped separately).
+
 Not yet mapped / not cleanly mappable from OMOP:
 - **Drug infusion rates** (`*_rate`, `*_duration`): AMSTEL stores the rate in
   the free-text `drug_exposure.sig` field, so a numeric rate cannot be recovered
@@ -104,3 +126,4 @@ Not yet mapped / not cleanly mappable from OMOP:
   `listitems`/`person`/`drug_exposure`/`specimen`, pending.
 - **troponin_I**, **erythrocyte_distribution_width**, **totcal_CO2**: no
   approved AMSTEL target in AUMCdb.
+- **prothrombine_time** (seconds): the only item holds INR values (see above).
