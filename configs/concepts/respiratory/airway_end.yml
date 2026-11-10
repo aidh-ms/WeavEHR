@@ -1,0 +1,6 @@
+name: airway_end
+version: 1.0.0
+levels: [endotracheal_tube, tracheostomy]
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

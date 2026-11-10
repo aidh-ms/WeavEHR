@@ -3,4 +3,5 @@ concept_transformer: weavehr.steps.concept.transformer.sofa.SofaRespiratoryTrans
 concepts:
   - O2_partial_pressure.1.0.0
   - fraction_of_inspired_oxygen.1.0.0
-  - mechanical_ventilation_windows.1.0.0
+  - ventilation_start.1.0.0
+  - ventilation_end.1.0.0

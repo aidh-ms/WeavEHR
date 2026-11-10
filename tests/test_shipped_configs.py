@@ -11,6 +11,7 @@ physical files and inherited/merged configs are validated. They guard the
 configuration library — the part of WeavEHR most contributors will touch.
 """
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,7 @@ import yaml
 
 from weavehr.callbacks.interpreter import ExprInterpreter
 from weavehr.callbacks.proto import UnknownColumnError
-from weavehr.config.inheritance import resolve_effective_configs
+from weavehr.config.inheritance import resolve_effective_config, resolve_effective_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
@@ -57,7 +58,8 @@ def effective_table_cases() -> list[Any]:
 
 def load_effective_table(subdir: Path, name: str) -> TableConfig:
     """Build a TableConfig from effective data, raising on validation errors."""
-    data = resolve_effective_configs(subdir)[name]
+    data = resolve_effective_config(subdir, name)
+    assert data is not None, f"{relative_id(subdir)}/{name} does not resolve"
     data.setdefault("dataset", subdir.parent.parent.name)
     data.setdefault("version", subdir.parent.name)
     data.setdefault("name", Path(name).name)
@@ -260,8 +262,13 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
 
 
 @pytest.mark.parametrize("concept_file", CONCEPT_FILES, ids=relative_id)
-def test_concept_parses_with_all_dataset_mappings(concept_file: Path) -> None:
-    concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS)
+def test_concept_parses_with_all_dataset_mappings(concept_file: Path, caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger="weavehr"):
+        concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS)
+
+    # Loading skips an invalid dataset mapping with only a warning; a shipped mapping must never be skipped.
+    skipped = [record.getMessage().splitlines()[0] for record in caplog.records]
+    assert not skipped, f"{relative_id(concept_file)}: dataset mappings were skipped: {skipped}"
 
     assert concept.name == concept_file.stem, (
         f"{relative_id(concept_file)}: file name and concept name differ ({concept.name})"
@@ -275,8 +282,11 @@ def test_concept_parses_with_all_dataset_mappings(concept_file: Path) -> None:
             assert dataset_concept.mappings, f"{source}: no mappings defined"
             for mapping in dataset_concept.mappings:
                 expressions = [
-                    value for value in (mapping.columns.numeric_value, mapping.columns.text_value) if value is not None
+                    value
+                    for value in (mapping.columns.time, mapping.columns.numeric_value, mapping.columns.text_value)
+                    if value is not None
                 ]
+                expressions += list(mapping.columns.extension.values())
                 assert_expressions_parse(expressions + mapping.filters, source)
                 assert_regex_compiles(mapping.pattern.code, source)
 

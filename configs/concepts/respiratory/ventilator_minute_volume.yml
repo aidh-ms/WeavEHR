@@ -1,0 +1,6 @@
+name: ventilator_minute_volume
+version: 1.0.0
+unit: L/min
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

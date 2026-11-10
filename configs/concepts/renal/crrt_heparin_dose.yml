@@ -1,6 +1,7 @@
-name: tracheostomy
+name: crrt_heparin_dose
 version: 1.0.0
-unit: boolean
+unit: units/hr
 extension_columns:
   dataset: col("dataset")
   table: col("table")
+  source_code: col("code")

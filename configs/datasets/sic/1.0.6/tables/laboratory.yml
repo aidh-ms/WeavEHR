@@ -33,7 +33,7 @@ join:
         type: int64
     both_on:
       - CaseID
-  # (B) the patient's FIRST admission -> first_admission_year (one row per patient).
+  # (B) the patient's anchor case -> first_admission_year and anchor_offset (one row per patient).
   - name: cases
     path: cases.csv.gz
     columns:
@@ -43,10 +43,12 @@ join:
         type: int64
       - name: OffsetAfterFirstAdmission
         type: int64
-    pre_filters:
-      - drop_if(OffsetAfterFirstAdmission != 0)
     callbacks:
       - col(AdmissionYear, output=first_admission_year)
+      - col(OffsetAfterFirstAdmission, output=anchor_offset)
+    filters:
+      # One anchor per patient: the case at offset 0, or the earliest case if none is at 0.
+      - first_distinct(PatientID, order_by=[OffsetAfterFirstAdmission])
     both_on:
       - PatientID
   # (C) human-readable analyte name + unit.
@@ -68,7 +70,7 @@ join:
 
 post_join_callbacks:
   - to_datetime(first_admission_year, 1, 1, "00:00:00", output=year_base)
-  - add_offset(year_base, OffsetAfterFirstAdmission + Offset, offset_unit="seconds", output=event_time)
+  - add_offset(year_base, OffsetAfterFirstAdmission - anchor_offset + Offset, offset_unit="seconds", output=event_time)
 
 event_defaults:
   subject_id: col(PatientID)

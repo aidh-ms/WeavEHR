@@ -26,6 +26,7 @@ resolved configuration always comes from the extending version's directory,
 never from where a file physically lives.
 """
 
+import glob
 from pathlib import Path
 from typing import Any
 
@@ -133,6 +134,31 @@ def resolve_effective_configs(subdir: Path) -> dict[str, dict[str, Any]]:
         Mapping of configuration name (file stem, including any relative
         subdirectory prefix) to merged configuration data
     """
+    return _overlay_version_chain(subdir, "**/*.*")
+
+
+def resolve_effective_config(subdir: Path, name: str) -> dict[str, Any] | None:
+    """Resolve the effective configuration data of a single configuration.
+
+    Equivalent to ``resolve_effective_configs(subdir).get(name)``, but only
+    reads the files of that name along the inheritance chain instead of every
+    configuration file of every version.
+
+    Args:
+        subdir: A config subdirectory of a version directory
+            (e.g. ``.../<dataset>/<version>/mappings``)
+        name: Configuration name (file stem, including any relative
+            subdirectory prefix)
+
+    Returns:
+        The merged configuration data, or None if no version in the chain
+        defines the configuration or it was deleted
+    """
+    return _overlay_version_chain(subdir, f"{glob.escape(name)}.*").get(name)
+
+
+def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, dict[str, Any]]:
+    """Overlay the configuration files matching ``pattern`` along the inheritance chain of ``subdir``."""
     effective: dict[str, dict[str, Any]] = {}
 
     for version_dir in resolve_version_chain(subdir.parent):
@@ -140,7 +166,7 @@ def resolve_effective_configs(subdir: Path) -> dict[str, dict[str, Any]]:
         if not directory.is_dir():
             continue
 
-        for file_path in sorted(directory.rglob("*.*")):
+        for file_path in sorted(directory.glob(pattern)):
             if not file_path.is_file() or file_path.suffix.lower() not in CONFIG_SUFFIXES:
                 continue
 

@@ -39,7 +39,9 @@ extension_columns:           # optional extra output columns
   table: col("table")
 ```
 
-The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). For binary concepts like `antibiotics`, the bundled configs use `unit: boolean` with values mapped to `1`/`"true"`.
+The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex`, binary markers such as `antibiotics` (values mapped to `1`/`"true"`), dimensionless values such as pH, file paths and free text. `unit: None` is rejected, because YAML reads it as the string `"None"`.
+
+A unitless concept can declare `levels`, the allowed sub-types of its events, e.g. `levels: [invasive, noninvasive]` for `ventilation_start`. A simple or derived mapping sets one with `level`, and its events get the code `<name>//<level>` (e.g. `ventilation_start//invasive`). Events without a level keep the code `<name>`, so matching the prefix `<name>` finds every level. Levels are not supported for concepts with a unit.
 
 During processing, each row is annotated with `dataset`, `version`, `table`, and `event` columns describing where it came from; `extension_columns` chooses which of these (or any other [expression](expressions.md)) to keep in the output.
 
@@ -68,8 +70,32 @@ mappings:
 - `pattern.table` and `pattern.event` locate the Parquet file(s) to read (omit `event` to scan all events of the table). The dataset and version are filled in automatically from the mapping file's location.
 - `pattern.code` is a regular expression fragment matched against the full code, so alternations select multiple items at once: `(225792//Invasive Ventilation|225794//Non-invasive Ventilation)`. A fully custom regex can be given as `pattern.regex` instead.
 - `columns.numeric_value` / `columns.text_value` are expressions evaluated on the matched rows; constants work too (`numeric_value: const(1)` for flag-style concepts).
+- `columns.extension` maps extra output column names to expressions evaluated on the source rows. Use it for dataset-specific metadata, such as an infusion identifier. These expressions override same-named concept and dataset-wide extension expressions. Extension values are written as strings; mappings without a particular extension produce null for that column when their outputs are combined.
+- `level` (optional) is one of the concept's `levels`, written as a literal, not an expression. It applies to every row of the mapping; source values with different levels need separate mappings, each selecting its rows with `pattern.code` or `filters`. A level that the concept doesn't declare skips that dataset's mapping with a warning; the other datasets keep the concept.
+- `filters` see the mapped timestamps, values and extensions while `code` still contains the source extraction code. After filtering, `code` is replaced with the harmonised concept code (`<name>//<unit>`, `<name>`, or `<name>//<level>`).
 
 A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions.
+
+For example, the MIMIC-IV mappings for the four cardiovascular SOFA pressors
+preserve their source metadata on both infusion starts and retained ends:
+
+```yaml
+columns:
+  numeric_value: col(originalrate)   # the start mapping; ends still map to zero
+  extension:
+    stay_id: col(stay_id)
+    linkorderid: col(linkorderid)
+```
+
+The native `linkorderid` links an infusion across rate changes. Retained ends
+map to a zero rate, so no separate `event` column is needed for the rate state.
+Match identifiers within the relevant dataset, patient, stay and drug; an
+identifier is not evidence that the infusion was uninterrupted between records.
+
+The corresponding eICU mappings preserve only `stay_id`. Their
+`infusiondrug` source supplies rate observations rather than paired start/end
+records, so these mappings do not invent an infusion identifier. The cardiovascular
+SOFA consumer applies the alignment and expiry policy described below.
 
 ### Derived concepts
 
@@ -93,7 +119,7 @@ event:                              # mapping to the output MEDS columns
 filters: []
 ```
 
-`event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is always the concept code (`name//unit`) and cannot be set here — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
+`event` accepts `subject_id`, `time`, `numeric_value`, `text_value` and an `extension` mapping (output column name → expression); omitted `subject_id`/`time` are passed through from the joined table. Each output column is evaluated independently, so several columns may use the same expression. The output `code` is the concept code (`name//unit`, or `name` without a unit) and cannot be set here; an optional top-level `level` (one of the concept's `levels`, as for simple mappings) extends it to `name//level` — unknown keys such as `code` make the mapping invalid, and it is skipped with a warning.
 
 Joins use the same keys, `how` and `maintain_order` options as [extraction joins](extraction.md#joins); cross joins are not supported.
 
@@ -120,6 +146,401 @@ class VentilationWindows:
     def __call__(self, project: WeavEHRProject) -> None: ...
 ```
 
+Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
+
+### GCS
+
+`gcs_total` preserves directly recorded totals, currently mapped for eICU.
+The computed `gcs` concept uses `GcsTransformer`, a `WindowedConceptTransformer`
+that aligns `gcs_eye`, `gcs_motor`, `gcs_verbal`, recorded totals and optional
+`gcs_unable` correction flags on one grid.
+
+Each component's latest numeric value remains current for six hours, including
+the boundary. The mapping's `kwargs.window` controls this lookback. Missing
+components contribute their normal maxima: eye 4, motor 6 and verbal 5.
+Null entries neither refresh values nor generate new assessments.
+
+Output preserves source timestamps. A recorded `gcs_total` takes precedence
+at its own timestamp; newer component measurements reconstruct the total from
+the current components. MIMIC-IV uses the reconstructed total, since it has no
+recorded-total mapping. CNS SOFA consumes `gcs` with its own one-hour alignment
+window.
+
+`gcs_unable` is a separate boolean concept indicating when to apply the total
+correction to 15. Each dataset defines its own source events or flags through
+one or more mappings and includes `gcs_unable.1.0.0` in its `gcs` dependencies.
+The latest non-null flag uses the same lookback (`kwargs.window`, six hours by
+default, inclusive): **1 applies the correction; 0 clears it**. A current 1
+overrides both the component sum and recorded totals. If conflicting flags
+share a timestamp, 1 wins. Null flags do not clear or refresh the correction.
+GCS component measurements do not change the flag; each dataset must supply
+its own clearing values. When combining multiple reasons, the dataset's
+mapping must define when the overall correction no longer applies. Datasets
+without a `gcs_unable` mapping retain the usual calculation.
+
+MIMIC-IV maps verbal item 223900 to 1 for `No Response-ETT`, including entries
+without a numeric verbal value, and to 0 for other numeric verbal assessments.
+Other null-valued entries produce no flag. `gcs_verbal` keeps the original
+numeric value and text, including verbal 1 or null. MIMIC-IV 3.1 and the 2.2
+demo inherit this mapping. No correction mapping is currently supplied for
+eICU; RASS and ventilation status are not interpreted by `GcsTransformer`.
+
+Only numeric GCS components or recorded totals generate assessments. Flags
+and expiry alone create no assessment; they take effect at the next numeric
+GCS input. A patient with no numeric GCS observations has no GCS timeline;
+total SOFA already treats a missing CNS component as zero.
+
+Six-hour component carry-forward and normal-value imputation follow
+[ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L362).
+The recency rule deliberately differs from ricu's preference for any still-current
+recorded total. Setting the total to 15 for an explicit ETT marker follows the
+default correction in ricu and
+[mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/measurement/gcs.sql#L66).
+Leaving the recorded verbal value unchanged follows
+[ricu's MIMIC-IV verbal mapping](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6603);
+the correction is applied only to the computed GCS total.
+Carrying the latest correction flag for six hours is WeavEHR's timing rule,
+rather than either reference's exact propagation. In particular,
+[ricu's MIMIC ETT mapping](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L2696)
+uses one-minute windows expanded onto its time grid.
+
+`gcs_total` and `gcs_unable` retain source-table provenance; computed `gcs` retains
+dataset provenance. Regenerate these concepts and dependent CNS, SOFA and
+sepsis outputs after this change.
+
+### SOFA measurement alignment
+
+SOFA components carry the latest point measurements forward for **one hour**
+by default, except respiratory SOFA, which uses **two hours** for PaO₂/FiO₂.
+Both boundaries are inclusive. Set `kwargs.window` in a component's mapping to
+override this alignment window. Creatinine, platelets, bilirubin, GCS and MAP
+retain the one-hour default. Urine collection remains a trailing 24-hour
+window; ventilation and pressors retain their separate state-expiry rules.
+Total SOFA still takes each component's worst emitted score over 24 hours.
+
+Exact timestamp ties use the worst-value direction: maximum creatinine,
+bilirubin and FiO₂; minimum platelets, MAP, GCS and PaO₂. GCS reconstruction
+also takes the minimum of tied component or recorded-total values; correction
+flags keep their existing precedence. Later measurements replace these tied
+values normally. These reductions occur inside score calculations; ordinary
+mapped concepts retain every record. Urine volumes still sum, and state inputs
+retain their existing rules.
+
+SOFA and GCS ignore numeric `NaN` and positive or negative infinity inside
+their calculations. Those rows neither generate assessments nor refresh
+measurement or state validity, and invalid urine entries do not establish
+collection coverage or bridge recording gaps. Ordinary mapped concepts retain
+the original records. Finite zero values and valueless ventilation markers
+retain their usual meaning.
+
+### Respiratory SOFA ventilation state
+
+Respiratory SOFA consumes `ventilation_start` and `ventilation_end` markers.
+It combines them into 1/0 events only inside the transformer and uses `ActiveState`
+to align ventilation with the gas measurements. No intermediate state concept is written.
+Gas alignment defaults to **two hours**, following
+[ricu's default matching window](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L192).
+The latest PaO₂ and FiO₂ must each be within that window; no score is emitted
+without both, and missing FiO₂ is not replaced with 21%. Assessments still use
+the input event timestamps rather than ricu's hourly grid. Scoring thresholds
+and ventilation-state rules are unchanged.
+
+The MIMIC-IV mappings select procedure items 225792 and 225794, preserving native
+`orderid` and `stay_id` to pair each procedure's start and end. Both markers carry
+the ventilation level in the code: `ventilation_start//invasive` (225792) or
+`ventilation_start//noninvasive` (225794), and likewise for `ventilation_end`.
+Respiratory SOFA does not use the level, so noninvasive ventilation counts as
+ventilated.
+
+The eICU mappings treat each recorded sign of ventilation as a start marker:
+
+- the episode start in `respiratoryCare` (`ventstartoffset`); a zero offset means
+  "not recorded" and is dropped during extraction, and repeated reports of the
+  same start within a stay become one marker;
+- `RT Vent On/Off` charted as `Start` or `Continued`;
+- `O2 Device` charted as `Ventilator`, `Bi-PAP` or `CPAP`;
+- the nurse-charted `O2 Admin Device` (free text) naming a ventilator (`ventilator`,
+  `vent`, or a tracheostomy on a ventilator such as `trach to vent`) or BiPAP,
+  CPAP or NIV; `venturi mask` does not count;
+- positive ventilator settings (`PEEP`, `PEEP/CPAP`, `CPAP`, `Pressure Control`,
+  `Pressure Support`, `Tidal Volume (set)`, `Vent Rate`) and measurements
+  (`Exhaled MV`, `Exhaled TV (patient)`, `Exhaled TV (machine)`,
+  `Mean Airway Pressure`, `Peak Insp. Pressure`, `Plateau Pressure`, `B1: IPAP`,
+  `B2: EPAP`).
+
+End markers are `RT Vent On/Off` charted as `Off` or `Suspended` and the episode
+end in `respiratoryCare` (`ventendoffset`, zero dropped). Text values match
+regardless of case. Prior episodes recorded in `respiratoryCare`
+(`priorventstartoffset`, `priorventendoffset`) are not used. The markers preserve
+`stay_id`; they have no shared episode identifier and no level, so their codes
+stay `ventilation_start` and `ventilation_end`.
+
+ricu at c0efac7
+([`vent_start`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6498),
+[`vent_end`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config/concept-dict.json#L6411))
+also uses the prior episodes, every row in the `respFlowPtVentData` category and
+any value `off` or `Suspended`. The WeavEHR selection is deliberately narrower:
+patient observations such as `RR (patient)` and `SaO2`, FiO2 and oxygen flow
+settings, and oxygen devices other than ventilators, BiPAP and CPAP (including
+high-flow nasal cannula) are not evidence of ventilation.
+
+An end stops its matching episode; overlapping identified episodes keep ventilation
+on until all have ended. Identifiers are scoped to patient and stay. A new stay
+observed in any input prevents ventilation from the old stay carrying into that
+assessment; a stay change absent from all inputs cannot be detected.
+
+`kwargs.ventilation_window` sets fallback expiry after the latest start/update.
+A linked recorded end confirms the episode until that end, even beyond the timeout;
+unidentified observations always use the configured fallback. Its boundary is
+inclusive. Expiry is evaluated at the next input event; it creates no timestamp.
+The default is `null` (no forced expiry), preserving the previous default until a
+ventilation-specific timeout is agreed. `kwargs.ventilation_id_column` can select
+a native linking field other than the default `orderid`.
+
+The eICU mapping sets `ventilation_window: 6h`, so each start marker keeps
+ventilation on for six hours unless an end stops it first. This matches the
+six hours within which
+[ricu's `vent_ind`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L280)
+matches a start to the next end; ricu's additional minimum duration of 30 minutes
+is not applied. In eICU demo 2.0 the median gap between charted ventilation
+markers within a stay is 1.0 hours, the 95th percentile is 4.9 hours, and 3.5% of
+20,240 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
+their procedure episodes are linked by `orderid`.
+
+### Cardiovascular SOFA
+
+`sofa_cardiovascular` reassesses at every MAP or pressor input event, including
+recorded stops. It uses the **latest MAP within one hour**, rather than the
+worst MAP in that hour. The `window` mapping argument controls this lookback.
+
+Pressor rates have a separate `pressor_window` timeout. Within each dataset,
+patient, stay and drug, native `linkorderid` values identify independent
+infusions across rate changes. A zero stops only its matching infusion. A
+subsequent positive rate restarts it; a positive rate at the same timestamp as
+a zero takes precedence. Concurrent infusions contribute their **maximum rate**,
+not their sum, following the overlap aggregation in
+[ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L486)
+and [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/score/sofa.sql#L140).
+This does not reproduce their time grids, and the component does not apply
+ricu's separate minimum administration duration of one hour.
+
+A linked infusion with a matching zero-rate stop is retained until that stop,
+even if its duration exceeds `pressor_window`. When a matching stop is absent,
+the latest rate remains current through `last_record_time + pressor_window`,
+inclusive. Each new numeric rate refreshes its own stream's timeout; null rates
+and other drugs' events do not. Without an infusion identifier, observations
+form one stream per patient/stay/drug and always use the timeout, including when
+a later zero is recorded. A stop without identity cannot stop an identified
+infusion. A newly observed stay prevents rates from the previous stay carrying
+into its assessments; this cannot detect a stay change absent from all inputs.
+
+Timeout makes a rate unknown at the next input event; it does not generate an
+event at the timeout itself. A recorded zero is observed cessation, whereas
+expiry is missing information. No component score is emitted when all inputs
+are unknown. With a current normal MAP, an expired pressor can yield a component
+score of zero. Total SOFA still uses each component's worst emitted score over
+its own trailing 24-hour window.
+
+The shipped defaults were selected on **2026-10-23 from public demo
+distributions**, not validated as clinical cutoffs:
+
+| Mapping | `window` | `pressor_window` | Empirical basis |
+| --- | --- | --- | --- |
+| MIMIC-IV 2.2 | `1h` | `48h` | Among 1,055 mapped rate segments, the longest was 31.9 h; the longest reconstructed linked start/stop episode was 40.57 h. The fallback rounds above both observed maxima. |
+| eICU-CRD 2.0 | `1h` | `6h` | Among 666 gaps after positive mapped rate observations, the median was 1 h and the 95th percentile was 5.99 h. Thirty-two gaps (4.8%) exceeded 6 h. |
+
+The MIMIC analysis used
+[`inputevents.csv.gz` from demo 2.2](https://physionet.org/files/mimic-iv-demo/2.2/icu/inputevents.csv.gz),
+items 221906, 221289, 221662 and 221653, with the existing `mcg/kg/min`
+selection. Episodes were grouped by stay and `linkorderid`, split at retained
+ends (`statusdescription != "ChangeDose/Rate"`), with simultaneous stop/restart
+treated as continuation. There were 247 closed episodes. All linked streams
+had retained terminal stops, so this sample cannot validate missing-stop expiry.
+
+The eICU analysis used
+[`infusiondrug.csv.gz` from demo 2.0](https://physionet.org/files/eicu-crd-demo/2.0/infusiondrug.csv.gz),
+restricted to the four current mappings' drug names ending in `(mcg/kg/min)`
+and numeric rates: 736 observations across 38 stays. Gaps were measured between
+distinct consecutive timestamps within each stay and source drug name, after
+a positive rate; percentiles used linear interpolation. These are recording
+gaps, not verified infusion durations. The maximum gap was 37.67 h; a long gap
+may contain an unrecorded stop or restart. Other units were excluded, and the
+epinephrine subset contained only four observations in one stay.
+
+MIMIC-IV 3.1 and MIMIC-IV demo 2.2 inherit the MIMIC-IV 2.2 mapping; eICU demo
+2.0 inherits eICU-CRD 2.0. These defaults remain configurable pending clinical
+validation and assessment on representative data.
+
+### Suspected infection and Sepsis-3
+
+`suspected_infection` is the shared output concept. Each dataset's
+`suspected_infection.yml` selects its evidence rule: antibiotic/culture pairing
+for MIMIC-IV, or sustained antibiotic treatment for eICU.
+
+`AntibioticsWithCultureTransformer` pairs antibiotic treatment with body-fluid sampling:
+sampling follows antibiotics within 24 hours, or antibiotics follow sampling
+within 72 hours. The earlier event dates the suspicion. Both boundaries are
+inclusive; neither positive culture results nor a sustained antibiotic course
+are required.
+
+`sepsis3` assesses **every** suspected-infection window independently. Within
+the inclusive interval from 48 hours before suspicion to 24 hours after it,
+the first observed SOFA rise of at least `kwargs.sofa_increase` (default: 2)
+above the running minimum produces an onset event. An elevated first score
+alone does not qualify, and observations outside that window do not establish
+its baseline.
+
+Several windows can produce several events for the same patient. Overlapping
+windows can produce identical onset timestamps; `Sepsis3Transformer` collapses
+these copies by `subject_id` and `time` after assessing every window. Later
+distinct onsets are retained. Selecting a first onset per patient or episode
+belongs downstream; the transformer no longer takes an `infection_window`
+selector. This deliberately differs from ricu's default selection of only its
+first infection window.
+Pairing, window lengths and the cumulative-minimum baseline follow
+[ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-sep3.R).
+
+The MIMIC-IV antibiotic mapping extends ricu's prescription regex with
+ceftriaxone, meropenem and linezolid, which also appear in
+[mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/medication/antibiotic.sql),
+plus ertapenem, imipenem and daptomycin. Its prescription exclusions follow
+mimic-code: `BASE` records, eye/ear and topical routes, and drug names containing
+`cream`, `gel`, `ophth oint` or `desensitization` are excluded. Prescriptions
+without a recorded route or drug type do not qualify. Drug-name exclusions inspect
+the original prescription code. Prescription markers use the prescribed treatment
+start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo 2.2 inherit
+these mappings.
+
+The eICU antibiotic inputs follow the drug selection and binary markers in
+[YAIB-cohorts at 74ac699](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/configs/medications/concept-dict.json).
+Medication markers use `prescribed_start`; infusion observations use their
+recorded timestamps. Prescription starts and ends are native datetimes from
+extraction and are used directly. Medication rows with missing starts are
+excluded from antibiotic output; the original orders remain in extraction.
+Both emit `numeric_value: 1`, including zero-rate infusion
+observations as in the reference. Neither retains `stay_id`. Both mappings supply a
+common `coverage_end` extension: the prescribed stop for medication, or one minute
+after an infusion observation. Infusion rates are not used to infer longer
+coverage. eICU demo 2.0 inherits these mappings.
+
+For eICU, `suspected_infection` selects `SustainedAntibioticsTransformer`, following
+[YAIB's continuity callback at 74ac699](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/callbacks/callback-sepsis.R).
+Each antibiotic start is assessed over the following `kwargs.antibiotic_window`
+(default: 72h). Every gap, including the final gap to the horizon, must be at most
+`kwargs.max_gap` (default: 24h). Thus a single prescription covering exactly 48h
+can qualify. Duplicate starts use the latest prescribed end unless any end is
+missing; in that case the collapsed end is missing. Overlapping prescriptions
+use the cumulative latest end. Recorded ends, including ends before the start,
+are used without clamping. A missing end invalidates every window containing
+that row, even if another interval covers the entire window. This preserves
+YAIB's conservative handling of missing durations. Treatment is grouped by
+`subject_id`, which identifies a hospital
+admission in eICU. All available antibiotic records can contribute, including
+across ICU stays or outside ICU admission/discharge times. This intentionally
+extends YAIB's ICU-stay scope; complete ward treatment records may be unavailable.
+
+The transformer requires a `coverage_end` extension column, independently
+of the original source tables or fields. Coverage ends are naive ISO datetime
+strings. Invalid non-null ends fail rather than silently removing
+suspected-infection events. The dataset mapping defines each source's coverage.
+The antibiotic window must be a positive Polars temporal duration string and
+the maximum gap must be non-negative. Index-count units (`i`) are not supported;
+invalid values fail at construction. All three sepsis-related transformers
+reject unknown parameters at construction.
+The `death` input is a thin mapping of extracted `MEDS_DEATH` events. Any recorded
+death shortens the horizon and excludes antibiotics starting after death. This
+intentionally extends YAIB's ICU-death exception to deaths after ICU discharge.
+Death applies across the subject's hospital admission. Missing death events leave the full horizon.
+Live discharge does not shorten it. No culture pairing is required
+by this transformer. Every qualifying start feeds the existing `sepsis3` SOFA-rise rule;
+YAIB's additional cohort and prediction-label rules are not applied. eICU demo
+inherits both mappings. Calculations retain continuous timestamps rather than
+reproducing ricu's time-grid rounding.
+
+For the missing eICU death events described in
+[issue #84](https://github.com/aidh-ms/WeavEHR/issues/84), we use the earliest
+recorded death timestamp. ICU discharge is eligible when `unitdischargestatus`
+is `Expired`; hospital discharge is eligible when `hospitaldischargestatus` is
+`Expired`. `min` selects the earliest non-null death timestamp within each row,
+then `first_distinct(subject_id, order_by=[time, stay_id])` retains exactly one event per MEDS
+subject, using the lowest ICU stay ID to break equal-time ties. In eICU the MEDS
+subject is a hospital admission (`patienthealthsystemstayid`), so several ICU
+stays share one death event. Death events have no numeric measurement value.
+eICU demo inherits this extraction. Existing extractions need rerunning to expose it.
+
+These are retrospective labels: the culture, antibiotic or sustained treatment
+confirming suspicion can occur after the reported onset. Calculations use continuous timestamps
+and patient timelines. Partial SOFA scores and changes in measurement coverage
+can affect the apparent rise; no additional SOFA completeness or washout rule
+is applied here.
+
+### Respiratory support and airway
+
+`respiratory_support` records each charted oxygen device or ventilator mode as
+an observation of the kind of support at that time. Its levels are:
+
+- `invasive`: an invasive ventilator mode, or ventilation through a tracheostomy;
+- `noninvasive`: a CPAP or BiPAP interface, or a noninvasive ventilator mode;
+- `ventilator`: a ventilator without evidence of the interface, such as a
+  spontaneous mode or an eICU entry that only says "ventilator";
+- `high_flow`: high-flow nasal cannula;
+- `oxygen`: other supplemental oxygen, such as a nasal cannula, a mask, a face
+  tent or a trach collar;
+- `none`: room air.
+
+`airway_start` and `airway_end` record artificial airways, with the levels
+`endotracheal_tube` and `tracheostomy`. A start is an insertion or an airway
+charted in place; an end is a recorded removal. An end without a level records
+that no artificial airway is present.
+
+All three are observations without duration; each row keeps the raw text in
+`text_value` and the `stay_id`. Several observations can share a timestamp, for
+example a nasal cannula charted with a high-flow device. Ranking them and
+deciding how long an observation stays valid is left to the concepts that use
+them. An endotracheal tube on its own is recorded only as an airway, not as
+invasive support: during a T-piece trial the patient is intubated but not
+ventilated. Keeping the airway separate lets a later step resolve `ventilator`
+observations, for example as invasive when a tube is in place. Respiratory SOFA
+does not use these concepts yet; the "advanced ventilatory support" of
+[SOFA-2](https://doi.org/10.1001/jamanetworkopen.2025.45040) corresponds to the
+levels `invasive`, `noninvasive`, `ventilator` and `high_flow`.
+
+The MIMIC-IV mappings use the device and mode lists of
+[mimic-code's `ventilation.sql` at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/treatment/ventilation.sql),
+matched after trimming spaces. They differ from it in that they:
+
+- emit observations rather than episodes;
+- keep device rows even when no oxygen flow is charted at the same time;
+- record the endotracheal tube and tracheostomy devices as airways rather than
+  as invasive ventilation and a separate tracheostomy category;
+- classify Hamilton `SPONT` and the plain `CPAP` mode, which mimic-code leaves
+  out, as `ventilator`.
+
+Airways also come from the intubation, extubation and tracheostomy procedures,
+from Trach Tube Type and from Trach Care when it was done.
+
+The eICU mappings combine respiratory charting (`O2 Device`, `Oxygen Delivery
+Method` and the ventilator and NIV mode fields) with the nurse-charted
+`O2 Admin Device`, which is free text and matched regardless of case. A bare
+"high flow" without a device, T-piece entries, `Other` and plain flow rates are
+not classified. Airways come from `respiratoryCare.airwaytype`, at the time the
+care entry was recorded, and from nurse entries that mention a tracheostomy.
+Some care entries record contradictory airway types at the same time, such as
+`Oral ETT` and `No Artificial Airway`; the row with the highest
+`currenthistoryseqnum`, the latest one, counts. The eICU extraction gains an
+`AIRWAY` event for this; existing extractions need rerunning to expose it.
+
+The AmsterdamUMCdb mappings read the OMOP export: ventilator modes from
+`procedure_occurrence`, and oxygen devices and airways from `device_exposure`.
+The ambiguous modes (PS/CPAP, BIPAP, CPAP, VC and PC) are `ventilator`, and any
+listed mode whose source value contains "NIV" is `noninvasive`. Tube and
+tracheostoma ends recorded in `device_exposure` become `airway_end`, and
+`device_exposure_id` links each end to its start. A Guedel airway and an Ambu
+bag are not supplemental oxygen, and a double-lumen tube records only the
+airway, like every other tube. No high-flow nasal cannula or room-air item is
+mapped yet. Rows keep the source code, concept ID and source value, in
+`text_value`.
+
 ## Output layout
 
 Each concept is written per dataset and dataset version:
@@ -134,6 +555,6 @@ with the standard MEDS columns (`subject_id`, `time`, `code`, `numeric_value`, `
 
 ## Adding a new concept
 
-1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, unit).
+1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, and unit if it has one).
 2. For each dataset, find the relevant source codes — `datasets/extraction/metadata/codes.parquet` is your friend — and write a mapping in `configs/datasets/<dataset>/<version>/mappings/<your_concept>.yml`.
 3. Re-run the concept step (with `overwrite: true`, or `includes` limited to your concept while iterating).
