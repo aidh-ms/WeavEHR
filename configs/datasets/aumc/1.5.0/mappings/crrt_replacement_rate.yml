@@ -1,0 +1,13 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
+#   1988543 = Pre-filter replacement fluid rate Renal replacement therapy circuit
+# Total substitution rate items of 1988543 (not the predilution item).
+# Stored in ml/uur.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^1988543//(MFT_Substituaat \\(ingesteld\\)|Substitutieflow ingesteld|Substitutie-flow)(//.*)?$"
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)

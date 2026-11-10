@@ -43,6 +43,14 @@ Currently mapped (all `simple`, all from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
 respiratory numerics (SpO2, respiratory rate, FiO2) and urine output.
 
+The measurements from mimic-code that AUMCdb records are mapped too: further
+blood gas and differential values, NT-proBNP, anion gap, total protein,
+D-dimer, enzymes, ventilator settings and CRRT settings. AMSTEL has no mapped
+item for the alveolar-arterial gradient, total CO2, atypical lymphocytes,
+immature granulocytes, globulin, thrombin time, RDW, indirect bilirubin,
+spontaneous tidal volume, or the CRRT citrate, dialysate, heparin and current
+goal values.
+
 Respiratory support and the airway markers (`respiratory_support`,
 `airway_start`, `airway_end`) come from `procedure_occurrence` (ventilator
 modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). On
