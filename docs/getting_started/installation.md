@@ -51,7 +51,6 @@ WeavEHR builds on a small set of core libraries, installed automatically:
 | [meds](https://github.com/Medical-Event-Data-Standard/meds) | MEDS schema definitions and metadata validation |
 | [pyarrow](https://arrow.apache.org/docs/python/) | Parquet/columnar interchange |
 | [pandas](https://pandas.pydata.org) | Interoperability with pandas-based workflows |
-| [duckdb](https://duckdb.org) | SQL analytics engine |
 | [pyyaml](https://pyyaml.org) | YAML parsing |
 
 ## Getting the data

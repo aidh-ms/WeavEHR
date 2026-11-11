@@ -53,7 +53,6 @@ include = [
 ]
 
 [dependency-groups]
-validation = ["duckdb==2.0.0"]
 dev = [
     "jupyterlab>=4.5.8",
     "pre-commit>=4.6.2",

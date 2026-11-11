@@ -1,4 +1,3 @@
-# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
 # Evidence of extubation or transition to unassisted oxygen, not arbitrary device charting.
 type: simple
 mappings:

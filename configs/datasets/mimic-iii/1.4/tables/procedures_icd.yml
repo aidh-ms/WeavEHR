@@ -1,4 +1,3 @@
-# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
 path: PROCEDURES_ICD.csv.gz
 csv_header_case: lower
 columns:

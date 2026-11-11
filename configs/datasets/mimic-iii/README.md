@@ -56,7 +56,7 @@ Unmapped source items remain available in extraction.
 
 ## Coverage relative to IV
 
-145 of IV's 150 current mappings have III equivalents. III additionally maps
+III covers IV's concepts apart from the gaps below. III additionally maps
 recorded death, recorded GCS total, discharge notes and radiology notes.
 
 | IV concept not mapped | Reason |
@@ -65,7 +65,6 @@ recorded death, recorded GCS total, discharge notes and radiology notes.
 | `neutrophils_absolute` | Direct absolute-count item absent from III |
 | `immature_granulocytes` | Relevant IV item absent; other specimen types are not substituted |
 | `erythrocyte_distribution_width_sd` | No matching III RDW-SD item |
-| `in_hospital_mortality` | Omitted consistently with #160; raw expire flags and death events remain |
 
 AKI, SOFA, suspected infection and Sepsis-3 reuse WeavEHR's existing
 transformers with III inputs. Their continuous-time definitions do not claim
@@ -87,6 +86,9 @@ equivalence to every hourly ricu score or published SQL outcome definition.
   bridge gaps above six hours or extrapolate past an unclosed final record.
   Coincident amount/rate rows are merged before calculating intervals; null
   amount-only rates carry the preceding rate, and explicit stops reset it.
+- Vasopressin differs from IV: III emits ordered rates at segment start and
+  cessation markers, while IV emits realised average rates at segment end.
+  The two event series are not numerically equivalent.
 - MetaVision procedure markers retain invasive/NIV levels. CareVue mechanical
   support has an unspecified interface (bare `ventilation_start`/`ventilation_end`
   codes), not a proven intubation. Settings, ventilator modes, oxygen devices
@@ -120,22 +122,22 @@ equivalence to every hourly ricu score or published SQL outcome definition.
   `TIMESTAMP_OF` and `TRANSFER_TO` names. Transfer outtime remains available as
   `location_end` rather than a second transfer into the previous location.
 
-## Provenance and validation
+## References and limitations
 
-References: ricu 0.6.3 at
-[`c0efac7`](https://github.com/eth-mds/ricu/tree/c0efac720dbe72caaf63b361b6978a24383835bf),
-mimic-code at
-[`303d26c`](https://github.com/MIT-LCP/mimic-code/tree/303d26c623dcc9c49cc0f204468d4acc2f063797),
-III's item dictionaries, and WeavEHR's IV configs at `c9187df2`.
-[`reference-audit.yml`](reference-audit.yml) lists the paired ricu concepts.
-[`VALIDATION.md`](VALIDATION.md) gives reproducible checks and their limits.
+References: [ricu `c0efac7`](https://github.com/eth-mds/ricu/tree/c0efac720dbe72caaf63b361b6978a24383835bf), [mimic-code `303d26c`](https://github.com/MIT-LCP/mimic-code/tree/303d26c623dcc9c49cc0f204468d4acc2f063797), III's item dictionaries, and [WeavEHR IV configs `c9187df2`](https://github.com/aidh-ms/WeavEHR/tree/c9187df215214b61b228c3ce357fb7cf091025fe/configs/datasets/mimic-iv).
+
 The source documentation describes [note dates and missing storetimes](https://mimic.mit.edu/docs/iii/tables/noteevents.html),
 [prescription validity dates](https://mimic.mit.edu/docs/iii/tables/prescriptions.html),
 and [microbiology specimen dates](https://mimic.mit.edu/docs/iii/tables/microbiologyevents.html).
-Full credentialed III, neonatal observations absent from the demo, and real
-notes require further validation on the full release. Date-only discharge/ECG
-notes are also exercised with synthetic full-release CSVs, including uppercase
-headers and both date-only and midnight-datetime representations.
+Checks use III's public demo and synthetic cases. The full credentialed III
+release and the official CareVue subset have not been run. The demo does not
+exercise every item/unit. Neonatal observations absent from the demo and real
+note content remain untested. Date-only discharge/ECG notes are exercised with
+synthetic full-release CSVs, including uppercase headers and both date-only and
+midnight-datetime representations.
+
+R/ricu execution and hourly score equivalence have not been checked. Successful
+AKI, SOFA and Sepsis-3 execution does not establish external clinical validity.
 
 ## Combining III and IV
 

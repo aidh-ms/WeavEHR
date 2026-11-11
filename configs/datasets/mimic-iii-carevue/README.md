@@ -12,4 +12,5 @@ the subset with newer IV releases.
 
 Inheritance and schema are tested; the credentialed subset itself was not
 downloaded. Behavioural validation uses III's public demo and synthetic CareVue
-cases. See [`../mimic-iii/VALIDATION.md`](../mimic-iii/VALIDATION.md).
+cases. See the [MIMIC-III README](../mimic-iii/README.md#references-and-limitations)
+for limitations.

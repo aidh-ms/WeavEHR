@@ -1,3 +1,2 @@
-# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
 dataset: mimic-iii
 version: '1.4'

@@ -1,4 +1,3 @@
-# MIMIC-III v1.4; sources and validation: configs/datasets/mimic-iii/README.md
 path: INPUTEVENTS_CV.csv
 join:
 - path: D_ITEMS.csv

@@ -526,7 +526,7 @@ def test_culture_results_do_not_claim_specimen_time_availability(tmp_path: Path)
 
 def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
     iii = {p.stem for p in (DATASET / "mappings").glob("*.yml")}
-    iv = {p.stem for p in (CONFIGS / "datasets/mimic-iv/2.2/mappings").glob("*.yml")} - {"in_hospital_mortality"}
+    iv = {p.stem for p in (CONFIGS / "datasets/mimic-iv/2.2/mappings").glob("*.yml")}
     assert iv - iii == {
         "basophils_absolute",
         "erythrocyte_distribution_width_sd",
@@ -534,5 +534,3 @@ def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
         "neutrophils_absolute",
     }
     assert len(iii & iv) >= len(iv) - 4
-    audit = yaml.safe_load((DATASET.parent / "reference-audit.yml").read_text())
-    assert set(audit["missing_iv_concepts"]) & iv == iv - iii

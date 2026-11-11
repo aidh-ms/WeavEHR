@@ -8,4 +8,5 @@ normalisation is inherited. No manual CSV conversion is needed.
 
 The demo includes both CareVue and MetaVision stays. `NOTEEVENTS.csv` is a
 header-only placeholder, so discharge and radiology note outputs are empty.
-See [`../mimic-iii/VALIDATION.md`](../mimic-iii/VALIDATION.md) for the demo checks.
+See the [MIMIC-III README](../mimic-iii/README.md#references-and-limitations)
+for dataset rules and limitations.
