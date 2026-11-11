@@ -1,11 +1,60 @@
 path: OUTPUTEVENTS.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: icustay_id
+  type: int64
+- name: charttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: itemid
+  type: int64
+- name: value
+  type: float32
+- name: valueuom
+  type: string
+- name: storetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cgid
+  type: int64
+- name: stopped
+  type: string
+- name: newbottle
+  type: string
+- name: iserror
+  type: int64
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(icustay_id, output=ICUSTAY_ID)
+- col(charttime, output=CHARTTIME)
+- col(itemid, output=ITEMID)
+- col(value, output=VALUE)
+- col(valueuom, output=VALUEUOM)
+- col(storetime, output=STORETIME)
+- col(cgid, output=CGID)
+- col(stopped, output=STOPPED)
+- col(newbottle, output=NEWBOTTLE)
+- col(iserror, output=ISERROR)
 join:
 - path: D_ITEMS.csv
-  csv_header_case: lower
   columns:
   - name: itemid
     type: int64
   - name: label
     type: string
+  callbacks:
+  - col(itemid, output=ITEMID)
+  - col(label, output=LABEL)
   both_on:
-  - itemid
+  - ITEMID

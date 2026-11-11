@@ -1,74 +1,72 @@
 path: CHARTEVENTS.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: icustay_id
+- name: ICUSTAY_ID
   type: int64
-- name: itemid
+- name: ITEMID
   type: int64
-- name: charttime
+- name: CHARTTIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: storetime
+- name: STORETIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: cgid
+- name: CGID
   type: int64
-- name: value
+- name: VALUE
   type: string
-- name: valuenum
+- name: VALUENUM
   type: float32
-- name: valueuom
+- name: VALUEUOM
   type: string
-- name: warning
+- name: WARNING
   type: int64
-- name: error
+- name: ERROR
   type: int64
-- name: resultstatus
+- name: RESULTSTATUS
   type: string
-- name: stopped
+- name: STOPPED
   type: string
 join:
 - path: D_ITEMS.csv.gz
-  csv_header_case: lower
   columns:
-  - name: itemid
+  - name: ITEMID
     type: int64
-  - name: label
+  - name: LABEL
     type: string
   both_on:
-  - itemid
+  - ITEMID
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    stay_id: col(icustay_id)
-    caregiver_id: col(cgid)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    caregiver_id: col(CGID)
+    row_id: col(ROW_ID)
 filters:
-- not (error == 1) or error == None
+- not (ERROR == 1) or ERROR == None
 events:
 - name: CHART
   columns:
-    time: col(charttime)
+    time: col(CHARTTIME)
     code:
-    - col(itemid)
-    - col(label)
-    - col(valueuom)
-    numeric_value: col(valuenum)
-    text_value: col(value)
+    - col(ITEMID)
+    - col(LABEL)
+    - col(VALUEUOM)
+    numeric_value: col(VALUENUM)
+    text_value: col(VALUE)
     extension:
-      available_time: col(storetime)
-      error: col(error)
-      warning: col(warning)
+      available_time: col(STORETIME)
+      error: col(ERROR)
+      warning: col(WARNING)
   filters:
   - drop_na(time)

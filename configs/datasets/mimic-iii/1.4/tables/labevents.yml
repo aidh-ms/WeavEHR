@@ -1,54 +1,52 @@
 path: LABEVENTS.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: itemid
+- name: ITEMID
   type: int64
-- name: charttime
+- name: CHARTTIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: value
+- name: VALUE
   type: string
-- name: valuenum
+- name: VALUENUM
   type: float32
-- name: valueuom
+- name: VALUEUOM
   type: string
-- name: flag
+- name: FLAG
   type: string
 join:
 - path: D_LABITEMS.csv.gz
-  csv_header_case: lower
   columns:
-  - name: itemid
+  - name: ITEMID
     type: int64
-  - name: label
+  - name: LABEL
     type: string
   both_on:
-  - itemid
+  - ITEMID
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
 events:
 - name: LAB
   columns:
-    time: col(charttime)
+    time: col(CHARTTIME)
     code:
-    - col(itemid)
-    - col(label)
-    - col(valueuom)
-    numeric_value: col(valuenum)
-    text_value: col(value)
+    - col(ITEMID)
+    - col(LABEL)
+    - col(VALUEUOM)
+    numeric_value: col(VALUENUM)
+    text_value: col(VALUE)
     extension:
-      available_time: col(charttime)
-      flag: col(flag)
+      available_time: col(CHARTTIME)
+      flag: col(FLAG)
   filters:
   - drop_na(time)

@@ -1,77 +1,76 @@
 path: PRESCRIPTIONS.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: icustay_id
+- name: ICUSTAY_ID
   type: int64
-- name: startdate
+- name: STARTDATE
   type: datetime
   params:
     format: '%Y-%m-%d'
     exact: false
     strict: false
-- name: enddate
+- name: ENDDATE
   type: datetime
   params:
     format: '%Y-%m-%d'
     exact: false
     strict: false
-- name: drug_type
+- name: DRUG_TYPE
   type: string
-- name: drug
+- name: DRUG
   type: string
-- name: drug_name_poe
+- name: DRUG_NAME_POE
   type: string
-- name: drug_name_generic
+- name: DRUG_NAME_GENERIC
   type: string
-- name: formulary_drug_cd
+- name: FORMULARY_DRUG_CD
   type: string
-- name: gsn
+- name: GSN
   type: string
-- name: ndc
+- name: NDC
   type: string
-- name: prod_strength
+- name: PROD_STRENGTH
   type: string
-- name: dose_val_rx
+- name: DOSE_VAL_RX
   type: string
-- name: dose_unit_rx
+- name: DOSE_UNIT_RX
   type: string
-- name: form_val_disp
+- name: FORM_VAL_DISP
   type: string
-- name: form_unit_disp
+- name: FORM_UNIT_DISP
   type: string
-- name: route
+- name: ROUTE
   type: string
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    stay_id: col(icustay_id)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    row_id: col(ROW_ID)
 events:
 - name: MEDICATION_ORDER
   columns:
-    time: add_offset(startdate, 1, offset_unit="days")
+    time: add_offset(STARTDATE, 1, offset_unit="days")
     code:
-    - col(drug)
-    text_value: col(prod_strength)
+    - col(DRUG)
+    text_value: col(PROD_STRENGTH)
     extension:
       # III records prescription validity dates, not the order-entry time.
       available_time: cast(None, "datetime")
       time_precision: const(day)
-      time_lower_bound: col(startdate)
-      time_upper_bound: add_offset(startdate, 1, offset_unit="days")
-      prescribed_start: col(startdate)
-      prescribed_end: col(enddate)
-      drug_type: col(drug_type)
-      ndc: col(ndc)
-      dose: col(dose_val_rx)
-      dose_uom: col(dose_unit_rx)
-      route: col(route)
+      time_lower_bound: col(STARTDATE)
+      time_upper_bound: add_offset(STARTDATE, 1, offset_unit="days")
+      prescribed_start: col(STARTDATE)
+      prescribed_end: col(ENDDATE)
+      drug_type: col(DRUG_TYPE)
+      ndc: col(NDC)
+      dose: col(DOSE_VAL_RX)
+      dose_uom: col(DOSE_UNIT_RX)
+      route: col(ROUTE)
   filters:
   - drop_na(time)

@@ -1,54 +1,51 @@
 path: DIAGNOSES_ICD.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: seq_num
+- name: SEQ_NUM
   type: int64
-- name: icd9_code
+- name: ICD9_CODE
   type: string
 join:
 - path: D_ICD_DIAGNOSES.csv.gz
-  csv_header_case: lower
   columns:
-  - name: icd9_code
+  - name: ICD9_CODE
     type: string
-  - name: long_title
+  - name: LONG_TITLE
     type: string
   both_on:
-  - icd9_code
+  - ICD9_CODE
 - path: ADMISSIONS.csv.gz
-  csv_header_case: lower
   columns:
-  - name: hadm_id
+  - name: HADM_ID
     type: int64
-  - name: dischtime
+  - name: DISCHTIME
     type: datetime
     params:
       format: '%Y-%m-%d %H:%M:%S'
       strict: false
   both_on:
-  - hadm_id
+  - HADM_ID
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
 events:
 - name: DIAGNOSIS
   columns:
-    time: col(dischtime)
+    time: col(DISCHTIME)
     code:
     - const("ICD")
     - const("9")
-    - col(icd9_code)
-    - col(long_title)
+    - col(ICD9_CODE)
+    - col(LONG_TITLE)
     extension:
-      available_time: col(dischtime)
-      seq_num: col(seq_num)
+      available_time: col(DISCHTIME)
+      seq_num: col(SEQ_NUM)
   filters:
   - drop_na(time)

@@ -1,1 +1,59 @@
 path: MICROBIOLOGYEVENTS.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: chartdate
+  type: datetime
+  params:
+    format: '%Y-%m-%d'
+    exact: false
+    strict: false
+- name: charttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: spec_itemid
+  type: int64
+- name: spec_type_desc
+  type: string
+- name: org_itemid
+  type: int64
+- name: org_name
+  type: string
+- name: isolate_num
+  type: int64
+- name: ab_itemid
+  type: int64
+- name: ab_name
+  type: string
+- name: dilution_text
+  type: string
+- name: dilution_comparison
+  type: string
+- name: dilution_value
+  type: float32
+- name: interpretation
+  type: string
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(chartdate, output=CHARTDATE)
+- col(charttime, output=CHARTTIME)
+- col(spec_itemid, output=SPEC_ITEMID)
+- col(spec_type_desc, output=SPEC_TYPE_DESC)
+- col(org_itemid, output=ORG_ITEMID)
+- col(org_name, output=ORG_NAME)
+- col(isolate_num, output=ISOLATE_NUM)
+- col(ab_itemid, output=AB_ITEMID)
+- col(ab_name, output=AB_NAME)
+- col(dilution_text, output=DILUTION_TEXT)
+- col(dilution_comparison, output=DILUTION_COMPARISON)
+- col(dilution_value, output=DILUTION_VALUE)
+- col(interpretation, output=INTERPRETATION)
+- add_offset(CHARTDATE, 1, offset_unit="days", output=chartdate_plus1)

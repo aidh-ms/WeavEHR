@@ -1,1 +1,24 @@
 path: SERVICES.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: transfertime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: prev_service
+  type: string
+- name: curr_service
+  type: string
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(transfertime, output=TRANSFERTIME)
+- col(prev_service, output=PREV_SERVICE)
+- col(curr_service, output=CURR_SERVICE)

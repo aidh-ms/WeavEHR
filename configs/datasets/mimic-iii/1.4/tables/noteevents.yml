@@ -1,60 +1,59 @@
 path: NOTEEVENTS.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: chartdate
+- name: CHARTDATE
   type: datetime
   params:
     format: '%Y-%m-%d'
     exact: false
     strict: false
-- name: charttime
+- name: CHARTTIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: storetime
+- name: STORETIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: category
+- name: CATEGORY
   type: string
-- name: description
+- name: DESCRIPTION
   type: string
-- name: cgid
+- name: CGID
   type: int64
-- name: iserror
+- name: ISERROR
   type: string
-- name: text
+- name: TEXT
   type: string
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    caregiver_id: col(cgid)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    caregiver_id: col(CGID)
+    row_id: col(ROW_ID)
 filters:
-- not (iserror == "1") or iserror == None
+- not (ISERROR == "1") or ISERROR == None
 callbacks:
-- add_offset(chartdate, 1, offset_unit="days", output=chartdate_plus1)
+- add_offset(CHARTDATE, 1, offset_unit="days", output=chartdate_plus1)
 events:
 - name: NOTE
   columns:
-    time: first_not_null(charttime, chartdate_plus1, output=time)
+    time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
     code:
-    - col(category)
-    - col(description)
-    text_value: col(text)
+    - col(CATEGORY)
+    - col(DESCRIPTION)
+    text_value: col(TEXT)
     extension:
-      available_time: col(storetime)
-      time_precision: replace(charttime == None, const(day), const(second))
-      time_lower_bound: first_not_null(charttime, chartdate)
-      time_upper_bound: first_not_null(charttime, chartdate_plus1)
+      available_time: col(STORETIME)
+      time_precision: replace(CHARTTIME == None, const(day), const(second))
+      time_lower_bound: first_not_null(CHARTTIME, CHARTDATE)
+      time_upper_bound: first_not_null(CHARTTIME, chartdate_plus1)
   filters:
   - drop_na(time)

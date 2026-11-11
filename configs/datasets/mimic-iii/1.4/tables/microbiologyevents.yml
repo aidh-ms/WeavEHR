@@ -1,91 +1,90 @@
 path: MICROBIOLOGYEVENTS.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: chartdate
+- name: CHARTDATE
   type: datetime
   params:
     format: '%Y-%m-%d'
     exact: false
     strict: false
-- name: charttime
+- name: CHARTTIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: spec_itemid
+- name: SPEC_ITEMID
   type: int64
-- name: spec_type_desc
+- name: SPEC_TYPE_DESC
   type: string
-- name: org_itemid
+- name: ORG_ITEMID
   type: int64
-- name: org_name
+- name: ORG_NAME
   type: string
-- name: isolate_num
+- name: ISOLATE_NUM
   type: int64
-- name: ab_itemid
+- name: AB_ITEMID
   type: int64
-- name: ab_name
+- name: AB_NAME
   type: string
-- name: dilution_text
+- name: DILUTION_TEXT
   type: string
-- name: dilution_comparison
+- name: DILUTION_COMPARISON
   type: string
-- name: dilution_value
+- name: DILUTION_VALUE
   type: float32
-- name: interpretation
+- name: INTERPRETATION
   type: string
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    row_id: col(row_id)
-    time_precision: replace(charttime == None, const(day), const(second))
-    time_lower_bound: first_not_null(charttime, chartdate)
-    time_upper_bound: first_not_null(charttime, chartdate_plus1)
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
+    time_precision: replace(CHARTTIME == None, const(day), const(second))
+    time_lower_bound: first_not_null(CHARTTIME, CHARTDATE)
+    time_upper_bound: first_not_null(CHARTTIME, chartdate_plus1)
 callbacks:
-- add_offset(chartdate, 1, offset_unit="days", output=chartdate_plus1)
+- add_offset(CHARTDATE, 1, offset_unit="days", output=chartdate_plus1)
 events:
 - name: MICROBIOLOGY_SPECIMEN
   columns:
-    time: first_not_null(charttime, chartdate_plus1, output=time)
+    time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
     code:
-    - col(spec_itemid)
-    - col(spec_type_desc)
+    - col(SPEC_ITEMID)
+    - col(SPEC_TYPE_DESC)
     extension:
-      available_time: first_not_null(charttime, chartdate_plus1, output=time)
+      available_time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
   filters:
   - drop_na(time)
-  - first_distinct(subject_id, hadm_id, time, spec_itemid)
+  - first_distinct(SUBJECT_ID, HADM_ID, time, SPEC_ITEMID)
 - name: MICROBIOLOGY_ORGANISM
   columns:
-    time: first_not_null(charttime, chartdate_plus1, output=time)
+    time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
     code:
-    - col(org_itemid)
-    - col(org_name)
+    - col(ORG_ITEMID)
+    - col(ORG_NAME)
     extension:
       available_time: cast(None, "datetime")
-      isolate_num: col(isolate_num)
+      isolate_num: col(ISOLATE_NUM)
   filters:
   - drop_na(time)
-  - drop_na(org_itemid) or drop_na(org_name)
+  - drop_na(ORG_ITEMID) or drop_na(ORG_NAME)
 - name: MICROBIOLOGY_SUSCEPTIBILITY
   columns:
-    time: first_not_null(charttime, chartdate_plus1, output=time)
+    time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
     code:
-    - col(ab_itemid)
-    - col(ab_name)
-    numeric_value: col(dilution_value)
-    text_value: col(interpretation)
+    - col(AB_ITEMID)
+    - col(AB_NAME)
+    numeric_value: col(DILUTION_VALUE)
+    text_value: col(INTERPRETATION)
     extension:
       available_time: cast(None, "datetime")
-      dilution_text: col(dilution_text)
-      dilution_comparison: col(dilution_comparison)
+      dilution_text: col(DILUTION_TEXT)
+      dilution_comparison: col(DILUTION_COMPARISON)
   filters:
   - drop_na(time)
-  - drop_na(interpretation)
+  - drop_na(INTERPRETATION)

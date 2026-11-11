@@ -1,11 +1,66 @@
 path: DATETIMEEVENTS.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: icustay_id
+  type: int64
+- name: itemid
+  type: int64
+- name: charttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: storetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cgid
+  type: int64
+- name: value
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: valueuom
+  type: string
+- name: warning
+  type: int64
+- name: error
+  type: int64
+- name: resultstatus
+  type: string
+- name: stopped
+  type: string
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(icustay_id, output=ICUSTAY_ID)
+- col(itemid, output=ITEMID)
+- col(charttime, output=CHARTTIME)
+- col(storetime, output=STORETIME)
+- col(cgid, output=CGID)
+- col(value, output=VALUE)
+- col(valueuom, output=VALUEUOM)
+- col(warning, output=WARNING)
+- col(error, output=ERROR)
+- col(resultstatus, output=RESULTSTATUS)
+- col(stopped, output=STOPPED)
 join:
 - path: D_ITEMS.csv
-  csv_header_case: lower
   columns:
   - name: itemid
     type: int64
   - name: label
     type: string
+  callbacks:
+  - col(itemid, output=ITEMID)
+  - col(label, output=LABEL)
   both_on:
-  - itemid
+  - ITEMID

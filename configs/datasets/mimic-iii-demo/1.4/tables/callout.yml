@@ -1,1 +1,93 @@
 path: CALLOUT.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: submit_wardid
+  type: int64
+- name: submit_careunit
+  type: string
+- name: curr_wardid
+  type: int64
+- name: curr_careunit
+  type: string
+- name: callout_wardid
+  type: int64
+- name: callout_service
+  type: string
+- name: request_tele
+  type: int64
+- name: request_resp
+  type: int64
+- name: request_cdiff
+  type: int64
+- name: request_mrsa
+  type: int64
+- name: request_vre
+  type: int64
+- name: callout_status
+  type: string
+- name: callout_outcome
+  type: string
+- name: discharge_wardid
+  type: int64
+- name: acknowledge_status
+  type: string
+- name: createtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: updatetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: acknowledgetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: outcometime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: firstreservationtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: currentreservationtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(submit_wardid, output=SUBMIT_WARDID)
+- col(submit_careunit, output=SUBMIT_CAREUNIT)
+- col(curr_wardid, output=CURR_WARDID)
+- col(curr_careunit, output=CURR_CAREUNIT)
+- col(callout_wardid, output=CALLOUT_WARDID)
+- col(callout_service, output=CALLOUT_SERVICE)
+- col(request_tele, output=REQUEST_TELE)
+- col(request_resp, output=REQUEST_RESP)
+- col(request_cdiff, output=REQUEST_CDIFF)
+- col(request_mrsa, output=REQUEST_MRSA)
+- col(request_vre, output=REQUEST_VRE)
+- col(callout_status, output=CALLOUT_STATUS)
+- col(callout_outcome, output=CALLOUT_OUTCOME)
+- col(discharge_wardid, output=DISCHARGE_WARDID)
+- col(acknowledge_status, output=ACKNOWLEDGE_STATUS)
+- col(createtime, output=CREATETIME)
+- col(updatetime, output=UPDATETIME)
+- col(acknowledgetime, output=ACKNOWLEDGETIME)
+- col(outcometime, output=OUTCOMETIME)
+- col(firstreservationtime, output=FIRSTRESERVATIONTIME)
+- col(currentreservationtime, output=CURRENTRESERVATIONTIME)

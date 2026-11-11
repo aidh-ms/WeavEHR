@@ -1,11 +1,87 @@
 path: INPUTEVENTS_CV.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: icustay_id
+  type: int64
+- name: charttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: itemid
+  type: int64
+- name: amount
+  type: float32
+- name: amountuom
+  type: string
+- name: rate
+  type: float32
+- name: rateuom
+  type: string
+- name: storetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cgid
+  type: int64
+- name: orderid
+  type: int64
+- name: linkorderid
+  type: int64
+- name: stopped
+  type: string
+- name: newbottle
+  type: int64
+- name: originalamount
+  type: float32
+- name: originalamountuom
+  type: string
+- name: originalroute
+  type: string
+- name: originalrate
+  type: float32
+- name: originalrateuom
+  type: string
+- name: originalsite
+  type: string
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(icustay_id, output=ICUSTAY_ID)
+- col(charttime, output=CHARTTIME)
+- col(itemid, output=ITEMID)
+- col(amount, output=AMOUNT)
+- col(amountuom, output=AMOUNTUOM)
+- col(rate, output=RATE)
+- col(rateuom, output=RATEUOM)
+- col(storetime, output=STORETIME)
+- col(cgid, output=CGID)
+- col(orderid, output=ORDERID)
+- col(linkorderid, output=LINKORDERID)
+- col(stopped, output=STOPPED)
+- col(newbottle, output=NEWBOTTLE)
+- col(originalamount, output=ORIGINALAMOUNT)
+- col(originalamountuom, output=ORIGINALAMOUNTUOM)
+- col(originalroute, output=ORIGINALROUTE)
+- col(originalrate, output=ORIGINALRATE)
+- col(originalrateuom, output=ORIGINALRATEUOM)
+- col(originalsite, output=ORIGINALSITE)
 join:
 - path: D_ITEMS.csv
-  csv_header_case: lower
   columns:
   - name: itemid
     type: int64
   - name: label
     type: string
+  callbacks:
+  - col(itemid, output=ITEMID)
+  - col(label, output=LABEL)
   both_on:
-  - itemid
+  - ITEMID

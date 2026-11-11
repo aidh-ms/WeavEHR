@@ -12,8 +12,9 @@ The [public demo](../mimic-iii-demo/README.md) and
 
 Point the extraction step at the directory containing `ADMISSIONS.csv.gz`,
 `CHARTEVENTS.csv.gz` and the other native files. Lookup tables are joined
-directly. `csv_header_case: lower` normalises full-release uppercase headers
-before column types and expressions are applied, including on join tables.
+directly. Columns are declared and referenced by their native uppercase
+headers, including on join tables. The demo, whose headers are lowercase,
+declares lowercase columns and aliases them to these names (see its README).
 
 ```yaml
 name: extraction

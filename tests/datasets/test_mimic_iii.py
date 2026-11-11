@@ -3,6 +3,7 @@
 import gzip
 import random
 from datetime import datetime, timedelta
+from functools import cache
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -11,12 +12,13 @@ import polars as pl
 import pytest
 import yaml
 
+from weavehr.config.registry import load_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.concept.transformer.mimic import MimicInfusionTransformer
-from weavehr.steps.extraction.config.table import TableConfig
+from weavehr.steps.extraction.config.table import JoinTableConfig, TableConfig
 from weavehr.steps.extraction.step import ExtractionStep
 
 CONFIGS = Path(__file__).parents[2] / "configs"
@@ -107,25 +109,78 @@ def test_gcs_intubation_correction(item: int, text: str | None, value: float | N
     assert mapped("gcs_unable", "chartevents", item, value, text)["numeric_value"].to_list() == expected
 
 
-@pytest.mark.parametrize("uppercase", [False, True])
-def test_header_case_is_normalised_before_csv_types(tmp_path: Path, uppercase: bool) -> None:
-    name = "creatinine.csv.gz"
-    header = "subject_id,charttime,itemid,value,valuenum,valueuom\n"
-    data = (header.upper() if uppercase else header) + "10,2140-01-01 00:00:00,50912,1.2,1.2,mg/dL\n"
-    (tmp_path / name).write_bytes(gzip.compress(data.encode()))
-    config = TableConfig(
-        name="lab",
-        version="1.4",
-        dataset="mimic-iii",
-        path=name,
-        csv_header_case="lower",
-        columns=[{"name": "subject_id", "type": "int64"}, {"name": "valuenum", "type": "float32"}],
-        events=[],
+@pytest.mark.parametrize(
+    ("dataset", "uppercase"),
+    [("mimic-iii", True), ("mimic-iii-demo", False), ("mimic-iii-carevue", True)],
+)
+def test_yaml_header_overrides_apply_types_and_lookup_joins(tmp_path: Path, dataset: str, uppercase: bool) -> None:
+    config = next(
+        table
+        for table in load_configs(CONFIGS / "datasets" / dataset / "1.4/tables", TableConfig)
+        if table.name == "labevents"
     )
-    result = ExtractionStep._scan_table(config, tmp_path).collect()
-    assert result.schema == {"subject_id": pl.Int64, "valuenum": pl.Float32}
+    header = "row_id,subject_id,hadm_id,itemid,charttime,value,valuenum,valueuom,flag\n"
+    lookup_header = "itemid,label\n"
+    if uppercase:
+        header = header.upper()
+        lookup_header = lookup_header.upper()
+    sources = {
+        config.path: header + "1,10,20,50912,2140-01-01 00:00:00,1.2,1.2,mg/dL,\n",
+        config.join[0].path: lookup_header + "50912,Creatinine\n",
+    }
+    for name, data in sources.items():
+        encoded = data.encode()
+        (tmp_path / name).write_bytes(gzip.compress(encoded) if name.endswith(".gz") else encoded)
+
+    scanned = ExtractionStep._scan_table(config, tmp_path).collect()
+    assert scanned.schema["SUBJECT_ID" if uppercase else "subject_id"] == pl.Int64
+    assert scanned.schema["VALUENUM" if uppercase else "valuenum"] == pl.Float32
+    lf = ExtractionStep.build_table_frame(config, lambda table: ExtractionStep._scan_table(table, tmp_path))
+    result = ExtractionStep.build_event_frame(lf, config.events[0], True).collect()
     assert result["subject_id"].to_list() == [10]
-    assert result["valuenum"].to_list() == pytest.approx([1.2])
+    assert result["time"].to_list() == [START]
+    assert result["numeric_value"].to_list() == pytest.approx([1.2])
+    assert result["text_value"].to_list() == ["1.2"]
+    assert result["code"].to_list() == ["LAB//50912//Creatinine//mg/dL"]
+
+
+@cache
+def tables(dataset: str) -> dict[str, TableConfig]:
+    return {table.name: table for table in load_configs(CONFIGS / "datasets" / dataset / "1.4/tables", TableConfig)}
+
+
+def header_aliases(table: TableConfig | JoinTableConfig) -> list[str]:
+    """Demo callbacks that give its lowercase headers the full release's uppercase names."""
+    return [f"col({column.name}, output={column.name.upper()})" for column in table.columns]
+
+
+def without_header_case(table: TableConfig | JoinTableConfig, demo: bool) -> dict:
+    """Dump a table or join without the differences that only come from the header case."""
+    fields = set(type(table).model_fields) - {"dataset", "type", "join"}
+    data = table.model_dump(include=fields)
+    data["path"] = str(data["path"]).removesuffix(".gz")
+    data["columns"] = [{**column, "name": column["name"].lower()} for column in data["columns"]]
+    if demo:
+        aliases = header_aliases(table)
+        assert data["callbacks"][: len(aliases)] == aliases, f"{table.path}: header aliases must come first"
+        data["callbacks"] = data["callbacks"][len(aliases) :]
+    if isinstance(table, TableConfig):
+        data["join"] = [without_header_case(join, demo) for join in table.join]
+    return data
+
+
+@pytest.mark.parametrize("name", sorted(path.stem for path in (DATASET / "tables").glob("*.yml")))
+def test_demo_tables_match_full_release_apart_from_header_case(name: str) -> None:
+    full, demo = tables("mimic-iii")[name], tables("mimic-iii-demo")[name]
+    for full_part, demo_part in zip([full, *full.join], [demo, *demo.join], strict=True):
+        assert all(column.name.isupper() for column in full_part.columns)
+        assert all(column.name.islower() for column in demo_part.columns)
+        assert not any(callback in full_part.callbacks for callback in header_aliases(demo_part))
+    assert without_header_case(demo, demo=True) == without_header_case(full, demo=False)
+
+
+def test_demo_covers_every_full_release_table() -> None:
+    assert tables("mimic-iii-demo").keys() == tables("mimic-iii").keys()
 
 
 def infusion_transformer(mode: str = "rate", unit: str = "mcg/kg/min") -> MimicInfusionTransformer:
@@ -438,12 +493,11 @@ def test_ventilation_start_has_one_rule_per_source_row(item: int, text: str, exp
 
 def extract_rows(tmp_path: Path, table: str, rows: list[dict]) -> dict[str, pl.DataFrame]:
     config = TableConfig.load(DATASET / "tables" / f"{table}.yml")
-    frame = pl.DataFrame(rows)
+    frame = pl.DataFrame(rows).rename({column: column.upper() for column in rows[0]})
     # Write the actual full-release uppercase CSV schema, including empty fields.
     frame = frame.with_columns(
         [pl.lit(None).cast(c.dtype).alias(c.name) for c in config.columns if c.name not in frame.columns]
     ).select([c.name for c in config.columns])
-    frame.columns = [c.upper() for c in frame.columns]
     (tmp_path / config.path).write_bytes(gzip.compress(frame.write_csv().encode()))
     lf = ExtractionStep.build_table_frame(config, lambda t: ExtractionStep._scan_table(t, tmp_path))
     return {e.name: ExtractionStep.build_event_frame(lf, e, True).collect() for e in config.events}

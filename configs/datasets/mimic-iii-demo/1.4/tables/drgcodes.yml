@@ -1,7 +1,32 @@
 path: DRGCODES.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: drg_type
+  type: string
+- name: drg_code
+  type: string
+- name: description
+  type: string
+- name: drg_severity
+  type: int64
+- name: drg_mortality
+  type: int64
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(drg_type, output=DRG_TYPE)
+- col(drg_code, output=DRG_CODE)
+- col(description, output=DESCRIPTION)
+- col(drg_severity, output=DRG_SEVERITY)
+- col(drg_mortality, output=DRG_MORTALITY)
 join:
 - path: ADMISSIONS.csv
-  csv_header_case: lower
   columns:
   - name: hadm_id
     type: int64
@@ -10,5 +35,8 @@ join:
     params:
       format: '%Y-%m-%d %H:%M:%S'
       strict: false
+  callbacks:
+  - col(hadm_id, output=HADM_ID)
+  - col(dischtime, output=DISCHTIME)
   both_on:
-  - hadm_id
+  - HADM_ID

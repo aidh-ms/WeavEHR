@@ -377,13 +377,6 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         else:
             lf = pl.scan_csv(
                 source,
-                with_column_names=(
-                    (lambda names: [name.lower() for name in names])
-                    if table.csv_header_case == "lower"
-                    else (lambda names: [name.upper() for name in names])
-                    if table.csv_header_case == "upper"
-                    else None
-                ),
                 schema_overrides=table.dtypes,
                 infer_schema=False,
                 low_memory=True,

@@ -1,51 +1,49 @@
 path: DRGCODES.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: drg_type
+- name: DRG_TYPE
   type: string
-- name: drg_code
+- name: DRG_CODE
   type: string
-- name: description
+- name: DESCRIPTION
   type: string
-- name: drg_severity
+- name: DRG_SEVERITY
   type: int64
-- name: drg_mortality
+- name: DRG_MORTALITY
   type: int64
 join:
 - path: ADMISSIONS.csv.gz
-  csv_header_case: lower
   columns:
-  - name: hadm_id
+  - name: HADM_ID
     type: int64
-  - name: dischtime
+  - name: DISCHTIME
     type: datetime
     params:
       format: '%Y-%m-%d %H:%M:%S'
       strict: false
   both_on:
-  - hadm_id
+  - HADM_ID
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
 events:
 - name: DRG
   columns:
-    time: col(dischtime)
+    time: col(DISCHTIME)
     code:
-    - col(drg_type)
-    - col(drg_code)
-    text_value: col(description)
+    - col(DRG_TYPE)
+    - col(DRG_CODE)
+    text_value: col(DESCRIPTION)
     extension:
-      available_time: col(dischtime)
-      drg_severity: col(drg_severity)
-      drg_mortality: col(drg_mortality)
+      available_time: col(DISCHTIME)
+      drg_severity: col(DRG_SEVERITY)
+      drg_mortality: col(DRG_MORTALITY)
   filters:
   - drop_na(time)

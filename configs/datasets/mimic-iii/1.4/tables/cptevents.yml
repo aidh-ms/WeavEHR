@@ -1,60 +1,58 @@
 path: CPTEVENTS.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: costcenter
+- name: COSTCENTER
   type: string
-- name: chartdate
+- name: CHARTDATE
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: cpt_cd
+- name: CPT_CD
   type: string
-- name: cpt_number
+- name: CPT_NUMBER
   type: int64
-- name: cpt_suffix
+- name: CPT_SUFFIX
   type: string
-- name: ticket_id_seq
+- name: TICKET_ID_SEQ
   type: int64
-- name: sectionheader
+- name: SECTIONHEADER
   type: string
-- name: subsectionheader
+- name: SUBSECTIONHEADER
   type: string
-- name: description
+- name: DESCRIPTION
   type: string
 join:
 - path: ADMISSIONS.csv.gz
-  csv_header_case: lower
   columns:
-  - name: hadm_id
+  - name: HADM_ID
     type: int64
-  - name: dischtime
+  - name: DISCHTIME
     type: datetime
     params:
       format: '%Y-%m-%d %H:%M:%S'
       strict: false
   both_on:
-  - hadm_id
+  - HADM_ID
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
 events:
 - name: CPT
   columns:
-    time: first_not_null(chartdate, dischtime, output=time)
+    time: first_not_null(CHARTDATE, DISCHTIME, output=time)
     code:
     - const("CPT")
-    - col(cpt_cd)
-    text_value: col(description)
+    - col(CPT_CD)
+    text_value: col(DESCRIPTION)
     extension:
-      available_time: first_not_null(chartdate, dischtime, output=time)
+      available_time: first_not_null(CHARTDATE, DISCHTIME, output=time)
   filters:
   - drop_na(time)

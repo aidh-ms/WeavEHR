@@ -1,7 +1,80 @@
 path: ADMISSIONS.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: admittime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dischtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: deathtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: admission_type
+  type: string
+- name: admission_location
+  type: string
+- name: discharge_location
+  type: string
+- name: insurance
+  type: string
+- name: language
+  type: string
+- name: religion
+  type: string
+- name: marital_status
+  type: string
+- name: ethnicity
+  type: string
+- name: edregtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: edouttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: diagnosis
+  type: string
+- name: hospital_expire_flag
+  type: int64
+- name: has_chartevents_data
+  type: int64
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(admittime, output=ADMITTIME)
+- col(dischtime, output=DISCHTIME)
+- col(deathtime, output=DEATHTIME)
+- col(admission_type, output=ADMISSION_TYPE)
+- col(admission_location, output=ADMISSION_LOCATION)
+- col(discharge_location, output=DISCHARGE_LOCATION)
+- col(insurance, output=INSURANCE)
+- col(language, output=LANGUAGE)
+- col(religion, output=RELIGION)
+- col(marital_status, output=MARITAL_STATUS)
+- col(ethnicity, output=ETHNICITY)
+- col(edregtime, output=EDREGTIME)
+- col(edouttime, output=EDOUTTIME)
+- col(diagnosis, output=DIAGNOSIS)
+- col(hospital_expire_flag, output=HOSPITAL_EXPIRE_FLAG)
+- col(has_chartevents_data, output=HAS_CHARTEVENTS_DATA)
 join:
 - path: PATIENTS.csv
-  csv_header_case: lower
   columns:
   - name: subject_id
     type: int64
@@ -10,5 +83,8 @@ join:
     params:
       format: '%Y-%m-%d %H:%M:%S'
       strict: false
+  callbacks:
+  - col(subject_id, output=SUBJECT_ID)
+  - col(dob, output=DOB)
   both_on:
-  - subject_id
+  - SUBJECT_ID

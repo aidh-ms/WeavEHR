@@ -1,53 +1,52 @@
 path: TRANSFERS.csv.gz
-csv_header_case: lower
 columns:
-- name: row_id
+- name: ROW_ID
   type: int64
-- name: subject_id
+- name: SUBJECT_ID
   type: int64
-- name: hadm_id
+- name: HADM_ID
   type: int64
-- name: icustay_id
+- name: ICUSTAY_ID
   type: int64
-- name: dbsource
+- name: DBSOURCE
   type: string
-- name: eventtype
+- name: EVENTTYPE
   type: string
-- name: prev_careunit
+- name: PREV_CAREUNIT
   type: string
-- name: curr_careunit
+- name: CURR_CAREUNIT
   type: string
-- name: prev_wardid
+- name: PREV_WARDID
   type: int64
-- name: curr_wardid
+- name: CURR_WARDID
   type: int64
-- name: intime
+- name: INTIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: outtime
+- name: OUTTIME
   type: datetime
   params:
     format: '%Y-%m-%d %H:%M:%S'
     strict: false
-- name: los
+- name: LOS
   type: float32
 event_defaults:
-  subject_id: col(subject_id)
+  subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(hadm_id)
-    stay_id: col(icustay_id)
-    row_id: col(row_id)
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    row_id: col(ROW_ID)
 events:
 - name: TRANSFER_TO
   columns:
-    time: col(intime)
+    time: col(INTIME)
     code:
-    - col(eventtype)
-    - col(curr_careunit)
+    - col(EVENTTYPE)
+    - col(CURR_CAREUNIT)
     extension:
-      available_time: col(intime)
-      location_end: col(outtime)
+      available_time: col(INTIME)
+      location_end: col(OUTTIME)
   filters:
   - drop_na(time)

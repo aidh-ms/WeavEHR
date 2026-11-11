@@ -1,16 +1,34 @@
 path: DIAGNOSES_ICD.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: seq_num
+  type: int64
+- name: icd9_code
+  type: string
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(seq_num, output=SEQ_NUM)
+- col(icd9_code, output=ICD9_CODE)
 join:
 - path: D_ICD_DIAGNOSES.csv
-  csv_header_case: lower
   columns:
   - name: icd9_code
     type: string
   - name: long_title
     type: string
+  callbacks:
+  - col(icd9_code, output=ICD9_CODE)
+  - col(long_title, output=LONG_TITLE)
   both_on:
-  - icd9_code
+  - ICD9_CODE
 - path: ADMISSIONS.csv
-  csv_header_case: lower
   columns:
   - name: hadm_id
     type: int64
@@ -19,5 +37,8 @@ join:
     params:
       format: '%Y-%m-%d %H:%M:%S'
       strict: false
+  callbacks:
+  - col(hadm_id, output=HADM_ID)
+  - col(dischtime, output=DISCHTIME)
   both_on:
-  - hadm_id
+  - HADM_ID
