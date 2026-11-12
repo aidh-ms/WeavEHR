@@ -2,14 +2,16 @@
 
 A *complex* concept is one that cannot be expressed as a mapping over a single
 source table: it is computed from the output of other concepts, which the
-pipeline has already harmonised and written as per-dataset parquet. This module
+pipeline has already harmonised and written as per-dataset parquet, and from any
+extracted events its mapping selects under ``events``. This module
 factors out everything such a concept shares regardless of what it computes —
 resolving and scanning its dependencies, evaluating the subclass's
 ``transform``, attaching the MEDS columns and any configured extension columns,
 and sinking the result to the concept's output directory.
 
 Subclasses implement :meth:`BaseConceptTransformer.transform` and nothing else.
-It receives dependency concepts keyed by (unversioned) name and returns a
+It receives dependency concepts keyed by (unversioned) name, and event inputs by
+the name the mapping gives them, and returns a
 LazyFrame of ``subject_id`` and ``time`` plus ``numeric_value`` and/or
 ``text_value``; both are filled in as null where the subclass does not produce
 them. Keeping ``transform`` pure and I/O-free is deliberate — it makes the
@@ -26,6 +28,7 @@ import polars as pl
 from weavehr.callbacks.interpreter import parse_expr
 from weavehr.logging import get_logger
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig, ConceptTransformerProtocol
+from weavehr.steps.concept.config.simple import MappingPatternConfig
 
 if TYPE_CHECKING:
     from weavehr.steps.concept.config.concept import ConceptConfig
@@ -88,7 +91,11 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
         ever address one of them, and picking one silently would make the
         output depend on the order the mapping happens to store its concepts
         in. They are resolved in identifier order so that a run is reproducible
-        whatever that order is. The transformed frame is completed with the
+        whatever that order is. The mapping's ``events`` are added under their
+        names, which the mapping's validation keeps distinct from every declared
+        dependency, whether or not it resolves; a missing event file follows the
+        same :attr:`strict_dependencies` rule as a missing concept.
+        The transformed frame is completed with the
         MEDS columns (``code``, ``numeric_value``, ``text_value``) and any
         configured extension columns, then sunk to
         ``<concept output dir>/<dataset>/<dataset version>.parquet``.
@@ -120,6 +127,12 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                     f"concept can be declared."
                 )
             dependencies[name] = lf
+
+        # Event names never equal a declared dependency's name: the mapping is validated against all of them.
+        for name, pattern in sorted(self._complex_config.events.items()):
+            events = self._read_events(name, pattern)
+            if events is not None:
+                dependencies[name] = events
 
         if not dependencies:
             logger.warning(
@@ -200,6 +213,45 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
 
         return concept.name, pl.scan_parquet(concept_path)
 
+    def _read_events(self, name: str, pattern: MappingPatternConfig) -> pl.LazyFrame | None:
+        """Read one of the mapping's ``events`` inputs from the extraction output.
+
+        Args:
+            name: The name the transform receives the events under.
+            pattern: The pattern selecting them, as for a simple mapping.
+
+        Returns:
+            The matching extracted events (see :meth:`ConceptStep.read_events`), or
+            ``None`` when no selected event file was extracted and
+            :attr:`strict_dependencies` is False.
+
+        Raises:
+            FileNotFoundError: No selected event file was extracted and
+                :attr:`strict_dependencies` is True.
+        """
+        dataset, version = self._complex_config.dataset, self._complex_config.version
+        events = self._step.read_events(pattern, dataset, version)
+        if events is None:
+            event = f"/{pattern.event}" if pattern.event else ""
+            if self.strict_dependencies:
+                logger.error(
+                    "Concept %s: no events %s%s were extracted for input %r.",
+                    self._concept.identifier,
+                    pattern.table,
+                    event,
+                    name,
+                )
+                raise FileNotFoundError(f"No events {pattern.table}{event} were extracted for dataset {dataset}.")
+            logger.warning(
+                "Concept %s: no events %s%s were extracted for input %r in dataset %s; treating as never observed.",
+                self._concept.identifier,
+                pattern.table,
+                event,
+                name,
+                dataset,
+            )
+        return events
+
     def _output_file(self, concept: "ConceptConfig") -> Path:
         """Return the parquet file holding ``concept``'s output for this mapping's dataset version."""
         return self._step.concept_output_file(concept, self._complex_config.dataset, self._complex_config.version)
@@ -218,8 +270,11 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                 MEDS-shaped lazy frame (``subject_id``, ``time``, ``code``,
                 ``numeric_value``, ``text_value``) plus any preserved extension
                 columns, available before the subclass projects or aggregates
-                its inputs. Under
-                :attr:`strict_dependencies` = False a declared dependency may
+                its inputs. The mapping's ``events`` inputs are included under
+                their names, as the matching extracted rows: the same core
+                columns, all extracted extension columns, and ``dataset``,
+                ``version``, ``table`` and ``event``. Under
+                :attr:`strict_dependencies` = False a declared input may
                 be absent, which the implementation should treat as never
                 measured rather than as an error.
 

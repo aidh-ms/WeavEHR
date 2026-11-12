@@ -22,9 +22,10 @@ import yaml
 from weavehr.callbacks.interpreter import ExprInterpreter
 from weavehr.callbacks.proto import UnknownColumnError
 from weavehr.config.inheritance import resolve_effective_config, resolve_effective_configs
+from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
-from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
+from weavehr.steps.concept.config.simple import MappingPatternConfig, SimpleDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.extraction.config.table import BaseTableConfig, TableConfig
 from weavehr.steps.extraction.step import ExtractionStep
@@ -110,6 +111,31 @@ def concept_output_schema(concept_reference: str) -> pl.Schema:
     (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")
     extension_columns = yaml.safe_load(concept_file.read_text()).get("extension_columns") or {}
     return pl.Schema(MEDS_SCHEMA | {column: pl.String() for column in extension_columns})
+
+
+def matching_event_schemas(
+    dataset: str, version: str, pattern: MappingPatternConfig, source: str
+) -> dict[tuple[str, str], pl.Schema]:
+    """Schemas of the extracted (table, event) files a mapping pattern selects; fails if there are none."""
+    events = extracted_event_schemas(dataset, version)
+    matching = {
+        key: schema for key, schema in events.items() if key[0] == pattern.table and pattern.event in (None, key[1])
+    }
+    assert matching, f"{source}: no extracted event matches table={pattern.table!r} event={pattern.event!r}"
+    return matching
+
+
+def empty_event_input(dataset: str, version: str, pattern: MappingPatternConfig, source: str) -> pl.LazyFrame:
+    """The (empty) frame a derived table or complex mapping reading ``pattern`` receives."""
+    return pl.concat(
+        [
+            ConceptStep.build_event_input_frame(
+                pl.LazyFrame(schema=schema), pattern, dataset=dataset, version=version, event_name=event_name
+            )
+            for (_, event_name), schema in matching_event_schemas(dataset, version, pattern, source).items()
+        ],
+        how="diagonal_relaxed",
+    )
 
 
 def assert_resolves(build: Any, source: str) -> None:
@@ -219,26 +245,18 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
     """Every column reference of a concept and its mappings must exist in the frame it is applied to.
 
     Simple mappings are applied to the extracted events they match, derived mappings to
-    the output of the concepts they depend on. Complex mappings run Python transformers
-    and are not covered.
+    the output of the concepts they depend on or the extracted events their tables read.
+    Complex mappings run Python transformers; only the events they read are checked.
     """
     concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS)
 
     for dataset_concept in concept.dataset_concepts:
         source = f"{relative_id(concept_file)} [{dataset_concept.dataset} {dataset_concept.version}]"
+        dataset, version = dataset_concept.dataset, dataset_concept.version
 
         if isinstance(dataset_concept, SimpleDatasetConceptConfig):
-            events = extracted_event_schemas(dataset_concept.dataset, dataset_concept.version)
             for mapping in dataset_concept.mappings:
-                matching = {
-                    key: schema
-                    for key, schema in events.items()
-                    if key[0] == mapping.pattern.table and mapping.pattern.event in (None, key[1])
-                }
-                assert matching, (
-                    f"{source}: no extracted event matches table={mapping.pattern.table!r} "
-                    f"event={mapping.pattern.event!r}"
-                )
+                matching = matching_event_schemas(dataset, version, mapping.pattern, source)
                 for (table, event_name), schema in matching.items():
                     assert_resolves(
                         lambda: ConceptStep.build_mapping_frame(
@@ -256,9 +274,18 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
         if isinstance(dataset_concept, DerivedDatasetConceptConfig):
 
             def scan(table: BaseConceptTable) -> pl.LazyFrame:
+                if table.pattern is not None:
+                    return empty_event_input(dataset, version, table.pattern, source)
+                assert table.concept is not None
                 return pl.LazyFrame(schema=concept_output_schema(table.concept))
 
             assert_resolves(lambda: ConceptStep.build_derived_frame(concept, dataset_concept, scan), source)
+
+        if isinstance(dataset_concept, ComplexDatasetConceptConfig):
+            for name, pattern in dataset_concept.events.items():
+                assert_resolves(
+                    lambda: empty_event_input(dataset, version, pattern, source), f"{source} events {name!r}"
+                )
 
 
 @pytest.mark.parametrize("concept_file", CONCEPT_FILES, ids=relative_id)
