@@ -1,13 +1,24 @@
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from weavehr.config.base import BaseDatasetConfig
 from weavehr.config.join import JoinConfig, JoinHow
+from weavehr.steps.concept.config.simple import MappingPatternConfig
 
 
 class BaseConceptTable(BaseModel):
-    concept: str = Field(..., description="The identifier of the concept this table represents.")
+    """An input table of a derived concept: another concept's output or extracted events.
+
+    Exactly one of ``concept`` and ``pattern`` is set. A ``pattern`` selects
+    extracted events as a simple mapping does, so a derived concept can combine
+    source events without wrapping each one in a concept of its own.
+    """
+
+    concept: str | None = Field(None, description="The identifier of the concept this table reads.")
+    pattern: MappingPatternConfig | None = Field(
+        None, description="Extracted events this table reads instead of a concept, matched like a simple mapping."
+    )
     pre_callbacks: list[str] = Field(
         default_factory=list, description="The list of callback configurations for the table."
     )
@@ -18,6 +29,20 @@ class BaseConceptTable(BaseModel):
     columns: list[str] = Field(
         default_factory=list, description="The list of column names to include in the concept table."
     )
+
+    @model_validator(mode="after")
+    def _reads_one_source(self) -> Self:
+        if (self.concept is None) == (self.pattern is None):
+            raise ValueError("a concept table reads exactly one of `concept` or `pattern` (extracted events)")
+        return self
+
+    @property
+    def source(self) -> str:
+        """Human-readable description of what the table reads, for logs and errors."""
+        if self.pattern is None:
+            return f"concept {self.concept}"
+        event = f"/{self.pattern.event}" if self.pattern.event else ""
+        return f"events {self.pattern.table}{event} matching {self.pattern.code!r}"
 
 
 class JoinConceptTable(BaseConceptTable, JoinConfig):
@@ -82,12 +107,13 @@ class DerivedDatasetConceptConfig(BaseDatasetConfig):
     def dependencies(self) -> set[str]:
         """Get the set of concept dependencies for this derived concept.
 
+        Tables reading extracted events add no dependency: extraction finishes
+        before any concept runs.
+
         Returns:
             A set of concept identifiers that this derived concept depends on.
         """
         from weavehr.steps.concept.config.concept import ConceptConfig  # Avoid circular import
 
-        deps = {ConceptConfig.ensure_prefix(join_table.concept) for join_table in self.join} | {
-            ConceptConfig.ensure_prefix(self.table.concept)
-        }
-        return deps
+        tables = [self.table, *self.join]
+        return {ConceptConfig.ensure_prefix(table.concept) for table in tables if table.concept is not None}

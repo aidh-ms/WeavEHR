@@ -25,7 +25,7 @@ from weavehr.steps.concept.config.concept import (
     SimpleDatasetConceptConfig,
 )
 from weavehr.steps.concept.config.derived import BaseConceptTable
-from weavehr.steps.concept.config.simple import MappingConfig
+from weavehr.steps.concept.config.simple import MappingConfig, MappingPatternConfig
 from weavehr.steps.concept.config.step import ConceptStepConfig
 from weavehr.steps.concept.registry import concept_config_registry
 from weavehr.storage.project import WeavEHRProject
@@ -212,21 +212,118 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         return lf
 
-    def _matching_codes_for_patterns(
-        self,
-        event_name: str,
-        patterns: list[str],
-    ) -> list[str]:
+    @staticmethod
+    def _code_matches(event_name: str, regex: str) -> pl.Expr:
+        """Whether ``regex`` is found in the code, with or without the event name in it.
+
+        Patterns need not repeat the event name that extraction writes into the
+        code, so the regex is also searched in the code with that name removed.
+        """
         code = pl.col("code").cast(pl.String)
         code_without_event_name = (
             code.str.replace(f"//{event_name}//", "//", literal=True)
             .str.strip_prefix(f"{event_name}//")
             .str.strip_suffix(f"//{event_name}")
         )
+        return code.str.contains(regex) | code_without_event_name.str.contains(regex)
 
+    @classmethod
+    def match_pattern(cls, lf: pl.LazyFrame, pattern: MappingPatternConfig, event_name: str) -> pl.LazyFrame:
+        """Keep the rows of one extracted event file that a mapping pattern selects.
+
+        Args:
+            lf: Rows of the extracted event file
+            pattern: The pattern; its ``code`` and ``extensions`` regexes select rows
+            event_name: Name of the event file, which may be part of the codes
+
+        Returns:
+            The matching rows, with all extracted columns
+        """
+        lf = lf.filter(cls._code_matches(event_name, pattern.code))
+        for col_name, regex in pattern.extensions.items():
+            lf = lf.filter(pl.col(col_name).str.contains(regex))
+        return lf
+
+    def event_paths(self, dataset: str, version: str, table: str, event: str | None) -> list[Path]:
+        """Return the extracted event files that a pattern's ``table`` and ``event`` select.
+
+        Without ``event``, every event file extracted for the table is selected.
+        A named event's path is returned even if it was not extracted.
+        """
+        extraction_dataset = self.extraction_dataset
+        if extraction_dataset is None:
+            return []
+        table_path = extraction_dataset.data_path / dataset / version / table
+        if event is None:
+            return sorted(table_path.glob("*.parquet"))
+        return [table_path / f"{event}.parquet"]
+
+    @classmethod
+    def build_event_input_frame(
+        cls,
+        lf: pl.LazyFrame,
+        pattern: MappingPatternConfig,
+        *,
+        dataset: str,
+        version: str,
+        event_name: str,
+    ) -> pl.LazyFrame:
+        """Select a pattern's rows of one extracted event file as input to a derived or complex concept.
+
+        Args:
+            lf: Rows of the extracted event file
+            pattern: The pattern selecting the rows
+            dataset: Dataset name, exposed as the ``dataset`` column
+            version: Dataset version, exposed as the ``version`` column
+            event_name: Name of the event file, exposed as the ``event`` column
+
+        Returns:
+            The matching rows with all extracted columns, plus ``dataset``,
+            ``version``, ``table`` and ``event`` as simple mappings see them
+        """
+        return cls.match_pattern(lf, pattern, event_name).with_columns(
+            dataset=pl.lit(dataset),
+            version=pl.lit(version),
+            table=pl.lit(pattern.table),
+            event=pl.lit(event_name),
+        )
+
+    def read_events(self, pattern: MappingPatternConfig, dataset: str, version: str) -> pl.LazyFrame | None:
+        """Read the extracted events a pattern selects, as input to a derived or complex concept.
+
+        Args:
+            pattern: The pattern selecting the events
+            dataset: Dataset name
+            version: Dataset version
+
+        Returns:
+            The matching rows of every selected event file (see
+            :meth:`build_event_input_frame`), or ``None`` when none of these files
+            was extracted. Matching no rows gives an empty frame, not ``None``.
+        """
+        paths = [path for path in self.event_paths(dataset, version, pattern.table, pattern.event) if path.exists()]
+        if not paths:
+            return None
+        logger.debug("Reading events matching %r from %s", pattern.code, paths)
+        return pl.concat(
+            [
+                self.build_event_input_frame(
+                    pl.scan_parquet(path), pattern, dataset=dataset, version=version, event_name=path.stem
+                )
+                for path in paths
+            ],
+            # Events of one table may type the same extension column differently.
+            how="diagonal_relaxed",
+        )
+
+    def _matching_codes_for_patterns(
+        self,
+        event_name: str,
+        patterns: list[str],
+    ) -> list[str]:
         expr = None
         for pattern in patterns:
-            current = code.str.contains(pattern) | code_without_event_name.str.contains(pattern)
+            current = self._code_matches(event_name, pattern)
             expr = current if expr is None else expr | current
 
         if expr is None:
@@ -253,15 +350,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 if mapping.pattern.extensions or mapping.filters:
                     continue
 
-                table = mapping.pattern.table
-                event = mapping.pattern.event
-
-                table_path = self.extraction_dataset.data_path / dataset / version / table
-
-                if event is None:
-                    mapping_paths = sorted(table_path.glob("*.parquet"))
-                else:
-                    mapping_paths = [table_path / f"{event}.parquet"]
+                mapping_paths = self.event_paths(dataset, version, mapping.pattern.table, mapping.pattern.event)
 
                 if data_path not in mapping_paths:
                     continue
@@ -309,15 +398,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 if mapping.pattern.extensions or mapping.filters:
                     continue
 
-                table = mapping.pattern.table
-                event = mapping.pattern.event
-
-                table_path = extraction_dataset.data_path / dataset / version / table
-
-                if event is None:
-                    data_paths = sorted(table_path.glob("*.parquet"))
-                else:
-                    data_paths = [table_path / f"{event}.parquet"]
+                data_paths = self.event_paths(dataset, version, mapping.pattern.table, mapping.pattern.event)
 
                 source_paths.update(data_path for data_path in data_paths if data_path.exists())
 
@@ -412,18 +493,13 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 )
                 return
 
-            table_path = extraction_dataset.data_path / dataset / version / table
-
-            if event is None:
-                data_paths = sorted(table_path.glob("*.parquet"))
-            else:
-                data_paths = [table_path / f"{event}.parquet"]
+            data_paths = self.event_paths(dataset, version, table, event)
 
             if not data_paths:
                 logger.warning(
                     "skipping mapping for concept %s: no event files found in %s",
                     concept.name,
-                    table_path,
+                    extraction_dataset.data_path / dataset / version / table,
                 )
                 continue
 
@@ -447,13 +523,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     concept.identifier,
                 )
 
-                code = pl.col("code").cast(pl.String)
-                code_without_event_name = (
-                    code.str.replace(f"//{event_name}//", "//", literal=True)
-                    .str.strip_prefix(f"{event_name}//")
-                    .str.strip_suffix(f"//{event_name}")
-                )
-
                 source_path: Path | list[Path] = data_path
 
                 if routed_sources and not mapping.pattern.extensions and not mapping.filters:
@@ -466,12 +535,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                             routed,
                         )
 
-                lf = pl.scan_parquet(source_path).filter(
-                    code.str.contains(mapping.pattern.code) | code_without_event_name.str.contains(mapping.pattern.code)
-                )
-
-                for col_name, pattern in mapping.pattern.extensions.items():
-                    lf = lf.filter(pl.col(col_name).str.contains(pattern))
+                lf = self.match_pattern(pl.scan_parquet(source_path), mapping.pattern, event_name)
 
                 lf = self.build_mapping_frame(
                     lf,
@@ -601,12 +665,13 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         dataset_concept: DerivedDatasetConceptConfig,
         scan: Callable[[BaseConceptTable], pl.LazyFrame],
     ) -> pl.LazyFrame:
-        """Join the dependency concepts of a derived concept and map them to its output columns.
+        """Join the input tables of a derived concept and map them to its output columns.
 
         Args:
             concept: The derived concept
             dataset_concept: The dataset-specific derived mapping
-            scan: Returns the output frame of a dependency concept. Separated from
+            scan: Returns the frame a table reads: a dependency concept's output or,
+                for a ``pattern`` table, the matching extracted events. Separated from
                 the processing so the pipeline can be checked on empty frames.
 
         Returns:
@@ -629,9 +694,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         for join_table in dataset_concept.join:
             logger.debug(
-                "Joining concept table %s with %s (how=%s)",
-                dataset_concept.table.concept,
-                join_table.concept,
+                "Joining %s with %s (how=%s)",
+                dataset_concept.table.source,
+                join_table.source,
                 join_table.how,
             )
             lf = lf.join(
@@ -682,6 +747,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         return lf
 
     def get_path_for_concept_table(self, table: BaseConceptTable, dataset: str, version: str) -> Path:
+        if table.concept is None:
+            raise ValueError(f"table reads {table.source}, not a concept")
         concept = self._registry.get(table.concept)
         if concept is None:
             raise FileNotFoundError(f"concept not found in registry ({table.concept})")
@@ -699,6 +766,12 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         )
 
         def _scan(table: BaseConceptTable) -> pl.LazyFrame:
+            if table.pattern is not None:
+                events = self.read_events(table.pattern, dataset_concept.dataset, dataset_concept.version)
+                if events is None:
+                    raise FileNotFoundError(f"{table.source}: no event file was extracted")
+                return events
+
             file_path = self.get_path_for_concept_table(table, dataset_concept.dataset, dataset_concept.version)
             if not file_path.exists():
                 raise FileNotFoundError(f"file not found ({file_path})")
@@ -712,7 +785,9 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         try:
             lf = self.build_derived_frame(concept, dataset_concept, _scan)
         except FileNotFoundError as e:
-            logger.warning("skipping table %s: %s", dataset_concept.table.concept, e)
+            logger.warning(
+                "skipping derived concept %s for dataset %s: %s", concept.identifier, dataset_concept.dataset, e
+            )
             return
 
         lf = self.apply_limits(concept, lf)
