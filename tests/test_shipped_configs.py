@@ -103,11 +103,19 @@ def extracted_event_schemas(dataset: str, version: str) -> dict[tuple[str, str],
 _EVENT_SCHEMA_CACHE: dict[tuple[str, str], dict[tuple[str, str], pl.Schema]] = {}
 
 
-def concept_output_schema(concept_reference: str) -> pl.Schema:
-    """Output schema of a concept referenced as ``<name>.<version>`` by a derived mapping."""
+def concept_output_schema(concept_reference: str, dataset: str, version: str) -> pl.Schema:
+    """Output schema of a dependency concept for a specific dataset version."""
     name = concept_reference.split(".", 1)[0]
     (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")
+
     extension_columns = yaml.safe_load(concept_file.read_text()).get("extension_columns") or {}
+
+    concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS)
+    dataset_concept = concept.get_dataset_concept(dataset, version)
+
+    if isinstance(dataset_concept, SimpleDatasetConceptConfig):
+        extension_columns = extension_columns | dataset_concept.extension_columns
+
     return pl.Schema(MEDS_SCHEMA | {column: pl.String() for column in extension_columns})
 
 
@@ -255,7 +263,13 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
         if isinstance(dataset_concept, DerivedDatasetConceptConfig):
 
             def scan(table: BaseConceptTable) -> pl.LazyFrame:
-                return pl.LazyFrame(schema=concept_output_schema(table.concept))
+                return pl.LazyFrame(
+                    schema=concept_output_schema(
+                        table.concept,
+                        dataset_concept.dataset,
+                        dataset_concept.version,
+                    )
+                )
 
             assert_resolves(lambda: ConceptStep.build_derived_frame(concept, dataset_concept, scan), source)
 
@@ -406,14 +420,18 @@ def test_aumc_lymphocyte_ratio_sources_and_derived_mapping() -> None:
 
     assert final["type"] == "derived"
     assert final["table"]["concept"] == "absolute_lymphocyte_count.1.0.0"
-    assert final["table"]["row_index_by"] == ["subject_id", "time"]
+    assert "visit_occurrence_id" in final["table"]["columns"]
+    assert "row_index_by" not in final["table"]
+    assert "row_index_order_by" not in final["table"]
 
     assert len(final["join"]) == 1
     join = final["join"][0]
     assert join["concept"] == "white_blood_cell_count.1.0.0"
-    assert join["row_index_by"] == ["subject_id", "time"]
-    assert join["both_on"] == ["subject_id", "time", "row_id"]
+    assert "visit_occurrence_id" in join["columns"]
+    assert join["both_on"] == ["subject_id", "visit_occurrence_id", "time"]
     assert join["how"] == "inner"
+    assert "row_index_by" not in join
+    assert "row_index_order_by" not in join
 
     assert len(final["append"]) == 1
     assert final["append"][0]["concept"] == "lymphocyte_percentage.1.0.0"

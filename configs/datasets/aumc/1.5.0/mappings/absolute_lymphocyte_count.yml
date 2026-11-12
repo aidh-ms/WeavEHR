@@ -4,6 +4,8 @@
 # AUMC stores these measurements as 10^9/L, which is numerically equivalent
 # to the canonical K/uL unit.
 type: simple
+extension_columns:
+  visit_occurrence_id: col("visit_occurrence_id")
 mappings:
   - pattern:
       table: measurement

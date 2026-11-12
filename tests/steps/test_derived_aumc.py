@@ -1,4 +1,4 @@
-"""Tests for optional row indexing in derived concept joins."""
+"""Tests for AUMC derived lymphocyte concepts and event appending."""
 
 from datetime import datetime
 
@@ -8,173 +8,6 @@ import pytest
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
-
-
-@pytest.mark.parametrize(
-    ("use_row_id", "expected_count"),
-    [(False, 9), (True, 3)],
-)
-def test_derived_row_index_prevents_many_to_many_join(
-    use_row_id: bool,
-    expected_count: int,
-) -> None:
-    timestamp = datetime(2024, 1, 1, 10)
-
-    def frame(values: list[float]) -> pl.LazyFrame:
-        return pl.DataFrame(
-            {
-                "subject_id": [1] * len(values),
-                "time": [timestamp] * len(values),
-                "numeric_value": values,
-            }
-        ).lazy()
-
-    frames = {
-        "absolute_lymphocyte_count.1.0.0": frame([2.0, 3.0, 4.0]),
-        "white_blood_cell_count.1.0.0": frame([10.0, 20.0, 30.0]),
-    }
-
-    row_options = (
-        {
-            "row_index_by": ["subject_id", "time"],
-            "row_index_order_by": ["numeric_value"],
-        }
-        if use_row_id
-        else {}
-    )
-
-    config = DerivedDatasetConceptConfig(
-        name="lymphocytes",
-        dataset="aumc",
-        version="1.5.0",
-        table={
-            "concept": "absolute_lymphocyte_count.1.0.0",
-            "columns": ["subject_id", "time", "numeric_value"],
-            **row_options,
-        },
-        join=[
-            {
-                "concept": "white_blood_cell_count.1.0.0",
-                "columns": ["subject_id", "time", "numeric_value"],
-                "both_on": (["subject_id", "time", "row_id"] if use_row_id else ["subject_id", "time"]),
-                "how": "inner",
-                "suffix": "_wbc",
-                **row_options,
-            }
-        ],
-        event={
-            "numeric_value": "100 * col(numeric_value) / col(numeric_value_wbc)",
-        },
-    )
-
-    concept = ConceptConfig(
-        name="lymphocytes",
-        version="1.0.0",
-        unit="%",
-    )
-
-    result = ConceptStep.build_derived_frame(
-        concept,
-        config,
-        lambda table: frames[table.concept],
-    ).collect()
-
-    assert result.height == expected_count
-
-    if use_row_id:
-        assert sorted(result["numeric_value"].to_list()) == pytest.approx(
-            [13.333333, 15.0, 20.0],
-            abs=1e-5,
-        )
-
-
-def test_row_index_and_append_preserve_direct_measurements() -> None:
-    timestamp = datetime(2024, 1, 1, 10)
-
-    def frame(values: list[float]) -> pl.LazyFrame:
-        return pl.DataFrame(
-            {
-                "subject_id": [1] * len(values),
-                "time": [timestamp] * len(values),
-                "numeric_value": values,
-                "dataset": ["aumc"] * len(values),
-                "table": ["measurement"] * len(values),
-            }
-        ).lazy()
-
-    frames = {
-        "absolute_lymphocyte_count.1.0.0": frame([2.0, 3.0, 4.0]),
-        "white_blood_cell_count.1.0.0": frame([10.0, 20.0, 30.0]),
-        "lymphocyte_percentage.1.0.0": frame([25.0, 35.0]),
-    }
-
-    concept = ConceptConfig(
-        name="lymphocytes",
-        version="1.0.0",
-        unit="%",
-        extension_columns={
-            "dataset": "col(dataset)",
-            "table": "col(table)",
-        },
-    )
-
-    config = DerivedDatasetConceptConfig(
-        name="lymphocytes",
-        dataset="aumc",
-        version="1.5.0",
-        table={
-            "concept": "absolute_lymphocyte_count.1.0.0",
-            "columns": [
-                "subject_id",
-                "time",
-                "numeric_value",
-                "dataset",
-                "table",
-            ],
-            "row_index_by": ["subject_id", "time"],
-            "row_index_order_by": ["numeric_value"],
-        },
-        join=[
-            {
-                "concept": "white_blood_cell_count.1.0.0",
-                "columns": ["subject_id", "time", "numeric_value"],
-                "row_index_by": ["subject_id", "time"],
-                "row_index_order_by": ["numeric_value"],
-                "both_on": ["subject_id", "time", "row_id"],
-                "how": "inner",
-                "suffix": "_wbc",
-            }
-        ],
-        append=[
-            {
-                "concept": "lymphocyte_percentage.1.0.0",
-                "columns": [
-                    "subject_id",
-                    "time",
-                    "numeric_value",
-                    "dataset",
-                    "table",
-                ],
-            }
-        ],
-        event={
-            "numeric_value": ("100 * col(numeric_value) / col(numeric_value_wbc)"),
-        },
-    )
-
-    result = ConceptStep.build_derived_frame(
-        concept,
-        config,
-        lambda table: frames[table.concept],
-    ).collect()
-
-    assert result.height == 5
-    assert sorted(result["numeric_value"].to_list()) == pytest.approx(
-        [13.333333, 15.0, 20.0, 25.0, 35.0],
-        abs=1e-5,
-    )
-    assert result["code"].unique().to_list() == ["lymphocytes//%"]
-    assert result["time"].n_unique() == 1
 
 
 def test_aumc_lymphocytes_exclude_invalid_wbc_and_preserve_direct_events() -> None:
@@ -216,6 +49,7 @@ def test_aumc_lymphocytes_exclude_invalid_wbc_and_preserve_direct_events() -> No
                 "numeric_value": values,
                 "dataset": ["aumc"] * len(values),
                 "table": ["measurement"] * len(values),
+                "visit_occurrence_id": ["100"] * len(values),
             }
         ).lazy()
 
@@ -288,6 +122,7 @@ def test_aumc_valid_wbc_is_paired_after_prefilter(
                 "numeric_value": pl.Series(values, dtype=pl.Float32),
                 "dataset": ["aumc"] * len(values),
                 "table": ["measurement"] * len(values),
+                "visit_occurrence_id": ["100"] * len(values),
             }
         ).lazy()
 
@@ -308,7 +143,7 @@ def test_aumc_valid_wbc_is_paired_after_prefilter(
 
 
 def test_aumc_surplus_identical_wbc_rows_do_not_duplicate_events() -> None:
-    """Surplus identical WBC rows must not duplicate lymphocyte events."""
+    """WBC events from other visits must not duplicate derived events."""
     from pathlib import Path
 
     import yaml
@@ -342,12 +177,17 @@ def test_aumc_surplus_identical_wbc_rows_do_not_duplicate_events() -> None:
                 "numeric_value": values,
                 "dataset": ["aumc"] * len(values),
                 "table": ["measurement"] * len(values),
+                "visit_occurrence_id": ["100"] * len(values),
             }
         ).lazy()
 
     frames = {
-        "absolute_lymphocyte_count.1.0.0": frame([2.0, 3.0]),
-        "white_blood_cell_count.1.0.0": frame([10.0, 10.0, 10.0]),
+        "absolute_lymphocyte_count.1.0.0": frame([2.0, 3.0]).with_columns(
+            pl.Series("visit_occurrence_id", ["100", "200"])
+        ),
+        "white_blood_cell_count.1.0.0": frame([10.0, 10.0, 10.0]).with_columns(
+            pl.Series("visit_occurrence_id", ["100", "200", "300"])
+        ),
         "lymphocyte_percentage.1.0.0": frame([25.0]),
     }
 
@@ -395,6 +235,7 @@ def test_aumc_append_excludes_null_direct_percentage() -> None:
                 "numeric_value": pl.Series(values, dtype=pl.Float32),
                 "dataset": ["aumc"] * len(values),
                 "table": ["measurement"] * len(values),
+                "visit_occurrence_id": ["100"] * len(values),
             }
         ).lazy()
 

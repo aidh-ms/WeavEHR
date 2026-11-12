@@ -97,12 +97,13 @@ is represented separately as an absolute lymphocyte count (`K/uL`). The
 canonical `lymphocytes` percentage concept additionally derives
 `100 * absolute_lymphocyte_count / white_blood_cell_count` when OMOP concept
 `3010813` is available at the exact same MEDS timestamp.
-Simultaneous absolute lymphocyte and WBC observations
-are ordered by numeric value and paired using a zero-based row index within
-each subject/timestamp group. This prevents many-to-many expansion but does not
-establish clinical sample identity. Unmatched observations are excluded by the
-inner join; simultaneous direct and derived percentage events remain separate.
-The previous median-denominator behavior is no longer used.
+Absolute lymphocyte and WBC observations are joined by `subject_id`,
+`visit_occurrence_id`, and the exact MEDS timestamp. This prevents pairing
+measurements from different admissions of the same patient. The join does not
+independently establish clinical sample identity; it relies on the encounter
+and timestamp recorded in the source data. Unmatched observations are excluded
+by the inner join, while simultaneous direct and derived percentage events
+remain separate. The previous median-denominator behavior is no longer used.
 
 This deliberately preserves the clinical distinction identified by medical
 review instead of treating absolute counts as raw percentages. It also keeps

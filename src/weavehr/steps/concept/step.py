@@ -521,7 +521,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     version=version,
                     table=table,
                     event_name=event_name,
-                    dataset_extension_columns=dataset_extension_columns,
+                    dataset_extension_columns={
+                        **(dataset_extension_columns or {}),
+                        **dataset_concept.extension_columns,
+                    },
                 )
 
                 lf = self.apply_limits(concept, lf)
@@ -659,20 +662,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
             for expr in table.pre_filters:
                 lf = lf.filter(parse_expr(lf, expr))
-
-
-            if table.row_index_by:
-                lf = (
-                    lf.sort(
-                        [*table.row_index_by, *table.row_index_order_by],
-                        maintain_order=True,
-                    )
-                    .with_columns(
-                        pl.int_range(pl.len())
-                        .over(table.row_index_by)
-                        .alias("row_id")
-                    )
-                )
 
             return lf
 

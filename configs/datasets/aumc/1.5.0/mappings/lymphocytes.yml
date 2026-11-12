@@ -3,9 +3,9 @@
 #   3002030 = direct lymphocyte percentage
 #   3019198 = absolute lymphocyte count
 #
-# Derive percentages only when absolute lymphocyte counts and WBC have
-# exactly matching timestamps. Pair simultaneous observations by row index
-# to avoid a many-to-many join.
+# Derive percentages only when absolute lymphocyte counts and WBC
+# belong to the same patient, visit, and exact timestamp.
+# This prevents matching observations from different admissions.
 #
 # Preserve directly measured percentages as separate events, including
 # when a derived observation exists at the same timestamp.
@@ -19,11 +19,7 @@ table:
     - numeric_value
     - dataset
     - table
-  row_index_by:
-    - subject_id
-    - time
-  row_index_order_by:
-    - numeric_value
+    - visit_occurrence_id
 
 join:
   - concept: white_blood_cell_count.1.0.0
@@ -31,15 +27,11 @@ join:
       - subject_id
       - time
       - numeric_value
-    row_index_by:
-      - subject_id
-      - time
-    row_index_order_by:
-      - numeric_value
+      - visit_occurrence_id
     both_on:
       - subject_id
+      - visit_occurrence_id
       - time
-      - row_id
     how: inner
     suffix: "_wbc"
     pre_filters:

@@ -54,6 +54,10 @@ class SimpleDatasetConceptConfig(BaseDatasetConfig):
     __weavehr_config_type__ = "concept"
 
     mappings: list[MappingConfig] = Field(default_factory=list, description="List of concept mappings.")
+    extension_columns: dict[str, str] = Field(
+        default_factory=dict,
+        description="Dataset-specific extension columns to preserve in simple concept outputs.",
+    )
     type: Literal["simple"] = Field(
         "simple", description="Type of concept: 'base', 'derived', or 'complex'."
     )

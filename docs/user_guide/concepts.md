@@ -97,28 +97,29 @@ filters: []
 
 Joins use the same keys, `how` and `maintain_order` options as [extraction joins](extraction.md#joins); cross joins are not supported.
 
+For simple concepts, dataset-specific mappings can declare
+`extension_columns` to preserve additional source metadata in the concept
+output. These columns complement the concept-level and concept-step
+dataset-wide extensions; dataset-specific extensions take precedence when
+names overlap. For example, AUMC preserves `visit_occurrence_id` in its
+absolute lymphocyte and white blood cell concepts so they can be joined
+within the same encounter.
+
 Additional options for derived concepts:
 
-- `pre_filters`: Expressions evaluated on each input table after its callbacks,
-  but before row indexing and joining.
-- `row_index_by`: Groups rows by the specified columns and assigns a zero-based
-  `row_id` within each group.
-- `row_index_order_by`: Sorts rows within each group before assigning `row_id`.
-  Include suitable ordering columns when using positional matching.
+- `pre_filters`: Expressions evaluated on each input concept table after its
+  callbacks but before joining. This can exclude invalid measurements
+  before they contribute to a derived result.
 - `append`: Additional concept tables whose events are concatenated with the
   derived output. Direct and derived events remain separate, even when their
   subject and timestamp match. Missing numeric or text values are represented
   as null.
 
-For example, two input tables can be indexed by `[subject_id, time]`,
-ordered by `numeric_value`, and joined on `[subject_id, time, row_id]`
-to avoid a many-to-many join between simultaneous observations.
-
-**Important:** Row-index matching pairs observations by position, not by
-clinical sample identity. When input groups have different numbers of rows,
-unmatched rows may be excluded by an inner join. Different measurements
-within the same group can also be paired arbitrarily if the ordering does
-not establish a meaningful correspondence.
+Joins should use keys that establish the intended relationship between
+measurements. For example, the AUMC lymphocyte mapping joins absolute
+lymphocyte counts with white blood cell counts on `subject_id`,
+`visit_occurrence_id`, and `time`. Matching only on subject and timestamp
+could incorrectly combine observations from different admissions.
 
 This is how composite scores or ratios (e.g. concepts that combine two measurements) are expressed declaratively.
 

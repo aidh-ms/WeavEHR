@@ -21,15 +21,7 @@ class BaseConceptTable(BaseModel):
 
     pre_filters: list[str] = Field(
         default_factory=list,
-        description="Filters applied before row indexing and joining.",
-    )
-    row_index_by: list[str] = Field(
-        default_factory=list,
-        description="Columns defining groups for optional zero-based row indexing.",
-    )
-    row_index_order_by: list[str] = Field(
-        default_factory=list,
-        description="Columns defining deterministic row-index ordering.",
+        description="Filters applied before joining.",
     )
 
 

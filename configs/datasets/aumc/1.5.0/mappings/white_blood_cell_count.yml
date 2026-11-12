@@ -1,6 +1,8 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
 #   3010813 = Leukocytes [#/volume] in Blood
 type: simple
+extension_columns:
+  visit_occurrence_id: col("visit_occurrence_id")
 mappings:
   - pattern:
       table: measurement
