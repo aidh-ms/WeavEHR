@@ -1,7 +1,0 @@
-type: complex
-concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer
-concepts:
-- suspected_infection.1.0.0
-- sofa.1.0.0
-kwargs:
-  sofa_increase: 2

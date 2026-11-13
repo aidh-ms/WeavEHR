@@ -144,11 +144,6 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
 
         lf = self.transform(dependencies)
 
-        self._write(lf)
-
-    def _write(self, lf: pl.LazyFrame, extra_columns: tuple[str, ...] = ()) -> None:
-        """Complete a transformed frame with MEDS metadata and write its output."""
-
         lf = lf.with_columns(
             code=pl.lit(self._concept.code),
             dataset=pl.lit(self._complex_config.dataset),
@@ -169,7 +164,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                 pl.col("numeric_value").cast(pl.Float32),
                 pl.col("text_value").cast(pl.String),
             ]
-            + [pl.col(col).cast(pl.String) for col in dict.fromkeys((*self._concept.extension_columns, *extra_columns))]
+            + [pl.col(col).cast(pl.String) for col in self._concept.extension_columns]
         ).sort("subject_id", "time")
 
         output_file = self._output_file(self._concept)

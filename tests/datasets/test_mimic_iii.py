@@ -1,23 +1,17 @@
 """Regression cases for MIMIC-III's two acquisition systems and public demo."""
 
 import gzip
-import random
 from datetime import datetime, timedelta
 from functools import cache
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import polars as pl
 import pytest
-import yaml
 
 from weavehr.config.registry import load_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
-from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
-from weavehr.steps.concept.transformer.mimic import MimicInfusionTransformer
 from weavehr.steps.extraction.config.table import JoinTableConfig, TableConfig
 from weavehr.steps.extraction.step import ExtractionStep
 
@@ -183,89 +177,6 @@ def test_demo_covers_every_full_release_table() -> None:
     assert tables("mimic-iii-demo").keys() == tables("mimic-iii").keys()
 
 
-def infusion_transformer(mode: str = "rate", unit: str = "mcg/kg/min") -> MimicInfusionTransformer:
-    transformer = object.__new__(MimicInfusionTransformer)
-    transformer._kwargs = {"mode": mode, "unit": unit}
-    return transformer
-
-
-def infusions(rows: list[dict]) -> pl.LazyFrame:
-    defaults = {
-        "subject_id": 1,
-        "time": START,
-        "table": "inputevents_cv",
-        "event": "INFUSION_RATE",
-        "stay_id": "10",
-        "linkorderid": "20",
-        "rate": 8.0,
-        "rateuom": "mcgmin",
-        "status": None,
-        "patientweight": None,
-        "duration_minutes": None,
-    }
-    return pl.LazyFrame(
-        [{**defaults, **row} for row in rows],
-        schema_overrides={
-            "patientweight": pl.Float64,
-            "duration_minutes": pl.Float64,
-            "status": pl.String,
-        },
-    )
-
-
-def test_rate_uses_only_previous_weight_in_same_stay() -> None:
-    weight = pl.LazyFrame(
-        {
-            "subject_id": [1, 1, 1],
-            "stay_id": ["10", "10", "99"],
-            "time": [START, START + timedelta(hours=2), START],
-            "numeric_value": [80.0, 40.0, 1.0],
-        }
-    )
-    source = infusions([{"time": START + timedelta(hours=h)} for h in [-1, 1, 3]])
-    result = infusion_transformer().transform_infusions(source, weight).collect().sort("time")
-    assert result["numeric_value"].to_list() == pytest.approx([0.1, 0.2])
-    assert result["time"].to_list() == [START + timedelta(hours=h) for h in [1, 3]]
-
-
-def test_infusion_pipeline_resolves_weight_and_preserves_order_identifiers(tmp_path: Path) -> None:
-    concept = ConceptConfig.load(
-        CONFIGS / "concepts/medications/norepinephrine_rate.yml", dataset_paths=[DATASET / "mappings"]
-    )
-    weight = ConceptConfig.load(CONFIGS / "concepts/demographics/patient_weight.yml")
-    config = concept.get_dataset_concept("mimic-iii", "1.4")
-    assert isinstance(config, ComplexDatasetConceptConfig)
-    extraction = tmp_path / "extraction"
-    source = extraction / "mimic-iii/1.4/inputevents_cv"
-    source.mkdir(parents=True)
-    pl.DataFrame(
-        {
-            "subject_id": [1],
-            "time": [START + timedelta(hours=1)],
-            "code": ["INFUSION_RATE//30047//Norepinephrine"],
-            "numeric_value": [8.0],
-            "rateuom": ["mcgmin"],
-            "stay_id": ["10"],
-            "linkorderid": ["20"],
-        }
-    ).write_parquet(source / "INFUSION_RATE.parquet")
-    weight_path = tmp_path / "patient_weight.parquet"
-    pl.DataFrame({"subject_id": [1], "time": [START], "stay_id": ["10"], "numeric_value": [80.0]}).write_parquet(
-        weight_path
-    )
-    output = tmp_path / "norepinephrine.parquet"
-    step = MagicMock(spec=ConceptStep)
-    step.extraction_dataset = SimpleNamespace(data_path=extraction)
-    step._registry = MagicMock()
-    step._registry.get.side_effect = lambda identifier: weight if identifier == weight.identifier else None
-    step.concept_output_file.side_effect = lambda c, *_: weight_path if c.name == "patient_weight" else output
-    config.build_transformer(step)()
-    actual = pl.read_parquet(output)
-    assert actual["numeric_value"].to_list() == pytest.approx([0.1])
-    assert actual.select("stay_id", "linkorderid").rows() == [("10", "20")]
-    assert actual["table"].to_list() == ["inputevents_cv"]
-
-
 @pytest.mark.parametrize(
     ("item", "text", "present"),
     [
@@ -280,116 +191,6 @@ def test_carevue_ventilation_evidence_keeps_interface_unspecified(item: int, tex
     assert (result.height > 0) is present
     if present:
         assert result["code"].to_list() == ["ventilation_start"]
-
-
-@pytest.mark.parametrize(
-    ("unit", "rate", "expected"),
-    [
-        ("mcgkgmin", 0.2, 0.2),
-        ("mcg/kg/min", 0.2, 0.2),
-        ("mcgmin", 16, 0.2),
-        ("mg/min", 0.016, 0.2),
-        ("mg/kg/min", 0.0002, 0.2),
-        ("mcg/kg/hour", 12, 0.2),
-        ("mL/hour", 8, None),
-    ],
-)
-def test_pressor_unit_conversion(unit: str, rate: float, expected: float | None) -> None:
-    result = (
-        infusion_transformer()
-        .transform_infusions(
-            infusions(
-                [
-                    {
-                        "patientweight": 80.0,
-                        "rateuom": unit,
-                        "rate": rate,
-                    }
-                ]
-            )
-        )
-        .collect()
-    )
-    assert result["numeric_value"].to_list() == pytest.approx([] if expected is None else [expected])
-
-
-@pytest.mark.parametrize("unit", ["Uhr", "units/hour", "units/hr", "Umin", "units/min"])
-def test_vasopressin_unit_conversion(unit: str) -> None:
-    rate = 2.4 if "h" in unit.lower() else 0.04
-    result = (
-        infusion_transformer(unit="units/min")
-        .transform_infusions(
-            infusions(
-                [
-                    {
-                        "rateuom": unit,
-                        "rate": rate,
-                    }
-                ]
-            )
-        )
-        .collect()
-    )
-    assert result["numeric_value"].to_list() == pytest.approx([0.04])
-
-
-def test_rate_changes_are_not_cessations_and_stops_need_no_weight() -> None:
-    result = (
-        infusion_transformer()
-        .transform_infusions(
-            infusions(
-                [
-                    {"event": "INFUSION_END", "status": "ChangeDose/Rate"},
-                    {"event": "INFUSION_END", "status": "Changed"},
-                    {"event": "INFUSION_END", "status": "FinishedRunning"},
-                    {"status": "Stopped"},
-                    {"status": "D/C'd"},
-                    {"rate": -1.0},
-                ]
-            )
-        )
-        .collect()
-    )
-    assert result["numeric_value"].to_list() == [0.0, 0.0, 0.0]
-
-
-def test_carevue_durations_require_a_closed_segment_and_do_not_bridge_orders() -> None:
-    source = infusions(
-        [
-            {},
-            {"time": START + timedelta(hours=1)},
-            {"time": START + timedelta(hours=2), "status": "Stopped"},
-            {"time": START + timedelta(hours=3)},
-            {"time": START + timedelta(hours=10)},
-            {"time": START + timedelta(hours=11), "linkorderid": "other"},
-            {"event": "INFUSION_END", "duration_minutes": 30.0},
-            {"event": "INFUSION_END", "duration_minutes": -30.0},
-        ]
-    )
-    result = infusion_transformer(mode="duration").transform_infusions(source).collect()
-    assert sorted(result["numeric_value"].to_list()) == [30.0, 60.0, 60.0]
-
-
-def test_carevue_amount_rows_do_not_shorten_durations_or_depend_on_input_order() -> None:
-    rows = [
-        {"time": START + timedelta(hours=h), "rate": rate, "status": status}
-        for h, rate, status in [
-            (0, 8.0, None),
-            (0, None, None),
-            (1, 16.0, None),
-            (1, None, None),
-            (2, None, None),  # amount-only update carries the preceding rate
-            (3, None, "Stopped"),
-            (3, 16.0, None),
-            (4, None, None),  # a stop must not be forward-filled as active
-        ]
-    ]
-    transformer = infusion_transformer(mode="duration")
-    for seed in range(20):
-        random.Random(seed).shuffle(rows)
-        actual = transformer.transform_infusions(infusions(rows)).collect().sort("time")
-        assert actual["time"].to_list() == [START + timedelta(hours=h) for h in [1, 2, 3]]
-        assert actual["numeric_value"].to_list() == [60.0, 60.0, 60.0]
 
 
 @pytest.mark.parametrize(
@@ -410,12 +211,6 @@ def test_alarm_settings_other_substances_and_derived_duplicates_are_excluded(
     name: str, table: str, item: int, text: str | None
 ) -> None:
     assert mapped(name, table, item, 85, text).is_empty()
-
-
-def test_milrinone_is_not_dopamine() -> None:
-    for name in ["dopamine_rate", "dopamine_duration"]:
-        config = yaml.safe_load((DATASET / "mappings" / f"{name}.yml").read_text())
-        assert config["kwargs"]["itemids"]["inputevents_cv"] == [30043, 30307]
 
 
 def test_absolute_lymphocytes_convert_cells_per_microlitre_to_thousands() -> None:
@@ -578,6 +373,22 @@ def test_culture_results_do_not_claim_specimen_time_availability(tmp_path: Path)
             assert frame["available_time"].null_count() == 1
 
 
+# Infusions are deferred until CareVue and MetaVision infusions are harmonised without a
+# dataset-specific transformer; cardiovascular SOFA, and so SOFA and Sepsis-3, need them.
+DEFERRED_INFUSIONS = {
+    *(
+        f"{drug}_{kind}"
+        for drug in ["norepinephrine", "epinephrine", "dopamine", "dobutamine"]
+        for kind in ["rate", "duration"]
+    ),
+    "phenylephrine_rate",
+    "vasopressin_rate",
+    "sofa_cardiovascular",
+    "sofa",
+    "sepsis3",
+}
+
+
 def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
     iii = {p.stem for p in (DATASET / "mappings").glob("*.yml")}
     iv = {p.stem for p in (CONFIGS / "datasets/mimic-iv/2.2/mappings").glob("*.yml")}
@@ -586,5 +397,5 @@ def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
         "erythrocyte_distribution_width_sd",
         "immature_granulocytes",
         "neutrophils_absolute",
+        *DEFERRED_INFUSIONS,
     }
-    assert len(iii & iv) >= len(iv) - 4

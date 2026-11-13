@@ -4,7 +4,7 @@ Native extraction and concept mappings for
 [MIMIC-III v1.4](https://physionet.org/content/mimiciii/1.4/), covering both
 CareVue and MetaVision. Related issue: [#26](https://github.com/aidh-ms/WeavEHR/issues/26).
 
-`1.4/` is the reference: 20 patient-event table configs and 149 concept mappings.
+`1.4/` is the reference: 20 patient-event table configs and 136 concept mappings.
 The [public demo](../mimic-iii-demo/README.md) and
 [official CareVue subset](../mimic-iii-carevue/README.md) inherit these configs.
 
@@ -66,10 +66,13 @@ recorded death, recorded GCS total, discharge notes and radiology notes.
 | `neutrophils_absolute` | Direct absolute-count item absent from III |
 | `immature_granulocytes` | Relevant IV item absent; other specimen types are not substituted |
 | `erythrocyte_distribution_width_sd` | No matching III RDW-SD item |
+| `norepinephrine_rate`, `norepinephrine_duration`, `epinephrine_rate`, `epinephrine_duration`, `dopamine_rate`, `dopamine_duration`, `dobutamine_rate`, `dobutamine_duration`, `phenylephrine_rate`, `vasopressin_rate` | Deferred: CareVue and MetaVision infusions are to be harmonised without a dataset-specific transformer (follow-up issue). Their source events are extracted |
+| `sofa_cardiovascular`, `sofa`, `sepsis3` | Deferred with the infusions: cardiovascular SOFA scores vasopressors, and SOFA and Sepsis-3 build on it |
 
-AKI, SOFA, suspected infection and Sepsis-3 reuse WeavEHR's existing
-transformers with III inputs. Their continuous-time definitions do not claim
-equivalence to every hourly ricu score or published SQL outcome definition.
+AKI, suspected infection and the respiratory, coagulation, liver, CNS and renal
+SOFA components reuse WeavEHR's existing transformers with III inputs. Their
+continuous-time definitions do not claim equivalence to every hourly ricu score
+or published SQL outcome definition.
 
 ## Dataset-specific rules
 
@@ -78,18 +81,6 @@ equivalence to every hourly ricu score or published SQL outcome definition.
 - Fahrenheit/inches and neonatal gram/pound/ounce weights are converted.
   Known inch item IDs are converted even when the source unit is missing.
   FiO2 fractions become percentages. CRP is multiplied by ten only for mg/dL.
-- MetaVision uses ordered `originalrate` at start and zero at explicit cessation;
-  III's `Changed` (or IV's `ChangeDose/Rate`) end is not a stop. CareVue uses charted rates and stop
-  statuses. Absolute doses use a contemporaneous MetaVision weight or the latest
-  earlier observed weight in the same stay. Unknown units/missing weight do not
-  produce an invented normalised dose. CareVue durations require consecutive
-  records of the same linked order, appear at the later record, and do not
-  bridge gaps above six hours or extrapolate past an unclosed final record.
-  Coincident amount/rate rows are merged before calculating intervals; null
-  amount-only rates carry the preceding rate, and explicit stops reset it.
-- Vasopressin differs from IV: III emits ordered rates at segment start and
-  cessation markers, while IV emits realised average rates at segment end.
-  The two event series are not numerically equivalent.
 - MetaVision procedure markers retain invasive/NIV levels. CareVue mechanical
   support has an unspecified interface (bare `ventilation_start`/`ventilation_end`
   codes), not a proven intubation. Settings, ventilator modes, oxygen devices
@@ -113,8 +104,7 @@ equivalence to every hourly ricu score or published SQL outcome definition.
   immediately known, or use these retrospective results as prospective inputs.
   Orders do not prove administration of every dose.
 - Temperature excludes text skin assessments and duplicate calculated CareVue
-  values. SpO2 excludes desaturation alarm settings. Dopamine excludes
-  milrinone. Urine excludes tube-feed residuals and pre-ICU OR/PACU output;
+  values. SpO2 excludes desaturation alarm settings. Urine excludes tube-feed residuals and pre-ICU OR/PACU output;
   GU irrigant input is subtracted. Absolute lymphocytes are converted from
   cells/uL to K/uL. Bicarbonate and glucose use the same laboratory sources as
   IV; calculated blood-gas bicarbonate and bedside glucose stay in extraction.
@@ -138,7 +128,7 @@ synthetic full-release CSVs, including uppercase headers and both date-only and
 midnight-datetime representations.
 
 R/ricu execution and hourly score equivalence have not been checked. Successful
-AKI, SOFA and Sepsis-3 execution does not establish external clinical validity.
+AKI and SOFA component execution does not establish external clinical validity.
 
 ## Combining III and IV
 
