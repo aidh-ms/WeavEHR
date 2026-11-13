@@ -1,0 +1,30 @@
+# Converts a prepared infusion `rate` with its normalised `unit` to mcg/kg/min.
+# Rates charted per kg convert directly. Other rates are divided by the `weight`
+# charted with the infusion or, without one, the latest earlier patient_weight of
+# the same stay; no default or future weight is used. A stopped infusion (rate 0)
+# needs no weight. Rows with unknown units, or without a weight they need, are dropped.
+type: derived
+join:
+  - type: asof
+    concept: patient_weight.1.0.0
+    by: [subject_id, stay_id]
+    optional: true
+    columns: [subject_id, time, stay_id, numeric_value]
+    pre_filters:
+      - is_finite(numeric_value) and numeric_value > 0
+      - drop_na(stay_id)
+    filters:
+      - first_distinct(subject_id, stay_id, time, order_by=[numeric_value])
+    post_callbacks:
+      - first_not_null(weight, numeric_value_right, output=weight)
+event:
+  numeric_value: >-
+    case(
+      (rate == 0, 0),
+      (unit == "mcgkgmin", rate),
+      (unit == "mgkgmin", rate * 1000),
+      (unit == "mcgkgh", rate / 60),
+      (unit == "mcgmin", rate / weight),
+      (unit == "mgmin", rate * 1000 / weight))
+filters:
+  - is_finite(numeric_value) and numeric_value >= 0

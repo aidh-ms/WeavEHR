@@ -1,0 +1,30 @@
+# CareVue charts no infusion durations, only rate observations (INFUSION_RATE)
+# of each linked order. A duration is the time since the order's previous
+# observation, if the infusion was running then and it was at most six hours
+# ago; the last observation of a run closes no duration. Observations at the
+# same time are combined first (amount-only rows carry no rate), and a charted
+# stop ends the run. Mappings add the pattern's table and item codes.
+type: derived
+table:
+  pattern:
+    event: INFUSION_RATE
+  columns: ['*']
+  pre_callbacks:
+    - aggregate(cast(numeric_value, "float64"), "max", by=[subject_id, stay_id, linkorderid, time], output=rate)
+    - aggregate(str_contains(text_value, "^(Stopped|D/C)"), "any", by=[subject_id, stay_id, linkorderid, time], output=stopped)
+  pre_filters:
+    - subject_id != None and stay_id != None and linkorderid != None
+    - first_distinct(subject_id, stay_id, linkorderid, time)
+  callbacks:
+    - replace(stopped, 0, rate, output=rate)
+    - forward_fill(rate, by=[subject_id, stay_id, linkorderid], order_by=time, output=rate)
+    - lag(rate, by=[subject_id, stay_id, linkorderid], order_by=time, output=previous_rate)
+    - lag(time, by=[subject_id, stay_id, linkorderid], order_by=time, output=previous_time)
+    - datetime_diff(previous_time, time, unit="minutes", output=elapsed)
+event:
+  numeric_value: case((previous_rate > 0 and elapsed > 0 and elapsed <= 360, elapsed))
+  extension:
+    stay_id: col(stay_id)
+    linkorderid: col(linkorderid)
+filters:
+  - is_finite(numeric_value) and numeric_value > 0

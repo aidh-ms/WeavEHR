@@ -1,0 +1,15 @@
+# MetaVision charts the duration of each infusion segment at its end
+# (INFUSION_END), including segments ended by a rate change. Mappings add the
+# pattern's table and item codes.
+type: derived
+table:
+  pattern:
+    event: INFUSION_END
+  columns: ['*']
+event:
+  numeric_value: col(duration_minutes)
+  extension:
+    stay_id: col(stay_id)
+    linkorderid: col(linkorderid)
+filters:
+  - is_finite(numeric_value) and numeric_value > 0

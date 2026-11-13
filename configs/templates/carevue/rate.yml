@@ -1,0 +1,19 @@
+# CareVue charts a running infusion as rate observations (INFUSION_RATE).
+# Prepares what the infusion/ conversions expect: `rate` (0 once charted as
+# stopped), the normalised rate `unit`, the body `weight` charted with the
+# infusion (CareVue charts none) and a string `stay_id`. Mappings add the
+# pattern's table and item codes.
+type: derived
+table:
+  pattern:
+    event: INFUSION_RATE
+  columns: ['*']
+  callbacks:
+    - cast(stay_id, "string", output=stay_id)
+    - lower_str(replace_str(replace_str(rateuom, "[/\\s]", ""), "(?i)hour|hr", "h"), output=unit)
+    - cast(None, "float64", output=weight)
+    - replace(str_contains(text_value, "^(Stopped|D/C)"), 0, cast(numeric_value, "float64"), output=rate)
+event:
+  extension:
+    stay_id: col(stay_id)
+    linkorderid: col(linkorderid)

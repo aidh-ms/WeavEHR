@@ -1,0 +1,10 @@
+type: union
+sources:
+  carevue:
+    extends: [carevue/rate, infusion/mcg_kg_min]
+    table:
+      pattern: {table: inputevents_cv, code: '^(?:[A-Z_]+//)?(?:30127|30128)(?:$|//)'}
+  metavision:
+    extends: [metavision/rate, infusion/mcg_kg_min]
+    table:
+      pattern: {table: inputevents_mv, code: '^(?:[A-Z_]+//)?221749(?:$|//)'}

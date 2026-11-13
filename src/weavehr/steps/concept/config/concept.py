@@ -1,23 +1,26 @@
 from pathlib import Path
 from typing import Annotated, Self
 
-import yaml
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, field_validator, model_validator
 
 from weavehr.config.base import BaseConfig
-from weavehr.config.inheritance import has_extends, resolve_effective_config
+from weavehr.config.inheritance import ConfigFileError, has_extends, resolve_config_file, resolve_effective_config
 from weavehr.logging import logger
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
+from weavehr.steps.concept.config.union import UnionDatasetConceptConfig
 
 DatasetConceptConfigUnion = Annotated[
-    SimpleDatasetConceptConfig | DerivedDatasetConceptConfig | ComplexDatasetConceptConfig, Field(discriminator="type")
+    SimpleDatasetConceptConfig | DerivedDatasetConceptConfig | ComplexDatasetConceptConfig | UnionDatasetConceptConfig,
+    Field(discriminator="type"),
 ]
 
 
 def _undeclared_levels(dataset_concept: DatasetConceptConfigUnion, levels: list[str]) -> list[str]:
-    """Return the mapping levels of a simple or derived dataset concept that are not among ``levels``."""
+    """Return the mapping levels of a simple, derived or union dataset concept that are not among ``levels``."""
+    if isinstance(dataset_concept, UnionDatasetConceptConfig):
+        return [level for source in dataset_concept.sources.values() for level in _undeclared_levels(source, levels)]
     if isinstance(dataset_concept, SimpleDatasetConceptConfig):
         mapping_levels = [mapping.level for mapping in dataset_concept.mappings]
     elif isinstance(dataset_concept, DerivedDatasetConceptConfig):
@@ -108,9 +111,9 @@ class ConceptConfig(BaseConfig):
         Raises:
             FileNotFoundError: If file_path does not exist
             yaml.YAMLError: If YAML parsing fails
+            ConfigFileError: If the concept file is not a mapping or a template it extends cannot be resolved
         """
-        with open(file_path, "r") as f:
-            data = yaml.safe_load(f)
+        data = resolve_config_file(file_path)
 
         name = data.get("name")
         paths = dataset_paths or []
@@ -126,8 +129,11 @@ class ConceptConfig(BaseConfig):
                 sub_file_path = path / f"{name}.yml"
                 if not sub_file_path.exists():
                     continue
-                with open(sub_file_path, "r") as f:
-                    sub_data = yaml.safe_load(f)
+                try:
+                    sub_data = resolve_config_file(sub_file_path)
+                except ConfigFileError as e:
+                    logger.warning("failed to load dataset concept config for %s from %s: %s", name, path, e)
+                    continue
 
             try:
                 # Identity always comes from the dataset directory itself,

@@ -1,16 +1,21 @@
 """Regression cases for MIMIC-III's two acquisition systems and public demo."""
 
 import gzip
+import random
 from datetime import datetime, timedelta
 from functools import cache
 from pathlib import Path
+from types import MethodType, SimpleNamespace
+from unittest.mock import MagicMock
 
 import polars as pl
 import pytest
 
 from weavehr.config.registry import load_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
+from weavehr.steps.concept.config.union import UnionDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.extraction.config.table import JoinTableConfig, TableConfig
 from weavehr.steps.extraction.step import ExtractionStep
@@ -177,6 +182,286 @@ def test_demo_covers_every_full_release_table() -> None:
     assert tables("mimic-iii-demo").keys() == tables("mimic-iii").keys()
 
 
+# Independent examples from the native item dictionaries, including each drug's
+# alternate CareVue item. The mapping's patterns still select every fixture row.
+INFUSION_ITEMS = {
+    "norepinephrine": ([30047, 30120], 221906),
+    "epinephrine": ([30044, 30119, 30309], 221289),
+    "dopamine": ([30043, 30307], 221662),
+    "dobutamine": ([30042, 30306], 221653),
+    "phenylephrine": ([30127, 30128], 221749),
+    "vasopressin": ([30051], 222315),
+}
+INFUSION_CONCEPTS = [f"{drug}_rate" for drug in INFUSION_ITEMS] + [
+    f"{drug}_duration" for drug in ["norepinephrine", "epinephrine", "dopamine", "dobutamine"]
+]
+
+
+def infusion_concept(name: str, dataset: str = "mimic-iii") -> ConceptConfig:
+    return ConceptConfig.load(
+        CONFIGS / "concepts/medications" / f"{name}.yml",
+        dataset_paths=[CONFIGS / "datasets" / dataset / "1.4/mappings"],
+    )
+
+
+def infusion_config(name: str, dataset: str = "mimic-iii") -> UnionDatasetConceptConfig:
+    config = infusion_concept(name, dataset).get_dataset_concept(dataset, "1.4")
+    assert isinstance(config, UnionDatasetConceptConfig)
+    assert list(config.sources) == ["carevue", "metavision"]
+    return config
+
+
+@pytest.mark.parametrize(
+    "recipe", ["[carevue/rate, infusion/mcg_kg_min]", "[metavision/rate, infusion/units_min]", "carevue/duration"]
+)
+def test_infusion_recipes_require_explicit_item_selection(tmp_path: Path, recipe: str) -> None:
+    (tmp_path / "templates").symlink_to(CONFIGS / "templates")
+    mapping_dir = tmp_path / "example" / "1.0" / "mappings"
+    mapping_dir.mkdir(parents=True)
+    (mapping_dir / "norepinephrine_rate.yml").write_text(f"type: union\nsources:\n  source:\n    extends: {recipe}\n")
+    concept = ConceptConfig.load(CONFIGS / "concepts/medications/norepinephrine_rate.yml", dataset_paths=[mapping_dir])
+    assert concept.dataset_concepts == []
+
+
+def mapped_infusions(
+    source: pl.LazyFrame,
+    weight: pl.LazyFrame | None = None,
+    *,
+    name: str = "norepinephrine_rate",
+    dataset: str = "mimic-iii",
+    events: set[str] | None = None,
+) -> pl.LazyFrame:
+    """Run each source of the inherited YAML with real source selection and native extraction schemas.
+
+    As in the concept step, a source without events contributes no rows.
+    """
+    concept = infusion_concept(name, dataset)
+    config = infusion_config(name, dataset)
+    cv_items, mv_item = INFUSION_ITEMS[name.rsplit("_", 1)[0]]
+
+    def scan(table: BaseConceptTable) -> pl.LazyFrame:
+        if table.concept is not None:
+            if weight is None:
+                raise FileNotFoundError("No weight observations")
+            return weight
+        pattern = table.pattern
+        assert pattern is not None
+        frames = []
+        for event in ["INFUSION_RATE", "INFUSION_START", "INFUSION_END"]:
+            source_table = "inputevents_cv" if event == "INFUSION_RATE" else "inputevents_mv"
+            if source_table != pattern.table or pattern.event not in (None, event):
+                continue
+            # Extraction writes every event file of a table, so `events` only selects rows.
+            rows = source.filter((pl.col("event") == event) & (events is None or event in events))
+            item = pl.coalesce(pl.col("item"), pl.lit(cv_items[0] if event == "INFUSION_RATE" else mv_item))
+            rows = rows.select(
+                "subject_id",
+                "time",
+                code=pl.concat_str(pl.lit(event), item, pl.lit("label"), separator="//"),
+                numeric_value=pl.col("rate") if event == "INFUSION_RATE" else pl.lit(None, pl.Float64),
+                text_value=pl.col("status"),
+                originalrate=pl.col("rate"),
+                rateuom=pl.col("rateuom"),
+                patientweight=pl.col("patientweight"),
+                duration_minutes=pl.col("duration_minutes"),
+                stay_id=pl.col("stay_id").cast(pl.Int64),
+                linkorderid=pl.col("linkorderid").cast(pl.Int64),
+            )
+            missing = {
+                "INFUSION_RATE": ["originalrate", "patientweight", "duration_minutes"],
+                "INFUSION_START": ["duration_minutes"],
+                "INFUSION_END": ["originalrate"],
+            }
+            frames.append(
+                ConceptStep.build_event_input_frame(
+                    rows.drop(missing[event]), pattern, dataset=dataset, version="1.4", event_name=event
+                )
+            )
+        if not frames:
+            raise FileNotFoundError("No infusion events")
+        return pl.concat(frames, how="diagonal_relaxed")
+
+    outputs = []
+    for source_config in config.sources.values():
+        assert isinstance(source_config, DerivedDatasetConceptConfig)
+        try:
+            outputs.append(ConceptStep.build_derived_frame(concept, source_config, scan).collect())
+        except FileNotFoundError:
+            continue
+    return pl.concat(outputs).lazy() if outputs else pl.LazyFrame(schema={"numeric_value": pl.Float32})
+
+
+def infusions(rows: list[dict]) -> pl.LazyFrame:
+    defaults = {
+        "subject_id": 1,
+        "time": START,
+        "event": "INFUSION_RATE",
+        "item": None,
+        "stay_id": "10",
+        "linkorderid": "20",
+        "rate": 8.0,
+        "rateuom": "mcgmin",
+        "status": None,
+        "patientweight": None,
+        "duration_minutes": None,
+    }
+    return pl.LazyFrame(
+        [{**defaults, **row} for row in rows],
+        schema_overrides={
+            "item": pl.Int64,
+            "patientweight": pl.Float64,
+            "duration_minutes": pl.Float64,
+            "status": pl.String,
+        },
+    )
+
+
+def test_rate_uses_only_previous_weight_in_same_stay() -> None:
+    weight = pl.LazyFrame(
+        {
+            "subject_id": [1, 1, 1],
+            "stay_id": ["10", "10", "99"],
+            "time": [START, START + timedelta(hours=2), START],
+            "numeric_value": [80.0, 40.0, 1.0],
+        }
+    )
+    source = infusions([{"time": START + timedelta(hours=h)} for h in [-1, 1, 3]])
+    result = mapped_infusions(source, weight).collect().sort("time")
+    assert result["numeric_value"].to_list() == pytest.approx([0.1, 0.2])
+    assert result["time"].to_list() == [START + timedelta(hours=h) for h in [1, 3]]
+
+
+@pytest.mark.parametrize("dataset", ["mimic-iii", "mimic-iii-demo", "mimic-iii-carevue"])
+@pytest.mark.parametrize("has_weight", [True, False])
+def test_infusion_pipeline_resolves_weight_and_preserves_order_identifiers(
+    tmp_path: Path, dataset: str, has_weight: bool
+) -> None:
+    config = infusion_config("norepinephrine_rate", dataset)
+    weight = ConceptConfig.load(CONFIGS / "concepts/demographics/patient_weight.yml")
+    extraction = tmp_path / "extraction"
+    source = extraction / dataset / "1.4/inputevents_cv"
+    source.mkdir(parents=True)
+    pl.DataFrame(
+        {
+            "subject_id": [1] * 4,
+            "time": [START + timedelta(hours=h) for h in [1, 2, 3, 4]],
+            "code": ["INFUSION_RATE//30047//Norepinephrine"] * 3 + ["INFUSION_RATE//999999//other"],
+            "numeric_value": [8.0, 0.2, 0.0, 0.5],
+            "text_value": [None] * 4,
+            "rateuom": ["mcgmin", "mcgkgmin", "unknown", "mcgkgmin"],
+            "stay_id": [10] * 4,
+            "linkorderid": [20] * 4,
+        },
+        schema_overrides={"text_value": pl.String},
+    ).write_parquet(source / "INFUSION_RATE.parquet")
+    weight_path = tmp_path / "patient_weight.parquet"
+    if has_weight:
+        pl.DataFrame({"subject_id": [1], "time": [START], "stay_id": ["10"], "numeric_value": [80.0]}).write_parquet(
+            weight_path
+        )
+    output = tmp_path / "norepinephrine.parquet"
+    step = MagicMock(spec=ConceptStep)
+    step.extraction_dataset = SimpleNamespace(data_path=extraction)
+    step._workspace_dir = tmp_path
+    step.event_paths = MethodType(ConceptStep.event_paths, step)
+    step.read_events = MethodType(ConceptStep.read_events, step)
+    step.build_event_input_frame = ConceptStep.build_event_input_frame
+    step._registry = MagicMock()
+    step._registry.get.side_effect = lambda identifier: (
+        weight if ConceptConfig.ensure_prefix(identifier) == weight.identifier else None
+    )
+    step.concept_output_file.side_effect = lambda c, *_: weight_path if c.name == "patient_weight" else output
+    step.get_path_for_concept_table = MethodType(ConceptStep.get_path_for_concept_table, step)
+    step.build_derived_frame = ConceptStep.build_derived_frame
+    step.apply_limits = MethodType(ConceptStep.apply_limits, step)
+    step._derived_frame = MethodType(ConceptStep._derived_frame, step)
+    step._write_concept_parts = MethodType(ConceptStep._write_concept_parts, step)
+    # The MetaVision source has no extracted events here and is skipped.
+    ConceptStep.extract_union_concept(step, infusion_concept("norepinephrine_rate", dataset), config)
+    actual = pl.read_parquet(output)
+    expected = [0.1, 0.2, 0.0] if has_weight else [0.2, 0.0]
+    assert actual["numeric_value"].to_list() == pytest.approx(expected)
+    assert actual.select("stay_id", "linkorderid").rows() == [("10", "20")] * len(expected)
+    assert actual["table"].to_list() == ["inputevents_cv"] * len(expected)
+    assert actual["dataset"].to_list() == [dataset] * len(expected)
+    assert actual["code"].to_list() == ["norepinephrine_rate//mcg/kg/min"] * len(expected)
+    assert actual["text_value"].null_count() == len(expected)
+
+
+@pytest.mark.parametrize("dataset", ["mimic-iii", "mimic-iii-demo", "mimic-iii-carevue"])
+@pytest.mark.parametrize("name", INFUSION_CONCEPTS)
+def test_infusion_mappings_select_native_items_in_all_variants(name: str, dataset: str) -> None:
+    cv_items, mv_item = INFUSION_ITEMS[name.rsplit("_", 1)[0]]
+    unit = "units/min" if name == "vasopressin_rate" else "mcgkgmin"
+    rows = [
+        {"item": item, "linkorderid": str(item), "time": START + timedelta(hours=h), "rate": 0.2, "rateuom": unit}
+        for item in [*cv_items, 999999]
+        for h in [0, 1]
+    ]
+    rows.extend({"event": "INFUSION_START", "item": item, "rate": 0.2, "rateuom": unit} for item in [mv_item, 999999])
+    rows.extend(
+        {"event": "INFUSION_END", "item": item, "duration_minutes": 30.0, "status": "Changed"}
+        for item in [mv_item, 999999]
+    )
+    actual = mapped_infusions(infusions(rows), name=name, dataset=dataset).collect()
+    if name.endswith("_duration"):
+        assert sorted(actual["numeric_value"].to_list()) == [30.0, *[60.0] * len(cv_items)]
+    else:
+        assert actual["numeric_value"].to_list() == pytest.approx([0.2] * (2 * len(cv_items) + 1))
+    assert set(actual["table"]) == {"inputevents_cv", "inputevents_mv"}
+
+
+@pytest.mark.parametrize("name", [f"{drug}_rate" for drug in INFUSION_ITEMS if drug != "vasopressin"])
+@pytest.mark.parametrize(("event", "expected"), [("INFUSION_START", 0.1), ("INFUSION_END", 0.0)])
+def test_metavision_only_native_identifiers_join_concept_weights(name: str, event: str, expected: float) -> None:
+    source = infusions(
+        [
+            {"event": "INFUSION_START", "time": START + timedelta(hours=1)},
+            {"event": "INFUSION_END", "time": START + timedelta(hours=2), "status": "FinishedRunning"},
+        ]
+    )
+    weight = pl.LazyFrame({"subject_id": [1], "time": [START], "stay_id": ["10"], "numeric_value": [80.0]})
+    actual = mapped_infusions(source, weight, name=name, events={event}).collect()
+    assert actual["numeric_value"].to_list() == pytest.approx([expected])
+    assert actual["stay_id"].to_list() == ["10"]
+    assert actual["table"].to_list() == ["inputevents_mv"]
+
+
+def test_metavision_weight_precedence_and_duplicate_observed_weights() -> None:
+    weight = pl.LazyFrame(
+        {
+            "subject_id": [1, 1, 2, 1],
+            "stay_id": ["10", "10", "10", "99"],
+            "time": [START] * 4,
+            "numeric_value": [100.0, 80.0, 1.0, 1.0],
+        }
+    )
+    source = infusions(
+        [
+            {"event": "INFUSION_START", "time": START + timedelta(hours=h), "patientweight": value}
+            for h, value in [(1, 40.0), (2, None), (3, 0.0)]
+        ]
+    )
+    actual = mapped_infusions(source, weight).collect().sort("time")
+    assert actual["numeric_value"].to_list() == pytest.approx([0.2, 0.1, 0.1])
+
+
+def test_infusion_without_source_events_is_skipped(tmp_path: Path) -> None:
+    config = infusion_config("norepinephrine_duration")
+    output = tmp_path / "output" / "norepinephrine_duration.parquet"
+    step = MagicMock(spec=ConceptStep)
+    step.extraction_dataset = SimpleNamespace(data_path=tmp_path)
+    step._workspace_dir = tmp_path
+    step.event_paths = MethodType(ConceptStep.event_paths, step)
+    step.read_events = MethodType(ConceptStep.read_events, step)
+    step.build_derived_frame = ConceptStep.build_derived_frame
+    step._derived_frame = MethodType(ConceptStep._derived_frame, step)
+    step._write_concept_parts = MethodType(ConceptStep._write_concept_parts, step)
+    step.concept_output_file.return_value = output
+    ConceptStep.extract_union_concept(step, infusion_concept("norepinephrine_duration"), config)
+    assert not output.parent.exists()
+
+
 @pytest.mark.parametrize(
     ("item", "text", "present"),
     [
@@ -191,6 +476,161 @@ def test_carevue_ventilation_evidence_keeps_interface_unspecified(item: int, tex
     assert (result.height > 0) is present
     if present:
         assert result["code"].to_list() == ["ventilation_start"]
+
+
+@pytest.mark.parametrize(
+    ("unit", "rate", "expected"),
+    [
+        ("mcgkgmin", 0.2, 0.2),
+        ("mcg/kg/min", 0.2, 0.2),
+        ("mcgmin", 16, 0.2),
+        ("mg/min", 0.016, 0.2),
+        ("mg/kg/min", 0.0002, 0.2),
+        ("mcg/kg/hour", 12, 0.2),
+        ("mL/hour", 8, None),
+    ],
+)
+def test_pressor_unit_conversion(unit: str, rate: float, expected: float | None) -> None:
+    result = mapped_infusions(
+        infusions(
+            [
+                {
+                    "event": "INFUSION_START",
+                    "patientweight": 80.0,
+                    "rateuom": unit,
+                    "rate": rate,
+                }
+            ]
+        )
+    ).collect()
+    assert result["numeric_value"].to_list() == pytest.approx([] if expected is None else [expected])
+
+
+@pytest.mark.parametrize("unit", ["Uhr", "units/hour", "units/hr", "Umin", "units/min"])
+def test_vasopressin_unit_conversion(unit: str) -> None:
+    rate = 2.4 if "h" in unit.lower() else 0.04
+    result = mapped_infusions(
+        infusions(
+            [
+                {
+                    "rateuom": unit,
+                    "rate": rate,
+                }
+            ]
+        ),
+        name="vasopressin_rate",
+    ).collect()
+    assert result["numeric_value"].to_list() == pytest.approx([0.04])
+
+
+def test_rate_changes_are_not_cessations_and_stops_need_no_weight() -> None:
+    result = mapped_infusions(
+        infusions(
+            [
+                {"event": "INFUSION_END", "status": "ChangeDose/Rate"},
+                {"event": "INFUSION_END", "status": "Changed"},
+                {"event": "INFUSION_END", "status": None},
+                {"event": "INFUSION_END", "status": "FinishedRunning"},
+                {"status": "Stopped"},
+                {"status": "D/C'd"},
+                {"rate": -1.0},
+            ]
+        )
+    ).collect()
+    assert result["numeric_value"].to_list() == [0.0, 0.0, 0.0]
+
+
+def test_carevue_durations_require_a_closed_segment_and_do_not_bridge_orders() -> None:
+    source = infusions(
+        [
+            {},
+            {"time": START + timedelta(hours=1)},
+            {"time": START + timedelta(hours=2), "status": "Stopped"},
+            {"time": START + timedelta(hours=3)},
+            {"time": START + timedelta(hours=10)},
+            {"time": START + timedelta(hours=11), "linkorderid": "30"},
+            {"event": "INFUSION_END", "duration_minutes": 30.0},
+            {"event": "INFUSION_END", "duration_minutes": -30.0},
+        ]
+    )
+    result = mapped_infusions(source, name="norepinephrine_duration").collect()
+    assert sorted(result["numeric_value"].to_list()) == [30.0, 60.0, 60.0]
+
+
+def test_carevue_amount_rows_do_not_shorten_durations_or_depend_on_input_order() -> None:
+    rows = [
+        {"time": START + timedelta(hours=h), "rate": rate, "status": status}
+        for h, rate, status in [
+            (0, 8.0, None),
+            (0, None, None),
+            (1, 16.0, None),
+            (1, None, None),
+            (2, None, None),  # amount-only update carries the preceding rate
+            (3, None, "Stopped"),
+            (3, 16.0, None),
+            (4, None, None),  # a stop must not be forward-filled as active
+        ]
+    ]
+    for seed in range(20):
+        random.Random(seed).shuffle(rows)
+        actual = mapped_infusions(infusions(rows), name="norepinephrine_duration").collect().sort("time")
+        assert actual["time"].to_list() == [START + timedelta(hours=h) for h in [1, 2, 3]]
+        assert actual["numeric_value"].to_list() == [60.0, 60.0, 60.0]
+
+
+def test_duration_groups_drug_aliases_after_excluding_other_drugs() -> None:
+    source = infusions(
+        [
+            {"item": 30047},
+            {"item": 30043, "time": START + timedelta(minutes=30)},  # dopamine in the same linked stream
+            {"item": 30120, "time": START + timedelta(hours=1), "rate": None},  # norepinephrine alias
+            {"item": 30047, "time": START + timedelta(hours=2), "status": "Stopped"},
+        ]
+    )
+    actual = mapped_infusions(source, name="norepinephrine_duration").collect().sort("time")
+    assert actual.select("time", "numeric_value").rows() == [
+        (START + timedelta(hours=1), 60.0),
+        (START + timedelta(hours=2), 60.0),
+    ]
+
+
+def test_metavision_duration_preserves_coincident_segments() -> None:
+    source = infusions([{"event": "INFUSION_END", "duration_minutes": 30.0, "status": "Changed"}] * 2)
+    actual = mapped_infusions(source, name="norepinephrine_duration").collect()
+    assert actual["numeric_value"].to_list() == [30.0, 30.0]
+
+
+@pytest.mark.parametrize("missing", [{"subject_id": None}, {"stay_id": None}, {"linkorderid": None}])
+def test_carevue_duration_requires_identifiers(missing: dict) -> None:
+    source = infusions([{**missing, "time": START + timedelta(hours=h)} for h in [0, 1]])
+    assert mapped_infusions(source, name="norepinephrine_duration").collect().is_empty()
+
+
+def test_carevue_duration_six_hour_boundary_and_subject_stay_separation() -> None:
+    source = infusions(
+        [
+            {},
+            {"time": START + timedelta(hours=6)},
+            {"time": START + timedelta(hours=12, seconds=1)},
+            {"subject_id": 2, "time": START + timedelta(hours=1)},
+            {"stay_id": "99", "time": START + timedelta(hours=1)},
+        ]
+    )
+    actual = mapped_infusions(source, name="norepinephrine_duration").collect()
+    assert actual["numeric_value"].to_list() == [360.0]
+    assert actual["time"].to_list() == [START + timedelta(hours=6)]
+
+
+def test_metavision_duration_keeps_changed_segments_and_rejects_nonpositive_values() -> None:
+    source = infusions(
+        [
+            {"event": "INFUSION_END", "duration_minutes": value, "status": "Changed"}
+            for value in [30.0, 0.0, -1.0, None, float("inf"), float("nan")]
+        ]
+    )
+    actual = mapped_infusions(source, name="norepinephrine_duration").collect()
+    assert actual["numeric_value"].to_list() == [30.0]
+    assert actual["table"].to_list() == ["inputevents_mv"]
 
 
 @pytest.mark.parametrize(
@@ -211,6 +651,14 @@ def test_alarm_settings_other_substances_and_derived_duplicates_are_excluded(
     name: str, table: str, item: int, text: str | None
 ) -> None:
     assert mapped(name, table, item, 85, text).is_empty()
+
+
+@pytest.mark.parametrize("name", ["dopamine_rate", "dopamine_duration"])
+def test_milrinone_is_not_dopamine(name: str) -> None:
+    source = infusions(
+        [{"time": START + timedelta(hours=h), "item": item, "patientweight": 80.0} for item in [30125] for h in [0, 1]]
+    )
+    assert mapped_infusions(source, name=name).collect().is_empty()
 
 
 def test_absolute_lymphocytes_convert_cells_per_microlitre_to_thousands() -> None:
@@ -373,22 +821,6 @@ def test_culture_results_do_not_claim_specimen_time_availability(tmp_path: Path)
             assert frame["available_time"].null_count() == 1
 
 
-# Infusions are deferred until CareVue and MetaVision infusions are harmonised without a
-# dataset-specific transformer; cardiovascular SOFA, and so SOFA and Sepsis-3, need them.
-DEFERRED_INFUSIONS = {
-    *(
-        f"{drug}_{kind}"
-        for drug in ["norepinephrine", "epinephrine", "dopamine", "dobutamine"]
-        for kind in ["rate", "duration"]
-    ),
-    "phenylephrine_rate",
-    "vasopressin_rate",
-    "sofa_cardiovascular",
-    "sofa",
-    "sepsis3",
-}
-
-
 def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
     iii = {p.stem for p in (DATASET / "mappings").glob("*.yml")}
     iv = {p.stem for p in (CONFIGS / "datasets/mimic-iv/2.2/mappings").glob("*.yml")}
@@ -397,5 +829,5 @@ def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
         "erythrocyte_distribution_width_sd",
         "immature_granulocytes",
         "neutrophils_absolute",
-        *DEFERRED_INFUSIONS,
     }
+    assert len(iii & iv) >= len(iv) - 4

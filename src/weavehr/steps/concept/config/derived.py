@@ -1,4 +1,4 @@
-from typing import ClassVar, Literal, Self
+from typing import Any, ClassVar, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
@@ -22,13 +22,22 @@ class BaseConceptTable(BaseModel):
     pre_callbacks: list[str] = Field(
         default_factory=list, description="The list of callback configurations for the table."
     )
+    pre_filters: list[str] = Field(default_factory=list, description="Filters after pre_callbacks, before callbacks.")
     callbacks: list[str] = Field(default_factory=list, description="The list of callback configurations for the table.")
+    filters: list[str] = Field(default_factory=list, description="Filters after callbacks.")
     post_callbacks: list[str] = Field(
         default_factory=list, description="The list of callback configurations for the table."
     )
     columns: list[str] = Field(
         default_factory=list, description="The list of column names to include in the concept table."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _optional_is_for_lookups(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "optional" in data and "optional" not in cls.model_fields:
+            raise ValueError("`optional` applies only to asof lookups (`type: asof`)")
+        return data
 
     @model_validator(mode="after")
     def _reads_one_source(self) -> Self:
@@ -64,6 +73,30 @@ class JoinConceptTable(BaseConceptTable, JoinConfig):
     )
 
 
+class AsOfConceptTable(BaseConceptTable):
+    """Attach the latest earlier row within a group, preserving every main-table row.
+
+    An ``optional`` lookup whose input is unavailable (no output, or no join key column)
+    leaves the looked-up columns null instead of skipping the derived concept.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["asof"]
+    on: str = "time"
+    by: list[str] = Field(default_factory=lambda: ["subject_id"], min_length=1)
+    strategy: Literal["backward"] = "backward"
+    tolerance: str | None = Field(None, description="Optional maximum age of the matching measurement.")
+    suffix: str = "_right"
+    optional: bool = Field(False, description="Look up nothing, rather than fail, when the input is unavailable.")
+
+    @model_validator(mode="after")
+    def _optional_columns(self) -> Self:
+        if self.optional and (not self.columns or "*" in self.columns):
+            raise ValueError("an optional lookup needs explicit columns to describe its empty input")
+        return self
+
+
 class ConceptTable(BaseConceptTable):
     pass
 
@@ -89,9 +122,9 @@ class DerivedDatasetConceptConfig(BaseDatasetConfig):
 
     __weavehr_config_type__ = "concept"
 
-    type: Literal["derived"] = Field("derived", description="Type of concept: 'base', 'derived', or 'complex'.")
+    type: Literal["derived"] = Field("derived", description="Type of concept: 'simple', 'derived', or 'complex'.")
     table: ConceptTable = Field(..., description="The configuration for the concept table to be derived.")
-    join: list[JoinConceptTable] = Field(
+    join: list[JoinConceptTable | AsOfConceptTable] = Field(
         default_factory=list, description="The list of join configurations for the derived concept."
     )
     event: MEDSConceptTable = Field(

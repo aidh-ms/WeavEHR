@@ -12,7 +12,7 @@ from typing import cast
 from pydantic import ValidationError
 
 from weavehr.config.base import BaseConfig
-from weavehr.config.inheritance import has_extends, resolve_effective_configs
+from weavehr.config.inheritance import ConfigFileError, has_extends, resolve_effective_configs
 from weavehr.logging import get_logger
 from weavehr.utils.type import get_generic_type
 
@@ -255,7 +255,7 @@ def load_configs[T: BaseConfig](
         try:
             config = config_type.load(file_path, **kwargs)
             logger.debug("Loaded configuration %s from %s", config.identifier, file_path)
-        except ValidationError as e:
+        except (ValidationError, ConfigFileError) as e:
             logger.warning("failed to load config from %s: %s", file_path, e)
             continue
 

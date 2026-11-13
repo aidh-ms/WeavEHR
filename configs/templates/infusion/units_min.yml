@@ -1,0 +1,11 @@
+# Converts a prepared infusion `rate` with its normalised `unit` to units/min.
+# A stopped infusion (rate 0) is 0; rows with other units are dropped.
+type: derived
+event:
+  numeric_value: >-
+    case(
+      (rate == 0, 0),
+      (unit == "unitsmin" or unit == "umin", rate),
+      (unit == "unitsh" or unit == "uh", rate / 60))
+filters:
+  - is_finite(numeric_value) and numeric_value >= 0

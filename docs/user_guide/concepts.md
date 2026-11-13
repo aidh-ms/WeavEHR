@@ -47,7 +47,7 @@ During processing, each row is annotated with `dataset`, `version`, `table`, and
 
 ## Concept mappings
 
-A mapping file declares its `type` — `simple`, `derived`, or `complex`.
+A mapping file declares its `type` — `simple`, `derived`, `complex`, or `union`. Recipes shared between mappings are written once as [templates](#templates).
 
 ### Simple concepts
 
@@ -99,7 +99,7 @@ SOFA consumer applies the alignment and expiry policy described below.
 
 ### Derived concepts
 
-Derived concepts are computed **from other concepts** rather than from raw events. WeavEHR resolves the dependency graph automatically (topological ordering), so derived concepts can build on other derived concepts.
+Derived concepts combine **other concepts and/or extracted events**. WeavEHR resolves the dependency graph automatically (topological ordering), so derived concepts can build on other derived concepts.
 
 ```yaml
 type: derived
@@ -144,6 +144,64 @@ event:
 ```
 
 Each table reads exactly one of `concept` and `pattern`. A `pattern` table holds the matching rows of the extracted event files with all their columns (`subject_id`, `time`, `code`, `numeric_value`, `text_value` and the extension columns of the event), plus `dataset`, `version`, `table` and `event` as simple mapping expressions see them; as for concept tables, `columns` selects the ones to keep. Select the columns that the concept's extension expressions use, such as `dataset` and `table`. `pattern` tables are not dependencies, because extraction finishes before any concept runs. If none of the selected event files was extracted, the derived concept is skipped with a warning, as when an input concept has no output.
+
+`columns: ['*']` keeps all input columns. To combine events of tables with different meanings, such as two acquisition systems, use a [union](#union-concepts) with one source per table instead.
+
+#### Temporal joins and input preparation
+
+Use `type: asof` to attach the latest observation at or before each primary row's timestamp. For example, to attach body weight within a subject and stay:
+
+```yaml
+join:
+  - type: asof
+    concept: patient_weight.1.0.0
+    by: [subject_id, stay_id]
+    columns: [subject_id, time, stay_id, numeric_value]
+    optional: true
+    pre_filters:
+      - is_finite(numeric_value) and numeric_value > 0
+    filters:
+      - first_distinct(subject_id, stay_id, time, order_by=[numeric_value])
+event:
+  numeric_value: col(numeric_value) / col(numeric_value_right)
+```
+
+The join uses `on: time` and `strategy: backward`; it retains the primary rows, order, timestamps and identifiers, including simultaneous rows. `tolerance` optionally limits the age of the matched observation. Matching keys must have compatible types. Rows on the right with null join keys cannot match. Resolve simultaneous right-hand measurements explicitly, as the minimum positive weight selection does above.
+
+`optional: true` on an asof join looks up nothing when its input has no output, is not part of the concept step, or lacks a required join key: the primary rows are kept and the declared columns contain nulls. Only asof lookups can be optional; elsewhere an empty input would silently drop rows, so `optional` is rejected. Optional inputs require an explicit `columns` list so their empty schema is known: subject/time use MEDS types, `numeric_value` is floating point, other columns are strings, and join keys use the primary table's types. The example's division remains null without weight; a mapping can instead retain already-normalized values or recorded zeros.
+
+Input tables apply `pre_callbacks` → `pre_filters` → `callbacks` → `filters` after column selection. Their `post_callbacks` run after all joins. The existing [expression DSL](expressions.md) includes grouped aggregates, ordered forward fill and previous-row access. These allow interval calculations in normal derived mappings without a custom transformer. The CareVue infusion duration template (`configs/templates/carevue/duration.yml`) uses them after selecting a drug's items, so unrelated drugs cannot establish its intervals.
+
+### Union concepts
+
+Some datasets record one concept in several independent ways. In MIMIC-III, CareVue charts infusion rates as observations, while MetaVision charts infusion segments as a start and an end. A union mapping combines one mapping per source, instead of a single mapping that branches on where each row came from:
+
+```yaml
+type: union
+sources:
+  carevue:
+    extends: [carevue/rate, infusion/mcg_kg_min]
+    table:
+      pattern: {table: inputevents_cv, code: '^(?:[A-Z_]+//)?(?:30047|30120)(?:$|//)'}
+  metavision:
+    extends: [metavision/rate, infusion/mcg_kg_min]
+    table:
+      pattern: {table: inputevents_mv, code: '^(?:[A-Z_]+//)?221906(?:$|//)'}
+```
+
+Each source is a complete `simple` or `derived` mapping, including its `type`. The concept's output is the union of their rows, in the order the sources are declared. Sources take the dataset, version and name of the union mapping. The union depends on the concepts its derived sources depend on. If a derived source's input is unavailable, that source is skipped with a warning and the others still contribute. Sources are keyed by name rather than listed: this lets a mapping that extends templates override one source's settings, because lists are replaced as a whole when merged.
+
+### Templates
+
+A recipe shared by several mappings, datasets or versions is written once as a template. Any mapping in a configuration file, at any depth, can extend one template (`extends: <name>`) or several (`extends: [<name>, ...]`). In the union above, each source combines two templates. `carevue/rate` and `metavision/rate` prepare one acquisition system's rows. `infusion/mcg_kg_min` converts any prepared rate to mcg/kg/min. The mapping itself only selects the table and items. So templates say how rows are processed, and mappings say which rows.
+
+- A name such as `carevue/rate` resolves to `templates/carevue/rate.yml` in the nearest directory above the file that declares it. The bundled templates live in `configs/templates/`, grouped by source system (`carevue/`, `metavision/`) and by shared step (`infusion/`).
+- Templates are merged in order, then the mapping's own keys are merged over them. Dictionaries merge recursively; lists and scalars replace. Templates can extend other templates.
+- A template is a fragment: it only has to be valid once merged. Each template's comment lists the columns it expects from the templates it is combined with.
+- A missing or malformed template name, or a circular reference, skips the configuration that declares it, with a warning, like an invalid mapping.
+- Each file's templates are resolved before [version inheritance](versioning.md) (`extends.yml`) is applied. A demo or later version therefore inherits the resolved mapping. A version that restates a mapping can use the same template names. Identity always comes from the mapping's directory.
+
+`extends` is reserved for templates in every configuration file: dataset tables, mappings and step configs.
 
 ### Complex concepts
 

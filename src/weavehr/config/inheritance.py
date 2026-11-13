@@ -24,10 +24,20 @@ Bases may themselves extend other versions; chains are resolved recursively
 and cycles are rejected. The identity (dataset, version, name) of every
 resolved configuration always comes from the extending version's directory,
 never from where a file physically lives.
+
+Independently of versions, any mapping inside a configuration file may
+reuse templates with ``extends: <name>`` or ``extends: [<name>, ...]``. A name
+such as ``carevue/rate`` resolves to ``templates/carevue/rate.yml`` in the
+nearest directory above the declaring file that contains it, so templates are
+shared by datasets, versions and variants alike. Several templates are merged
+in order, then the mapping's own keys are merged over them, with the same
+deep-merge rules as versions. Templates are resolved within each file before
+version overlays are applied. :func:`resolve_config_file` is the single reader
+of configuration files.
 """
 
 import glob
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -37,6 +47,10 @@ from weavehr.logging import get_logger
 logger = get_logger(__name__)
 
 EXTENDS_FILE = "extends.yml"
+
+EXTENDS_KEY = "extends"
+
+TEMPLATES_DIR = "templates"
 
 CONFIG_SUFFIXES = {".yml", ".yaml"}
 
@@ -74,6 +88,95 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
         else:
             merged[key] = value
     return merged
+
+
+class ConfigFileError(ValueError):
+    """A configuration file is not a mapping or references a missing, malformed or circular template."""
+
+
+def find_template(name: str, origin: Path) -> Path:
+    """Locate a template in the nearest ``templates/`` directory above the file referencing it.
+
+    Args:
+        name: Template name relative to a ``templates/`` directory, without suffix
+            (e.g. ``carevue/rate``)
+        origin: The configuration or template file declaring the reference
+
+    Returns:
+        Path of the template file
+
+    Raises:
+        ConfigFileError: If the name is malformed or no such template exists
+    """
+    reference = PurePosixPath(name)
+    if not name.strip() or reference.is_absolute() or ".." in reference.parts:
+        raise ConfigFileError(f"{origin}: template names are relative, like 'carevue/rate' (got {name!r})")
+    if reference.suffix.lower() in CONFIG_SUFFIXES:
+        raise ConfigFileError(f"{origin}: write the template name {name!r} without its file suffix")
+    start = origin.absolute().parent
+    for directory in (start, *start.parents):
+        for suffix in sorted(CONFIG_SUFFIXES):
+            candidate = directory / TEMPLATES_DIR / f"{name}{suffix}"
+            if candidate.is_file():
+                return candidate
+    raise ConfigFileError(f"{origin}: template {name!r} not found in a {TEMPLATES_DIR}/ directory above it")
+
+
+def resolve_config_file(file_path: Path) -> dict[str, Any]:
+    """Read a configuration file and resolve every template it references.
+
+    Any mapping in the file, at any depth, may declare ``extends`` with one
+    template name or a list of names (see :func:`find_template`). The templates
+    are resolved recursively and merged in order, then the mapping's own keys
+    are merged over them with :func:`deep_merge`; the ``extends`` key is
+    consumed. An empty file is an empty mapping.
+
+    Args:
+        file_path: The configuration file
+
+    Returns:
+        The resolved configuration data
+
+    Raises:
+        ConfigFileError: If the file is not a mapping, or a template reference
+            is malformed, missing or circular
+    """
+    return _resolve_templates(_read_mapping(file_path), file_path, (file_path.resolve(),))
+
+
+def _read_mapping(file_path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(file_path.read_text())
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ConfigFileError(f"{file_path} must contain a YAML mapping")
+    return data
+
+
+def _resolve_templates(node: Any, origin: Path, chain: tuple[Path, ...]) -> Any:
+    """Resolve ``extends`` in ``node`` and its children; ``chain`` holds the files being resolved, for cycles."""
+    if isinstance(node, list):
+        return [_resolve_templates(item, origin, chain) for item in node]
+    if not isinstance(node, dict):
+        return node
+
+    resolved = {key: _resolve_templates(value, origin, chain) for key, value in node.items() if key != EXTENDS_KEY}
+    if EXTENDS_KEY not in node:
+        return resolved
+
+    names = node[EXTENDS_KEY]
+    names = [names] if isinstance(names, str) else names
+    if not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names):
+        raise ConfigFileError(f"{origin}: 'extends' must name a template or a list of templates")
+
+    base: dict[str, Any] = {}
+    for name in names:
+        template = find_template(name, origin)
+        if template.resolve() in chain:
+            raise ConfigFileError(f"{origin}: circular template reference {name!r}")
+        data = _resolve_templates(_read_mapping(template), template, (*chain, template.resolve()))
+        base = deep_merge(base, data)
+    return deep_merge(base, resolved)
 
 
 def resolve_version_chain(version_dir: Path) -> list[Path]:
@@ -158,8 +261,13 @@ def resolve_effective_config(subdir: Path, name: str) -> dict[str, Any] | None:
 
 
 def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, dict[str, Any]]:
-    """Overlay the configuration files matching ``pattern`` along the inheritance chain of ``subdir``."""
+    """Overlay the configuration files matching ``pattern`` along the inheritance chain of ``subdir``.
+
+    A configuration with a file that cannot be resolved (see :func:`resolve_config_file`) is
+    skipped with a warning, so that one broken file does not prevent loading the others.
+    """
     effective: dict[str, dict[str, Any]] = {}
+    failed: set[str] = set()
 
     for version_dir in resolve_version_chain(subdir.parent):
         directory = version_dir / subdir.name
@@ -171,7 +279,12 @@ def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, dict[str, An
                 continue
 
             name = file_path.relative_to(directory).with_suffix("").as_posix()
-            data = yaml.safe_load(file_path.read_text()) or {}
+            try:
+                data = resolve_config_file(file_path)
+            except ConfigFileError as e:
+                logger.warning("failed to load config %s: %s", file_path, e)
+                failed.add(name)
+                continue
 
             if data.get("deleted") is True:
                 logger.debug("Config %s deleted by %s", name, file_path)
@@ -184,4 +297,4 @@ def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, dict[str, An
 
             effective[name] = data
 
-    return effective
+    return {name: data for name, data in effective.items() if name not in failed}

@@ -8,6 +8,33 @@ from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
+class LowerStr(OutputCallbackProtocol):
+    """Convert strings to lowercase; null inputs remain null."""
+
+    def __init__(self, value: AstValue, output: str | None = None) -> None:
+        self.value = value
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        return with_output(to_expr(lf, self.value).cast(pl.String).str.to_lowercase(), self.output)
+
+
+@register_callback_cls
+class ReplaceStr(OutputCallbackProtocol):
+    """Replace every regex match in a string; null inputs remain null."""
+
+    def __init__(self, value: AstValue, pattern: str, replacement: str, output: str | None = None) -> None:
+        self.value = value
+        self.pattern = pattern
+        self.replacement = replacement
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        expr = to_expr(lf, self.value).cast(pl.String).str.replace_all(self.pattern, self.replacement)
+        return with_output(expr, self.output)
+
+
+@register_callback_cls
 class StrContains(OutputCallbackProtocol):
     """Test strings against a regular expression; null inputs remain null."""
 

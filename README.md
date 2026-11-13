@@ -39,7 +39,7 @@ flowchart LR
 ```
 
 1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
-2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). Concept dependencies are resolved automatically.
+2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), custom Python transformers (*complex* concepts), or a combination of independent per-source mappings (*union* concepts). Shared recipes are written once as YAML templates. Concept dependencies are resolved automatically.
 3. **Sharding step** *(in development)* — re-partitions harmonised data into analysis-ready shards.
 
 Each step reads its inputs and writes its outputs as a self-contained MEDS dataset inside the project, so intermediate results are inspectable and individual steps can be re-run in isolation.
@@ -50,7 +50,7 @@ WeavEHR ships with ready-to-use extraction and concept configurations under [`co
 
 | Dataset | Version | Extraction configs | Concept mappings |
 | --- | --- | --- | --- |
-| [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) | 1.4 | 20 tables (CareVue + MetaVision) | 136 mappings, infusions pending; [coverage](configs/datasets/mimic-iii/README.md) |
+| [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) | 1.4 | 20 tables (CareVue + MetaVision) | 149 mappings; [coverage](configs/datasets/mimic-iii/README.md) |
 | [MIMIC-III demo](https://physionet.org/content/mimiciii-demo/1.4/) | 1.4 | inherited; native uncompressed CSV paths | inherited |
 | [MIMIC-III CareVue subset](https://physionet.org/content/mimic3-carevue/1.4/) | 1.4 | inherited from MIMIC-III | inherited |
 | [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/) | 3.1, 2.2 | 19 tables (ICU + hosp) | ~80 concepts |

@@ -204,3 +204,14 @@ class TestParseExpr:
             lf.filter(parse_expr(lf, 'col(label) == None or not str_contains(label, "(?i)^alpha$|beta")'))
         )
         assert filtered["label"].to_list() == [None, "alphabet", "zalpha"]
+
+    def test_replace_str_normalizes_all_matches_and_preserves_nulls(self) -> None:
+        lf = pl.LazyFrame({"label": ["a / b / c", "hour HR hr", None]})
+        expr = 'replace_str(replace_str(label, "[/ ]", ""), "(?i)hour|hr", "h", output="clean")'
+        assert evaluate(lf, expr).to_list() == ["abc", "hhh", None]
+        assert parse_expr(lf, expr).meta.output_name() == "clean"
+
+    def test_is_finite_filters_nonfinite_values_and_preserves_zero(self) -> None:
+        lf = pl.LazyFrame({"value": [0.0, 2.0, float("inf"), -float("inf"), float("nan"), None]})
+        assert evaluate(lf, "is_finite(value)").to_list() == [True, True, False, False, False, None]
+        assert collect(lf.filter(parse_expr(lf, "is_finite(value / 2)")))["value"].to_list() == [0.0, 2.0]

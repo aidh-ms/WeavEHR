@@ -8,6 +8,17 @@ from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
+class IsFinite(CallbackProtocol):
+    """Whether a numeric expression is finite; null inputs remain null."""
+
+    def __init__(self, value: AstValue) -> None:
+        self.value = value
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        return to_expr(lf, self.value).is_finite()
+
+
+@register_callback_cls
 class DropNa(CallbackProtocol):
     def __init__(self, column: AstValue) -> None:
         self.column = to_col_name(column)

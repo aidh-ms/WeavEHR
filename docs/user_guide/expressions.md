@@ -66,7 +66,10 @@ Configs use expressions in three contexts with different expectations:
 | `cast(value, dtype, strict=False, output=...)` | Cast to a dtype (`int64`, `float32`, `string`, `datetime`, …) |
 | `strip_str(value, characters=None, output=...)` | Trim whitespace, or a supplied character set, from both ends; e.g. `strip_str(text_value, " %")` turns `"60%"` into `"60"` |
 | `str_contains(value, pattern, output=...)` | Test strings against a regular expression; null values remain null. |
+| `replace_str(value, pattern, replacement, output=...)` | Replace every regex match in a string; null values remain null. |
 | `replace(condition, then_value, else_value, output=...)` | Conditional value (`when/then/otherwise`) |
+| `case((condition, value), ..., default=None, output=...)` | Value of the first true condition; false or null conditions are skipped |
+| `lower_str(value, output=...)` | Lowercase a string, preserving nulls |
 
 ### Date and time
 
@@ -90,9 +93,20 @@ Configs use expressions in three contexts with different expectations:
 | Callback | Description |
 | --- | --- |
 | `drop_na(column)` | Keep rows where the column is not null |
+| `is_finite(value)` | Whether a numeric expression is finite (excludes infinity and NaN); null values remain null |
 | `drop_if(condition)` | Drop rows where the condition is true |
 | `first_distinct(col_a, col_b, ...)` | Keep only the first row per distinct combination of the given columns |
 | `first_distinct(col_a, ..., order_by=[col_x, ...], descending=False)` | Keep the first row per distinct combination after ordering each group by `order_by` (nulls last, ties keep row order); use `descending=True` to keep the last |
+
+### Grouped expressions
+
+These retain every row in its original position. `by` is a nonempty list of grouping columns; ordered operations evaluate within each group using `order_by`. Resolve coincident observations before applying ordered operations when their order matters.
+
+| Callback | Description |
+| --- | --- |
+| `aggregate(value, operation, by=[...], output=...)` | Repeat each group's `max`, `min`, `any`, or `sum` on its rows |
+| `forward_fill(value, by=[...], order_by=time, output=...)` | Carry the preceding non-null value within a group; zero remains a value |
+| `lag(value, by=[...], order_by=time, output=...)` | The previous row's value within a group, including nulls; the first row has no predecessor |
 
 ### Frame transformations
 

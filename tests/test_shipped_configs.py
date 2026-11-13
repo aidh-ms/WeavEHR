@@ -26,6 +26,7 @@ from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import MappingPatternConfig, SimpleDatasetConceptConfig
+from weavehr.steps.concept.config.union import UnionDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.extraction.config.table import BaseTableConfig, TableConfig
 from weavehr.steps.extraction.step import ExtractionStep
@@ -136,6 +137,13 @@ def empty_event_input(dataset: str, version: str, pattern: MappingPatternConfig,
         ],
         how="diagonal_relaxed",
     )
+
+
+def mapping_parts(dataset_concept: Any, source: str) -> list[tuple[Any, str]]:
+    """The mappings to check: a union mapping's sources, each on its own, or the mapping itself."""
+    if isinstance(dataset_concept, UnionDatasetConceptConfig):
+        return [(part, f"{source} source {name!r}") for name, part in dataset_concept.sources.items()]
+    return [(dataset_concept, source)]
 
 
 def assert_resolves(build: Any, source: str) -> None:
@@ -250,8 +258,11 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
     """
     concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS)
 
-    for dataset_concept in concept.dataset_concepts:
-        source = f"{relative_id(concept_file)} [{dataset_concept.dataset} {dataset_concept.version}]"
+    for dataset_concept, source in (
+        part
+        for mapping in concept.dataset_concepts
+        for part in mapping_parts(mapping, f"{relative_id(concept_file)} [{mapping.dataset} {mapping.version}]")
+    ):
         dataset, version = dataset_concept.dataset, dataset_concept.version
 
         if isinstance(dataset_concept, SimpleDatasetConceptConfig):
@@ -302,9 +313,11 @@ def test_concept_parses_with_all_dataset_mappings(concept_file: Path, caplog: py
     )
     assert_expressions_parse(list(concept.extension_columns.values()), relative_id(concept_file))
 
-    for dataset_concept in concept.dataset_concepts:
-        source = f"{relative_id(concept_file)} [{dataset_concept.dataset}]"
-
+    for dataset_concept, source in (
+        part
+        for mapping in concept.dataset_concepts
+        for part in mapping_parts(mapping, f"{relative_id(concept_file)} [{mapping.dataset}]")
+    ):
         if isinstance(dataset_concept, SimpleDatasetConceptConfig):
             assert dataset_concept.mappings, f"{source}: no mappings defined"
             for mapping in dataset_concept.mappings:
@@ -320,10 +333,33 @@ def test_concept_parses_with_all_dataset_mappings(concept_file: Path, caplog: py
         if isinstance(dataset_concept, DerivedDatasetConceptConfig):
             for concept_table in (dataset_concept.table, *dataset_concept.join):
                 assert_expressions_parse(
-                    concept_table.pre_callbacks + concept_table.callbacks + concept_table.post_callbacks,
+                    concept_table.pre_callbacks
+                    + concept_table.pre_filters
+                    + concept_table.callbacks
+                    + concept_table.filters
+                    + concept_table.post_callbacks,
                     source,
                 )
             assert_expressions_parse(dataset_concept.filters, source)
+
+
+def referenced_templates(node: Any) -> set[str]:
+    if isinstance(node, list):
+        return set().union(*(referenced_templates(item) for item in node))
+    if not isinstance(node, dict):
+        return set()
+    names = node.get("extends", [])
+    names = {names} if isinstance(names, str) else set(names)
+    return names.union(*(referenced_templates(value) for value in node.values()))
+
+
+def test_every_template_is_used() -> None:
+    """Templates are validated through the configs extending them, so each must be extended somewhere."""
+    template_dir = CONFIG_ROOT / "templates"
+    templates = {path.relative_to(template_dir).with_suffix("").as_posix() for path in template_dir.rglob("*.yml")}
+    used = set().union(*(referenced_templates(yaml.safe_load(path.read_text())) for path in CONFIG_ROOT.rglob("*.yml")))
+    assert templates, "no shipped templates found"
+    assert not templates - used, f"unused templates: {sorted(templates - used)}"
 
 
 def test_demo_dataset_inherits_full_table_set() -> None:

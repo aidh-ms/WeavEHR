@@ -138,9 +138,11 @@ class BaseConfig(BaseModel, metaclass=ABCMeta):
         Raises:
             FileNotFoundError: If file_path does not exist
             yaml.YAMLError: If YAML parsing fails
+            ConfigFileError: If the file is not a mapping or a template it extends cannot be resolved
         """
-        with open(file_path, "r") as f:
-            data = yaml.safe_load(f)
+        from weavehr.config.inheritance import resolve_config_file  # Avoid circular import
+
+        data = resolve_config_file(file_path)
 
         for k, v in kwargs.items():
             if k not in data:

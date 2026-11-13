@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from weavehr.steps.concept.config.concept import ConceptConfig
-from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
+from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig, JoinConceptTable
 from weavehr.steps.concept.config.simple import MappingConfig, SimpleDatasetConceptConfig
 
 
@@ -242,6 +242,7 @@ event:
     def test_join_defaults(self) -> None:
         derived = self.make_derived()
         join = derived.join[0]
+        assert isinstance(join, JoinConceptTable)
         assert join.join_params == {
             "how": "full",
             "maintain_order": "left_right",
@@ -262,6 +263,7 @@ event:
             ]
         )
         join = derived.join[0]
+        assert isinstance(join, JoinConceptTable)
         assert join.join_params == {
             "how": "full",
             "maintain_order": "none",

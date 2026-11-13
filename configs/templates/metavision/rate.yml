@@ -1,0 +1,22 @@
+# MetaVision charts each infusion segment as a start (INFUSION_START) and an
+# end (INFUSION_END). Prepares what the infusion/ conversions expect: `rate` is
+# the ordered rate at the start and 0 at an end that stops the infusion (a rate
+# change ends one segment and starts the next, so it is no stop); `unit` is the
+# normalised rate unit, `weight` the body weight charted with the infusion and
+# `stay_id` a string. Mappings add the pattern's table and item codes.
+type: derived
+table:
+  columns: ['*']
+  callbacks:
+    - cast(stay_id, "string", output=stay_id)
+    - lower_str(replace_str(replace_str(rateuom, "[/\\s]", ""), "(?i)hour|hr", "h"), output=unit)
+    - replace(patientweight > 0, cast(patientweight, "float64"), None, output=weight)
+    - >-
+      case(
+        (event == "INFUSION_START", cast(originalrate, "float64")),
+        (event == "INFUSION_END" and text_value != None and text_value != "Changed" and text_value != "ChangeDose/Rate", 0),
+        output=rate)
+event:
+  extension:
+    stay_id: col(stay_id)
+    linkorderid: col(linkorderid)

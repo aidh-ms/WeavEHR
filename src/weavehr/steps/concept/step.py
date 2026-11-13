@@ -10,8 +10,7 @@ import shutil
 from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
-from typing import Callable
-from uuid import uuid4
+from typing import Callable, Iterable, Iterator
 
 import polars as pl
 
@@ -23,8 +22,9 @@ from weavehr.steps.concept.config.concept import (
     ConceptConfig,
     DerivedDatasetConceptConfig,
     SimpleDatasetConceptConfig,
+    UnionDatasetConceptConfig,
 )
-from weavehr.steps.concept.config.derived import BaseConceptTable
+from weavehr.steps.concept.config.derived import AsOfConceptTable, BaseConceptTable
 from weavehr.steps.concept.config.simple import MappingConfig, MappingPatternConfig
 from weavehr.steps.concept.config.step import ConceptStepConfig
 from weavehr.steps.concept.registry import concept_config_registry
@@ -100,7 +100,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                         dataset_extension_columns=dataset_config.extension_columns,
                     )
 
-                if isinstance(dataset_concept, (DerivedDatasetConceptConfig, ComplexDatasetConceptConfig)):
+                if isinstance(
+                    dataset_concept,
+                    (DerivedDatasetConceptConfig, ComplexDatasetConceptConfig, UnionDatasetConceptConfig),
+                ):
                     logger.debug(
                         "Registering dependent concept %s for dataset %s",
                         concept.identifier,
@@ -115,7 +118,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     dataset,
                 )
                 concept = self._registry.get(concept_id)
-                assert concept is not None, f"concept {concept_id} not found in registry"
+                if concept is None:
+                    # A dependency outside this step's concepts has no output to read: concepts that
+                    # require it are skipped, optional lookups of it find nothing.
+                    logger.warning("concept %s is a dependency but not part of this concept step", concept_id)
+                    continue
 
                 dataset_concept = concept.get_dataset_concept(dataset, version)
                 if dataset_concept is None:
@@ -147,6 +154,13 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     self.extract_complex_concept(
                         concept,
                         dataset_concept,
+                    )
+
+                if isinstance(dataset_concept, UnionDatasetConceptConfig):
+                    self.extract_union_concept(
+                        concept,
+                        dataset_concept,
+                        dataset_extension_columns=dataset_config.extension_columns,
                     )
 
             if routed_cache_dir.exists():
@@ -473,33 +487,36 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             concept.identifier,
             dataset_concept.dataset,
         )
-        assert self._workspace_dir is not None
-        output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
-        # Per-mapping parts are staged next to the final file, one directory per dataset version.
-        output_dataset_path = output_file.with_suffix(".tmp")
-        output_dataset_path.mkdir(parents=True, exist_ok=True)
+        if not self.extraction_dataset:
+            logger.warning("skipping concept %s: extraction dataset not found", concept.identifier)
+            return
+        self._write_concept_parts(
+            concept,
+            dataset_concept.dataset,
+            dataset_concept.version,
+            self._simple_frames(concept, dataset_concept, routed_sources, dataset_extension_columns),
+        )
+
+    def _simple_frames(
+        self,
+        concept: ConceptConfig,
+        dataset_concept: SimpleDatasetConceptConfig,
+        routed_sources: dict[tuple[Path, str], list[Path]] | None = None,
+        dataset_extension_columns: dict[str, str] | None = None,
+    ) -> Iterator[pl.LazyFrame]:
+        """Yield the mapped rows of each extracted event file that a simple mapping selects."""
+        dataset = dataset_concept.dataset
+        version = dataset_concept.version
 
         for mapping in dataset_concept.mappings:
-            dataset = dataset_concept.dataset
-            version = dataset_concept.version
             table = mapping.pattern.table
-            event = mapping.pattern.event
-
-            extraction_dataset = self.extraction_dataset
-            if not extraction_dataset:
-                logger.warning(
-                    "skipping concept %s: extraction dataset not found",
-                    concept.identifier,
-                )
-                return
-
-            data_paths = self.event_paths(dataset, version, table, event)
+            data_paths = self.event_paths(dataset, version, table, mapping.pattern.event)
 
             if not data_paths:
                 logger.warning(
-                    "skipping mapping for concept %s: no event files found in %s",
+                    "skipping mapping for concept %s: no event files found for table %s",
                     concept.name,
-                    extraction_dataset.data_path / dataset / version / table,
+                    table,
                 )
                 continue
 
@@ -548,29 +565,44 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     dataset_extension_columns=dataset_extension_columns,
                 )
 
-                lf = self.apply_limits(concept, lf)
+                yield self.apply_limits(concept, lf)
 
-                tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
-                logger.debug(
-                    "Writing temporary concept file for %s to %s",
-                    concept.identifier,
-                    tmp_output_file,
-                )
-                lf.sink_parquet(
-                    tmp_output_file,
-                )
+    def _write_concept_parts(
+        self, concept: ConceptConfig, dataset: str, version: str, frames: Iterable[pl.LazyFrame]
+    ) -> None:
+        """Write each frame as a staged part, then merge the parts into the concept's output file.
 
-                del lf
-                gc.collect()
+        Parts are merged in the order they are produced. Nothing is written when there are no frames.
+        """
+        assert self._workspace_dir is not None
+        output_file = self.concept_output_file(concept, dataset, version)
+        # Parts are staged next to the final file, one directory per dataset version.
+        output_dataset_path = output_file.with_suffix(".tmp")
 
-        files = list(output_dataset_path.glob("*.parquet"))
-        if files:
-            logger.info(
-                "Writing merged concept file for %s to %s",
+        files = []
+        for index, lf in enumerate(frames):
+            output_dataset_path.mkdir(parents=True, exist_ok=True)
+            tmp_output_file = output_dataset_path / f"{index:05d}.parquet"
+            logger.debug(
+                "Writing temporary concept file for %s to %s",
                 concept.identifier,
-                output_file,
+                tmp_output_file,
             )
-            pl.concat([pl.scan_parquet(file) for file in files], how="diagonal").sink_parquet(output_file)
+            lf.sink_parquet(tmp_output_file)
+            files.append(tmp_output_file)
+
+            del lf
+            gc.collect()
+
+        if not files:
+            return
+
+        logger.info(
+            "Writing merged concept file for %s to %s",
+            concept.identifier,
+            output_file,
+        )
+        pl.concat([pl.scan_parquet(file) for file in files], how="diagonal").sink_parquet(output_file)
 
         logger.debug(
             "Cleaning up temporary concept files for %s in %s",
@@ -678,35 +710,74 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             LazyFrame with the MEDS columns plus the concept's extension columns
         """
 
-        def _read_table(table: BaseConceptTable) -> pl.LazyFrame:
-            lf = scan(table).select(table.columns)
+        def _prepare(table: BaseConceptTable, lf: pl.LazyFrame) -> pl.LazyFrame:
+            lf = lf.select(table.columns)
 
             for expr in table.pre_callbacks:
                 lf = lf.with_columns(parse_expr(lf, expr))
 
+            for expr in table.pre_filters:
+                lf = lf.filter(parse_expr(lf, expr))
+
             for expr in table.callbacks:
                 lf = lf.with_columns(parse_expr(lf, expr))
 
+            for expr in table.filters:
+                lf = lf.filter(parse_expr(lf, expr))
+
             return lf
 
-        lf = _read_table(dataset_concept.table)
+        def _lookup(table: AsOfConceptTable, keys: pl.Schema) -> pl.LazyFrame:
+            """Read a lookup table; an unavailable optional one is empty, typed by the main table's keys."""
+            try:
+                lf = scan(table)
+                schema = lf.collect_schema()
+                if table.optional and any(key in table.columns and key not in schema for key in keys):
+                    raise FileNotFoundError(f"{table.source}: a lookup key is unavailable")
+            except FileNotFoundError as e:
+                if not table.optional:
+                    raise
+                logger.warning("Looking up nothing for optional %s: %s", table.source, e)
+                meds = pl.Schema({"subject_id": pl.Int64, "time": pl.Datetime("us"), "numeric_value": pl.Float64})
+                lf = pl.LazyFrame(schema={name: keys.get(name, meds.get(name, pl.String)) for name in table.columns})
+            return _prepare(table, lf)
+
+        lf = _prepare(dataset_concept.table, scan(dataset_concept.table))
         post_callbacks = [*dataset_concept.table.post_callbacks]
 
         for join_table in dataset_concept.join:
-            logger.debug(
-                "Joining %s with %s (how=%s)",
-                dataset_concept.table.source,
-                join_table.source,
-                join_table.how,
-            )
-            lf = lf.join(
-                _read_table(join_table),
-                suffix=join_table.suffix,
-                # Full joins don't coalesce keys by default, which would leave
-                # subject_id/time null for rows present only on the right side.
-                coalesce=True,
-                **join_table.join_params,
-            )
+            logger.debug("Joining %s with %s", dataset_concept.table.source, join_table.source)
+            if isinstance(join_table, AsOfConceptTable):
+                keys = [*join_table.by, join_table.on]
+                right = _lookup(join_table, lf.select(keys).collect_schema()).drop_nulls(keys)
+                # Sort for the lookup, then restore the source rows' original order.
+                row_order = "__join_order"
+                while row_order in lf.collect_schema():
+                    row_order += "_"
+                lf = (
+                    lf.with_row_index(row_order)
+                    .sort(join_table.on)
+                    .join_asof(
+                        right.sort(join_table.on),
+                        on=join_table.on,
+                        by=join_table.by,
+                        strategy=join_table.strategy,
+                        tolerance=join_table.tolerance,
+                        suffix=join_table.suffix,
+                        check_sortedness=False,
+                    )
+                    .sort(row_order)
+                    .drop(row_order)
+                )
+            else:
+                lf = lf.join(
+                    _prepare(join_table, scan(join_table)),
+                    suffix=join_table.suffix,
+                    # Full joins don't coalesce keys by default, which would leave
+                    # subject_id/time null for rows present only on the right side.
+                    coalesce=True,
+                    **join_table.join_params,
+                )
             post_callbacks.extend(join_table.post_callbacks)
 
         for expr in post_callbacks:
@@ -764,6 +835,28 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             concept.identifier,
             dataset_concept.dataset,
         )
+        lf = self._derived_frame(concept, dataset_concept)
+        if lf is None:
+            return
+
+        output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info(
+            "Writing derived concept %s to %s",
+            concept.identifier,
+            output_file,
+        )
+
+        lf.sink_parquet(output_file)
+
+        del lf
+        gc.collect()
+
+    def _derived_frame(
+        self, concept: ConceptConfig, dataset_concept: DerivedDatasetConceptConfig
+    ) -> pl.LazyFrame | None:
+        """Build a derived mapping's rows, or return None (with a warning) if one of its inputs is unavailable."""
 
         def _scan(table: BaseConceptTable) -> pl.LazyFrame:
             if table.pattern is not None:
@@ -788,23 +881,40 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             logger.warning(
                 "skipping derived concept %s for dataset %s: %s", concept.identifier, dataset_concept.dataset, e
             )
+            return None
+
+        return self.apply_limits(concept, lf)
+
+    def extract_union_concept(
+        self,
+        concept: ConceptConfig,
+        dataset_concept: UnionDatasetConceptConfig,
+        dataset_extension_columns: dict[str, str] | None = None,
+    ) -> None:
+        """Extract the rows of every source of a union mapping into one output file.
+
+        Sources are processed in the order they are declared. A derived source whose
+        inputs are unavailable is skipped with a warning; the other sources still
+        contribute their rows.
+        """
+        logger.debug(
+            "Extracting union concept %s for dataset %s",
+            concept.identifier,
+            dataset_concept.dataset,
+        )
+        if not self.extraction_dataset:
+            logger.warning("skipping concept %s: extraction dataset not found", concept.identifier)
             return
 
-        lf = self.apply_limits(concept, lf)
+        def frames() -> Iterator[pl.LazyFrame]:
+            for name, source in dataset_concept.sources.items():
+                logger.debug("Extracting source %r of concept %s", name, concept.identifier)
+                if isinstance(source, SimpleDatasetConceptConfig):
+                    yield from self._simple_frames(concept, source, dataset_extension_columns=dataset_extension_columns)
+                elif (lf := self._derived_frame(concept, source)) is not None:
+                    yield lf
 
-        output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-
-        logger.info(
-            "Writing derived concept %s to %s",
-            concept.identifier,
-            output_file,
-        )
-
-        lf.sink_parquet(output_file)
-
-        del lf
-        gc.collect()
+        self._write_concept_parts(concept, dataset_concept.dataset, dataset_concept.version, frames())
 
     def extract_complex_concept(
         self,
