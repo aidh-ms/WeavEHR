@@ -3,7 +3,7 @@ mappings:
   - pattern:
       table: procedureevents
       event: PROCEDURE_END
-      code: (225792(//.*)?)
+      code: ^(?:PROCEDURE_END//)?(?:225792)(?:$|//)
     level: invasive
     columns:
       extension:
@@ -12,7 +12,7 @@ mappings:
   - pattern:
       table: procedureevents
       event: PROCEDURE_END
-      code: (225794(//.*)?)
+      code: ^(?:PROCEDURE_END//)?(?:225794)(?:$|//)
     level: noninvasive
     columns:
       extension:

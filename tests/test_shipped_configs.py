@@ -9,29 +9,43 @@ point (including columns added by callbacks, joins and transformations). Dataset
 through the version inheritance mechanism (extends.yml) first, so both
 physical files and inherited/merged configs are validated. They guard the
 configuration library — the part of WeavEHR most contributors will touch.
+
+Two generic invariants check how the simple mappings of every dataset version select
+extracted rows, through the concept step's own code matching (`ConceptStep.match_pattern`):
+a numeric ID in a code pattern must not also match a longer ID, and one concept must not
+select the same source row through two mappings. A dataset version whose violation cannot
+be fixed at once can be recorded in ``KNOWN_VIOLATIONS`` and then runs as a strict xfail.
 """
 
 import logging
+import re
+from collections.abc import Callable, Sequence
+from itertools import combinations, product
 from pathlib import Path
 from typing import Any
 
 import polars as pl
 import pytest
 import yaml
+from pydantic import TypeAdapter
 
+from tests.datasets.support import (
+    CONFIG_ROOT,
+    MEDS_SCHEMA,
+    build_event_frames,
+    extracted_event_schemas,
+    load_effective_table,
+    relative_id,
+)
 from weavehr.callbacks.interpreter import ExprInterpreter
 from weavehr.callbacks.proto import UnknownColumnError
-from weavehr.config.inheritance import resolve_effective_config, resolve_effective_configs
+from weavehr.config.inheritance import resolve_effective_configs
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
-from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.config.concept import ConceptConfig, DatasetConceptConfigUnion
 from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
-from weavehr.steps.concept.config.simple import MappingPatternConfig, SimpleDatasetConceptConfig
+from weavehr.steps.concept.config.simple import MappingConfig, MappingPatternConfig, SimpleDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.extraction.config.table import BaseTableConfig, TableConfig
-from weavehr.steps.extraction.step import ExtractionStep
-
-REPO_ROOT = Path(__file__).parents[1]
-CONFIG_ROOT = REPO_ROOT / "configs"
 
 # Version dirs may be marker-only (just an extends.yml, no physical tables/
 # or mappings/ subdirectory), so collect by version dir rather than globbing
@@ -44,10 +58,6 @@ DATASET_CONCEPT_DIRS = [
 ]
 
 
-def relative_id(path: Path) -> str:
-    return str(path.relative_to(CONFIG_ROOT))
-
-
 def effective_table_cases() -> list[Any]:
     """One test case per effective table config of each dataset version."""
     cases = []
@@ -55,54 +65,6 @@ def effective_table_cases() -> list[Any]:
         for name in sorted(resolve_effective_configs(subdir)):
             cases.append(pytest.param(subdir, name, id=f"{relative_id(subdir)}/{name}"))
     return cases
-
-
-def load_effective_table(subdir: Path, name: str) -> TableConfig:
-    """Build a TableConfig from effective data, raising on validation errors."""
-    data = resolve_effective_config(subdir, name)
-    assert data is not None, f"{relative_id(subdir)}/{name} does not resolve"
-    data.setdefault("dataset", subdir.parent.parent.name)
-    data.setdefault("version", subdir.parent.name)
-    data.setdefault("name", Path(name).name)
-    return TableConfig(**data)
-
-
-# Schema of the MEDS columns every extracted event and concept output has.
-MEDS_SCHEMA: dict[str, pl.DataType] = {
-    "subject_id": pl.Int64(),
-    "time": pl.Datetime("us"),
-    "code": pl.String(),
-    "numeric_value": pl.Float32(),
-    "text_value": pl.String(),
-}
-
-
-def empty_table_frame(table: BaseTableConfig) -> pl.LazyFrame:
-    """An empty frame with the declared columns of a table, as the extraction step scans it."""
-    return pl.LazyFrame(schema=table.dtypes)
-
-
-def build_event_frames(table: TableConfig) -> dict[str, pl.LazyFrame]:
-    """Run the extraction pipeline of a table on empty frames; returns the output frame per event."""
-    lf = ExtractionStep.build_table_frame(table, empty_table_frame)
-    return {event.name: ExtractionStep.build_event_frame(lf, event, include_event_name=True) for event in table.events}
-
-
-def extracted_event_schemas(dataset: str, version: str) -> dict[tuple[str, str], pl.Schema]:
-    """Output schema of every extracted (table, event) of a dataset version."""
-    cache_key = (dataset, version)
-    if cache_key not in _EVENT_SCHEMA_CACHE:
-        subdir = CONFIG_ROOT / "datasets" / dataset / version / "tables"
-        schemas = {}
-        for name in resolve_effective_configs(subdir):
-            table = load_effective_table(subdir, name)
-            for event_name, lf in build_event_frames(table).items():
-                schemas[(table.name, event_name)] = lf.collect_schema()
-        _EVENT_SCHEMA_CACHE[cache_key] = schemas
-    return _EVENT_SCHEMA_CACHE[cache_key]
-
-
-_EVENT_SCHEMA_CACHE: dict[tuple[str, str], dict[tuple[str, str], pl.Schema]] = {}
 
 
 def concept_output_schema(concept_reference: str) -> pl.Schema:
@@ -429,27 +391,444 @@ def test_config_inventory_is_nonempty() -> None:
     assert len(DATASET_CONCEPT_DIRS) >= 5
 
 
-# Datasets whose codes start with a bare numeric id after the event name. Concept
-# patterns are matched with an unanchored regex search, so an id pattern without a
-# leading ``^`` also matches longer ids that end in the same digits (e.g. HiRID
-# ``2200`` end-tidal CO2 matching ``20002200`` CRP).
-START_ANCHORED_MAPPING_DIRS = [
-    CONFIG_ROOT / "datasets" / "hirid" / "1.1.1" / "mappings",
-    CONFIG_ROOT / "datasets" / "sic" / "1.0.6" / "mappings",
-    CONFIG_ROOT / "datasets" / "aumc" / "1.5.0" / "mappings",
-]
+# --- Generic invariants of simple mappings ------------------------------------------------------
+#
+# A simple mapping selects extracted rows by searching its regex ``pattern.code`` in the ``code``
+# column, unanchored (`ConceptStep.match_pattern`). Two classes of bug follow from that, and no other
+# test catches them: an ID pattern that also matches a longer ID (HiRID end-tidal CO2
+# ``(2200)(//.*)?$`` matched CRP ``20002200``), and one source row emitted twice by one concept
+# (an item listed in two of its mappings, so every charted row produces two rows). Both invariants
+# run on the effective mappings of every dataset version.
+
+Invariant = Callable[[str, Sequence[MappingConfig]], list[str]]
+"""An invariant over the simple mappings of one dataset concept; returns readable violations."""
+
+ANY_EVENT = "ANY_EVENT"
+"""Event name a mapping without ``pattern.event`` is matched with; sampled codes never contain it."""
+
+# Sample of the character classes ``\d``, ``\w``, ``\s`` (and negations), and of zero-width escapes.
+ESCAPE_SAMPLES = {"d": "0", "D": "x", "w": "a", "W": " ", "s": " ", "S": "x", "b": "", "B": "", "A": "", "z": ""}
 
 
-@pytest.mark.parametrize("mapping_dir", START_ANCHORED_MAPPING_DIRS, ids=relative_id)
-def test_id_patterns_are_start_anchored(mapping_dir: Path) -> None:
-    unanchored = {
-        f"{name}: {mapping['pattern']['code']}"
-        for name, data in resolve_effective_configs(mapping_dir).items()
-        if data.get("type", "simple") == "simple"
-        for mapping in data.get("mappings", [])
-        if not mapping["pattern"]["code"].startswith("^")
-    }
-    assert not unanchored, f"patterns without a leading '^': {sorted(unanchored)}"
+def regex_samples(pattern: str, limit: int = 4096) -> list[str]:
+    """Sample strings for a mapping regex: every alternative once, every repetition at its minimum.
+
+    Best effort over the syntax the shipped patterns use (literals and escapes, ``.``, character
+    classes, groups including ``(?:...)`` and inline flags, alternation, quantifiers, ``^``/``$``);
+    other syntax yields no samples. A sample need not match: callers keep only the samples
+    `ConceptStep.match_pattern` confirms, so imperfect sampling can hide an ID but never invent a match.
+    """
+    pos = 0
+
+    def peek(chars: str) -> bool:
+        return pos < len(pattern) and pattern[pos] in chars
+
+    def alternation() -> list[str]:
+        nonlocal pos
+        samples = sequence()
+        while peek("|"):
+            pos += 1
+            samples += sequence()
+        return samples[:limit]
+
+    def sequence() -> list[str]:
+        nonlocal pos
+        samples = [""]
+        while pos < len(pattern) and not peek("|)"):
+            options = atom()
+            if quantifier := re.match(r"[?*+]|\{(\d+)(?:,\d*)?\}", pattern[pos:]):
+                pos += quantifier.end()
+                if peek("?+"):  # lazy or possessive
+                    pos += 1
+                minimum = int(quantifier[1] or quantifier[0] == "+")
+                options = ["".join(parts) for parts in product(options, repeat=minimum)][:limit]
+            samples = [sample + option for sample in samples for option in options][:limit]
+        return samples
+
+    def atom() -> list[str]:
+        nonlocal pos
+        char = pattern[pos]
+        pos += 1
+        if char == "(":
+            if flags := re.match(r"\?[a-zA-Z-]*\)", pattern[pos:]):  # inline flags, e.g. (?i)
+                pos += flags.end()
+                return [""]
+            if opener := re.match(r"\?(?:P?<\w+>|[a-zA-Z-]*:)", pattern[pos:]):
+                pos += opener.end()
+            samples = alternation()
+            if not peek(")"):
+                raise ValueError("unbalanced group")
+            pos += 1
+            return samples
+        if char == "[":
+            negated = peek("^")
+            if (members := re.match(r"\^?(\]?(?:\\.|[^\]])*)\]", pattern[pos:])) is None:
+                raise ValueError("unterminated character class")
+            pos += members.end()
+            if negated:
+                return [next((c for c in "x_0 " if c not in members[1]), "x")]
+            if members[1].startswith("\\"):
+                return [ESCAPE_SAMPLES.get(members[1][1], members[1][1])]
+            return [members[1][0]]
+        if char == ".":
+            return ["x"]
+        if char in "^$":
+            return [""]
+        if char == "\\":
+            escaped = pattern[pos]
+            pos += 1
+            if escaped in ESCAPE_SAMPLES:
+                return [ESCAPE_SAMPLES[escaped]]
+            if escaped.isalnum():
+                raise ValueError(f"unsupported escape \\{escaped}")
+            return [escaped]
+        return [char]
+
+    try:
+        samples = alternation()
+    except (IndexError, ValueError):
+        return []
+    return samples if pos == len(pattern) else []
+
+
+def pattern_matches(pattern: str, event: str, codes: Sequence[str]) -> list[bool]:
+    """Whether a mapping pattern selects each extracted code of ``event``, through `ConceptStep.match_pattern`."""
+    frame = pl.LazyFrame({"code": list(codes)}, schema={"code": pl.String}).with_row_index()
+    code_pattern = MappingPatternConfig(table="any", code=pattern)  # no extensions: the code alone selects
+    selected = set(ConceptStep.match_pattern(frame, code_pattern, event).collect()["index"])
+    return [index in selected for index in range(len(codes))]
+
+
+def numeric_id_witnesses(pattern: str, event: str) -> dict[str, list[str]]:
+    """The numeric IDs a mapping pattern selects, each with the sampled codes that show it.
+
+    A digit run of the pattern is an ID if the pattern matches a sampled code
+    (:func:`regex_samples`, confirmed by `ConceptStep.match_pattern`) in which the run is a whole
+    ``//``-separated part: ``211`` and ``220045`` in ``^(?:[A-Z_]+//)?(?:211|220045)(?:$|//)``
+    (codes ``211``, ``220045//``), ``3004410`` in ``^3004410//[^/]*//mmol/mol$`` (code
+    ``3004410////mmol/mol``), but not the ``2`` of ``^(paCO2)(//.*)?$`` or of a quantifier ``{2}``.
+    """
+    runs = set(re.findall(r"\d+", pattern))
+    samples = regex_samples(pattern)
+    witnesses: dict[str, list[str]] = {}  # in pattern order
+    for code, matched in zip(samples, pattern_matches(pattern, event, samples), strict=True):
+        if matched:
+            for part in code.split("//"):
+                if part in runs:
+                    witnesses.setdefault(part, []).append(code)
+    return witnesses
+
+
+def mapping_event(mapping: MappingConfig) -> str:
+    """The event name a mapping's codes are matched with."""
+    return mapping.pattern.event or ANY_EVENT
+
+
+def numeric_ids(mapping: MappingConfig) -> set[str]:
+    """The numeric IDs whose rows a simple mapping selects (see :func:`numeric_id_witnesses`)."""
+    return set(numeric_id_witnesses(mapping.pattern.code, mapping_event(mapping)))
+
+
+def unbounded_id_violations(concept: str, mappings: Sequence[MappingConfig]) -> list[str]:
+    """Simple mappings whose numeric IDs also match a longer ID; one violation per mapping.
+
+    For every ID of a mapping (:func:`numeric_id_witnesses`) and every sampled code showing it,
+    the pattern must not match that code with one digit prepended to or appended to the ID, unless
+    the longer ID is listed in the pattern itself (``^(?:211|2110)$``). The check runs through
+    `ConceptStep.match_pattern`, so any anchoring style passes as long as it works.
+    """
+    violations = []
+    for index, mapping in enumerate(mappings):
+        pattern, event = mapping.pattern.code, mapping_event(mapping)
+        listed = set(re.findall(r"\d+", pattern))
+        probes = []  # (ID, the witness with a longer ID in its place)
+        for id_, witnesses in numeric_id_witnesses(pattern, event).items():
+            longer_ids = [f"{d}{id_}" for d in "1234567890"] + [f"{id_}{d}" for d in "1234567890"]
+            for witness in witnesses:
+                parts = witness.split("//")
+                for position in (i for i, part in enumerate(parts) if part == id_):
+                    for longer in longer_ids:
+                        if longer not in listed:
+                            probes.append((id_, "//".join([*parts[:position], longer, *parts[position + 1 :]])))
+        examples: dict[str, str] = {}
+        for (id_, code), matched in zip(probes, pattern_matches(pattern, event, [c for _, c in probes]), strict=True):
+            if matched:
+                examples.setdefault(id_, code)
+        if examples:
+            offending = ", ".join(f"{id_} (e.g. {code!r})" for id_, code in examples.items())
+            violations.append(
+                f"{concept} mapping {index} ({mapping.pattern.table}): {pattern!r} also matches longer IDs: {offending}"
+            )
+    return violations
+
+
+def duplicate_selection_violations(concept: str, mappings: Sequence[MappingConfig]) -> list[str]:
+    """Pairs of simple mappings that certainly select the same source rows; one violation per pair.
+
+    Two mappings select the same rows if they read the same table and a compatible event (equal,
+    or one of them unset), have the same ``pattern.extensions`` and the same ``filters`` (in any
+    order), and their code patterns overlap: the patterns are identical, or they share a numeric ID
+    (:func:`numeric_id_witnesses`) with a sampled code of that ID that both patterns select. So
+    ``^(3013290|3027946)//[^/]*//mmHg$`` and ``...//kPa$`` share IDs but no rows. Mappings with
+    different filters may share an item (e.g. one item classified into levels by its text);
+    per-dataset behaviour cases cover those.
+    """
+    witnesses = [numeric_id_witnesses(mapping.pattern.code, mapping_event(mapping)) for mapping in mappings]
+    violations = []
+    for (i, first), (j, second) in combinations(enumerate(mappings), 2):
+        a, b = first.pattern, second.pattern
+        events_compatible = a.event is None or b.event is None or a.event == b.event
+        if a.table != b.table or not events_compatible or a.extensions != b.extensions:
+            continue
+        if sorted(first.filters) != sorted(second.filters):
+            continue
+        examples: dict[str, str] = {}
+        for id_ in (id_ for id_ in witnesses[i] if id_ in witnesses[j]):
+            # A witness of one mapping is selected by that mapping; is it selected by the other, too?
+            candidates = [(code, b.code, mapping_event(second)) for code in witnesses[i][id_]]
+            candidates += [(code, a.code, mapping_event(first)) for code in witnesses[j][id_]]
+            for code, pattern, event in candidates:
+                if pattern_matches(pattern, event, [code]) == [True]:
+                    examples[id_] = code
+                    break
+        if a.code == b.code:
+            overlap = f"the identical pattern {a.code!r}"
+        elif examples:
+            overlap = "the IDs " + ", ".join(f"{id_} (e.g. {code!r})" for id_, code in examples.items())
+        else:
+            continue
+        violations.append(
+            f"{concept} mappings {i} and {j} ({a.table}/{a.event or '*'} and {b.table}/{b.event or '*'}): "
+            f"both select {overlap}"
+        )
+    return violations
+
+
+# Dataset versions whose shipped mappings violate an invariant and cannot be fixed at once, keyed by
+# the invariant and the test id of the dataset version, with the reason; none today. Each runs as a
+# strict xfail, so the suite stays green while every other dataset version is still checked. Once
+# the mappings are fixed, the strict xfail fails (XPASS) until its entry is removed here; an entry
+# never silences a new violation.
+KNOWN_VIOLATIONS: dict[Invariant, dict[str, str]] = {}
+
+# Dataset versions with effective mappings (marker-only versions inherit them; omop has none).
+INVARIANT_MAPPING_DIRS = [d for d in DATASET_CONCEPT_DIRS if resolve_effective_configs(d)]
+
+# Datasets whose mappings select source rows by numeric item IDs.
+ID_CODED_DATASETS = ["aumc", "hirid", "mimic-iv", "nwicu", "sic"]
+
+
+def invariant_cases(invariant: Invariant) -> list[Any]:
+    """One case per dataset version with mappings; its known violation of ``invariant`` is a strict xfail."""
+    known = KNOWN_VIOLATIONS.get(invariant, {})
+    if stale := sorted(set(known) - {relative_id(d) for d in INVARIANT_MAPPING_DIRS}):
+        raise ValueError(f"KNOWN_VIOLATIONS names dataset versions without mappings: {stale}")
+    cases = []
+    for mapping_dir in INVARIANT_MAPPING_DIRS:
+        reason = known.get(relative_id(mapping_dir))
+        marks = [] if reason is None else [pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)]
+        cases.append(pytest.param(mapping_dir, id=relative_id(mapping_dir), marks=marks))
+    return cases
+
+
+def simple_dataset_concepts(mapping_dir: Path) -> list[SimpleDatasetConceptConfig]:
+    """The effective simple dataset concepts of a dataset version, validated as `ConceptConfig.load` does."""
+    adapter = TypeAdapter(DatasetConceptConfigUnion)
+    dataset, version = mapping_dir.parent.parent.name, mapping_dir.parent.name
+    concepts = []
+    for name, data in sorted(resolve_effective_configs(mapping_dir).items()):
+        dataset_concept = adapter.validate_python(
+            {**data, "dataset": dataset, "version": version, "name": Path(name).name}
+        )
+        if isinstance(dataset_concept, SimpleDatasetConceptConfig):
+            concepts.append(dataset_concept)
+    return concepts
+
+
+def check_invariant(invariant: Invariant, mapping_dir: Path) -> None:
+    violations = [
+        violation
+        for dataset_concept in simple_dataset_concepts(mapping_dir)
+        for violation in invariant(dataset_concept.name, dataset_concept.mappings)
+    ]
+    assert not violations, f"{len(violations)} violation(s) in {relative_id(mapping_dir)}:\n" + "\n".join(violations)
+
+
+@pytest.mark.parametrize("mapping_dir", invariant_cases(unbounded_id_violations))
+def test_numeric_ids_do_not_match_longer_ids(mapping_dir: Path) -> None:
+    check_invariant(unbounded_id_violations, mapping_dir)
+
+
+@pytest.mark.parametrize("mapping_dir", invariant_cases(duplicate_selection_violations))
+def test_concept_does_not_select_a_source_row_twice(mapping_dir: Path) -> None:
+    check_invariant(duplicate_selection_violations, mapping_dir)
+
+
+@pytest.mark.parametrize("dataset", ID_CODED_DATASETS)
+def test_numeric_ids_are_found_in_id_coded_datasets(dataset: str) -> None:
+    """Guards both invariants against passing vacuously: if no IDs were identified, neither could fail."""
+    mapping_dirs = [d for d in INVARIANT_MAPPING_DIRS if d.parent.parent.name == dataset]
+    assert mapping_dirs, f"no dataset version of {dataset} has mappings"
+    for mapping_dir in mapping_dirs:
+        mappings = [m for c in simple_dataset_concepts(mapping_dir) for m in c.mappings]
+        without_ids = [m.pattern.code for m in mappings if not numeric_ids(m)]
+        assert len(without_ids) * 2 < len(mappings), (
+            f"{relative_id(mapping_dir)}: no numeric IDs found in most mappings: {without_ids}"
+        )
+
+
+def synthetic_mapping(
+    code: str,
+    *,
+    table: str = "chartevents",
+    event: str | None = "CHART",
+    filters: Sequence[str] = (),
+    extensions: dict[str, str] | None = None,
+) -> MappingConfig:
+    return MappingConfig.model_validate(
+        {
+            "pattern": {"table": table, "event": event, "code": code, "extensions": extensions or {}},
+            "columns": {},
+            "filters": list(filters),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "ids"),
+    [
+        # The anchoring styles of the shipped datasets.
+        pytest.param(r"^(?:LAB//)?(?:50809|50931)(?:$|//)", {"50809", "50931"}, id="mimic-iv-lab"),
+        pytest.param(r"^(227194|225468|225477)//", {"227194", "225468", "225477"}, id="mimic-iv-procedure"),
+        pytest.param(r"^(24000439|24000521)(//.*)?$", {"24000439", "24000521"}, id="hirid"),
+        pytest.param(r"^(664|689)(//.*)?$", {"664", "689"}, id="sic"),
+        pytest.param(r"^3020460(//.*)?$", {"3020460"}, id="aumc"),
+        pytest.param(r"^3004410//[^/]*//mmol/mol$", {"3004410"}, id="aumc-unit"),
+        pytest.param(r"^42869608//(O2-Saturatie \(bloed\))(//.*)?$", {"42869608"}, id="aumc-source-name"),
+        # A longer ID listed in the pattern itself is selected on purpose.
+        pytest.param(r"^(?:211|2110)$", {"211", "2110"}, id="listed-longer-id"),
+        # Digits that are not a whole part of a selected code are not IDs.
+        pytest.param(r"^(paCO2)(//.*)?$", set(), id="digit-in-name"),
+    ],
+)
+def test_bounded_ids_are_not_flagged(code: str, ids: set[str]) -> None:
+    mapping = synthetic_mapping(code)
+    assert numeric_ids(mapping) == ids  # the IDs are found, so the absence of violations is meaningful
+    assert unbounded_id_violations("concept", [mapping]) == []
+
+
+@pytest.mark.parametrize(
+    ("code", "violation"),
+    [
+        pytest.param(
+            "(50852(//.*)?)",
+            "concept mapping 0 (chartevents): '(50852(//.*)?)' also matches longer IDs: 50852 (e.g. '150852')",
+            id="unanchored",
+        ),
+        pytest.param(
+            "^2200(//.*)?",
+            "concept mapping 0 (chartevents): '^2200(//.*)?' also matches longer IDs: 2200 (e.g. '22001')",
+            id="start-anchored-only",
+        ),
+        # The HiRID pattern of end-tidal CO2 that matched CRP 20002200.
+        pytest.param(
+            "(2200)(//.*)?$",
+            "concept mapping 0 (chartevents): '(2200)(//.*)?$' also matches longer IDs: 2200 (e.g. '12200')",
+            id="end-anchored-only",
+        ),
+        pytest.param(
+            "^(?:211|220045)",
+            "concept mapping 0 (chartevents): '^(?:211|220045)' also matches longer IDs: "
+            "211 (e.g. '2111'), 220045 (e.g. '2200451')",
+            id="several-ids",
+        ),
+    ],
+)
+def test_unbounded_ids_are_flagged(code: str, violation: str) -> None:
+    assert unbounded_id_violations("concept", [synthetic_mapping(code)]) == [violation]
+
+
+ITEMS = r"^(?:[A-Z_]+//)?(?:223848|223849)(?:$|//)"
+ITEM = r"^(?:[A-Z_]+//)?(?:223849)(?:$|//)"
+
+
+@pytest.mark.parametrize(
+    ("mappings", "violation"),
+    [
+        # One item listed in two unfiltered mappings.
+        pytest.param(
+            [synthetic_mapping(ITEMS), synthetic_mapping(ITEM)],
+            "concept mappings 0 and 1 (chartevents/CHART and chartevents/CHART): "
+            "both select the IDs 223849 (e.g. '223849')",
+            id="shared-id",
+        ),
+        pytest.param(
+            [synthetic_mapping("^RESPIRATORY_CARE(//.*)?$"), synthetic_mapping("^RESPIRATORY_CARE(//.*)?$")],
+            "concept mappings 0 and 1 (chartevents/CHART and chartevents/CHART): "
+            "both select the identical pattern '^RESPIRATORY_CARE(//.*)?$'",
+            id="identical-pattern",
+        ),
+        pytest.param(
+            [synthetic_mapping(ITEMS), synthetic_mapping(ITEM, event=None)],
+            "concept mappings 0 and 1 (chartevents/CHART and chartevents/*): "
+            "both select the IDs 223849 (e.g. '223849')",
+            id="shared-id-any-event",
+        ),
+        pytest.param(
+            [
+                synthetic_mapping(ITEMS, filters=["drop_na(text_value)", 'text_value != "Other"']),
+                synthetic_mapping(ITEM, filters=['text_value != "Other"', "drop_na(text_value)"]),
+            ],
+            "concept mappings 0 and 1 (chartevents/CHART and chartevents/CHART): "
+            "both select the IDs 223849 (e.g. '223849')",
+            id="same-filters-in-other-order",
+        ),
+        # A unit-qualified pattern overlaps one that accepts every unit of the ID.
+        pytest.param(
+            [synthetic_mapping(r"^3004410//[^/]*//mmol/mol$"), synthetic_mapping(r"^3004410(//.*)?$")],
+            "concept mappings 0 and 1 (chartevents/CHART and chartevents/CHART): "
+            "both select the IDs 3004410 (e.g. '3004410////mmol/mol')",
+            id="shared-id-subset-of-codes",
+        ),
+    ],
+)
+def test_duplicate_selections_are_flagged(mappings: list[MappingConfig], violation: str) -> None:
+    assert duplicate_selection_violations("concept", mappings) == [violation]
+
+
+@pytest.mark.parametrize(
+    "mappings",
+    [
+        # One item classified into different levels by its text.
+        pytest.param(
+            [
+                synthetic_mapping(ITEMS, filters=['text_value == "CMV"']),
+                synthetic_mapping(ITEM, filters=['text_value == "SIMV"']),
+            ],
+            id="different-filters",
+        ),
+        pytest.param(
+            [synthetic_mapping(ITEMS), synthetic_mapping(ITEM, table="procedureevents")], id="different-tables"
+        ),
+        pytest.param([synthetic_mapping(ITEMS), synthetic_mapping(ITEM, event="CHART_END")], id="different-events"),
+        pytest.param(
+            [synthetic_mapping(ITEMS), synthetic_mapping(ITEM, extensions={"valueuom": "^%$"})],
+            id="different-extensions",
+        ),
+        # AUMC selects one ID per unit (or per source name) in separate mappings: shared IDs, disjoint codes.
+        pytest.param(
+            [
+                synthetic_mapping(r"^(3013290|3027946)//[^/]*//mmHg$"),
+                synthetic_mapping(r"^(3013290|3027946)//[^/]*//kPa$"),
+            ],
+            id="shared-id-different-unit",
+        ),
+        # 2110 is a different item than 211.
+        pytest.param([synthetic_mapping(r"^(?:211)$"), synthetic_mapping(r"^(?:2110)$")], id="id-extending-another-id"),
+    ],
+)
+def test_distinct_selections_are_not_flagged(mappings: list[MappingConfig]) -> None:
+    assert duplicate_selection_violations("concept", mappings) == []
 
 
 def test_column_reference_typo_is_detected() -> None:

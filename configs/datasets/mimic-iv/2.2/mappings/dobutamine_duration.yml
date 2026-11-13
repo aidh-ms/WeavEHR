@@ -3,7 +3,7 @@ mappings:
   - pattern:
       table: inputevents
       event: INFUSION_END
-      code: (221653(//.*)?)
+      code: ^(?:INFUSION_END//)?(?:221653)(?:$|//)
     columns:
       numeric_value: col(duration_minutes)
       text_value: col(text_value)
