@@ -13,8 +13,8 @@ configuration library — the part of WeavEHR most contributors will touch.
 Two generic invariants check how the simple mappings of every dataset version select
 extracted rows, through the concept step's own code matching (`ConceptStep.match_pattern`):
 a numeric ID in a code pattern must not also match a longer ID, and one concept must not
-select the same source row through two mappings. Dataset versions that violate an
-invariant today are recorded in ``KNOWN_VIOLATIONS`` and run as strict xfails.
+select the same source row through two mappings. A dataset version whose violation cannot
+be fixed at once can be recorded in ``KNOWN_VIOLATIONS`` and then runs as a strict xfail.
 """
 
 import logging
@@ -604,18 +604,12 @@ def duplicate_selection_violations(concept: str, mappings: Sequence[MappingConfi
     return violations
 
 
-# Dataset versions whose shipped mappings violate an invariant today, keyed by the invariant and
-# the test id of the dataset version, with the reason. Each runs as a strict xfail, so the suite
-# stays green while every other dataset version is still checked. Once the mappings are fixed, the
-# strict xfail fails (XPASS) until its entry is removed here; an entry never silences a new violation.
-KNOWN_VIOLATIONS: dict[Invariant, dict[str, str]] = {
-    unbounded_id_violations: {
-        "datasets/mimic-iv/2.2/mappings": "unanchored item patterns such as '(50852(//.*)?)'",
-        "datasets/mimic-iv/3.1/mappings": "inherits the unanchored item patterns of mimic-iv 2.2",
-        "datasets/mimic-iv-demo/2.2/mappings": "inherits the unanchored item patterns of mimic-iv 2.2",
-        "datasets/nwicu/0.1.0/mappings": "unanchored item patterns such as '(100053(//.*)?)'",
-    },
-}
+# Dataset versions whose shipped mappings violate an invariant and cannot be fixed at once, keyed by
+# the invariant and the test id of the dataset version, with the reason; none today. Each runs as a
+# strict xfail, so the suite stays green while every other dataset version is still checked. Once
+# the mappings are fixed, the strict xfail fails (XPASS) until its entry is removed here; an entry
+# never silences a new violation.
+KNOWN_VIOLATIONS: dict[Invariant, dict[str, str]] = {}
 
 # Dataset versions with effective mappings (marker-only versions inherit them; omop has none).
 INVARIANT_MAPPING_DIRS = [d for d in DATASET_CONCEPT_DIRS if resolve_effective_configs(d)]

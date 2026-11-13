@@ -8,7 +8,7 @@ mappings:
   - pattern:
       table: inputevents
       event: INFUSION_START
-      code: (221289(//.*)?)
+      code: ^(?:INFUSION_START//)?(?:221289)(?:$|//)
       extensions:
         rateuom: mcg/kg/min
     columns:
@@ -24,7 +24,7 @@ mappings:
   - pattern:
       table: inputevents
       event: INFUSION_END
-      code: (221289(//.*)?)
+      code: ^(?:INFUSION_END//)?(?:221289)(?:$|//)
       extensions:
         rateuom: mcg/kg/min
     columns:

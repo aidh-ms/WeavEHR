@@ -5,7 +5,7 @@ mappings:
   - pattern:
       table: procedureevents
       event: PROCEDURE_START
-      code: (225792(//.*)?)
+      code: ^(?:PROCEDURE_START//)?(?:225792)(?:$|//)
     level: invasive
     columns:
       extension:
@@ -14,7 +14,7 @@ mappings:
   - pattern:
       table: procedureevents
       event: PROCEDURE_START
-      code: (225794(//.*)?)
+      code: ^(?:PROCEDURE_START//)?(?:225794)(?:$|//)
     level: noninvasive
     columns:
       extension:
