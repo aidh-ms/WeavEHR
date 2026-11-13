@@ -1,0 +1,74 @@
+# Mechanical settings, modes and devices are separate, non-overlapping evidence.
+type: simple
+mappings:
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_START
+    code: ^(?:[A-Z_]+//)?(?:225792)(?:$|//)
+  level: invasive
+  columns:
+    extension:
+      stay_id: col(stay_id)
+      orderid: col(orderid)
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_START
+    code: ^(?:[A-Z_]+//)?(?:225794)(?:$|//)
+  level: noninvasive
+  columns:
+    extension:
+      stay_id: col(stay_id)
+      orderid: col(orderid)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:1|60|218|221|223|436|437|444|445|448|449|450|459|501|502|503|505|506|535|543|639|654|667|668|669|670|671|672|681|682|683|684|686|1211|1340|1486|1600|1655|2000|3459|5865|5866|220339|224419|224684|224685|224686|224687|224695|224696|224697|224700|224701|224702|224703|224704|224705|224706|224707|224709|224738|224746|224747|224750|226873|227187)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - drop_na(text_value) or drop_na(numeric_value)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:720)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - drop_na(text_value)
+  - text_value != "Other/Remarks"
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:467)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - text_value == "Ventilator"
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:223848)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - drop_na(text_value)
+  - strip_str(text_value) != "Other"
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:223849)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - drop_na(text_value)

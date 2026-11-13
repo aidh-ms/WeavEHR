@@ -1,0 +1,51 @@
+path: PROCEDURES_ICD.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: SEQ_NUM
+  type: int64
+- name: ICD9_CODE
+  type: string
+join:
+- path: D_ICD_PROCEDURES.csv.gz
+  columns:
+  - name: ICD9_CODE
+    type: string
+  - name: LONG_TITLE
+    type: string
+  both_on:
+  - ICD9_CODE
+- path: ADMISSIONS.csv.gz
+  columns:
+  - name: HADM_ID
+    type: int64
+  - name: DISCHTIME
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - HADM_ID
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
+events:
+- name: PROCEDURE
+  columns:
+    time: col(DISCHTIME)
+    code:
+    - const("ICD")
+    - const("9")
+    - col(ICD9_CODE)
+    - col(LONG_TITLE)
+    extension:
+      available_time: col(DISCHTIME)
+      seq_num: col(SEQ_NUM)
+  filters:
+  - drop_na(time)

@@ -1,0 +1,57 @@
+path: PATIENTS.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: gender
+  type: string
+- name: dob
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dod
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dod_hosp
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: dod_ssn
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: expire_flag
+  type: int64
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(gender, output=GENDER)
+- col(dob, output=DOB)
+- col(dod, output=DOD)
+- col(dod_hosp, output=DOD_HOSP)
+- col(dod_ssn, output=DOD_SSN)
+- col(expire_flag, output=EXPIRE_FLAG)
+join:
+- path: ADMISSIONS.csv
+  columns:
+  - name: subject_id
+    type: int64
+  - name: deathtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  callbacks:
+  - col(subject_id, output=SUBJECT_ID)
+  - col(deathtime, output=DEATHTIME)
+  both_on:
+  - SUBJECT_ID
+  filters:
+  - drop_na(DEATHTIME)
+  - first_distinct(SUBJECT_ID, order_by=[DEATHTIME])

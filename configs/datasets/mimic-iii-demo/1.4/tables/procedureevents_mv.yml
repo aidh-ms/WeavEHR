@@ -1,0 +1,102 @@
+path: PROCEDUREEVENTS_MV.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: icustay_id
+  type: int64
+- name: starttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: endtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: itemid
+  type: int64
+- name: value
+  type: float32
+- name: valueuom
+  type: string
+- name: location
+  type: string
+- name: locationcategory
+  type: string
+- name: storetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cgid
+  type: int64
+- name: orderid
+  type: int64
+- name: linkorderid
+  type: int64
+- name: ordercategoryname
+  type: string
+- name: secondaryordercategoryname
+  type: string
+- name: ordercategorydescription
+  type: string
+- name: isopenbag
+  type: int64
+- name: continueinnextdept
+  type: int64
+- name: cancelreason
+  type: int64
+- name: statusdescription
+  type: string
+- name: comments_editedby
+  type: string
+- name: comments_canceledby
+  type: string
+- name: comments_date
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(icustay_id, output=ICUSTAY_ID)
+- col(starttime, output=STARTTIME)
+- col(endtime, output=ENDTIME)
+- col(itemid, output=ITEMID)
+- col(value, output=VALUE)
+- col(valueuom, output=VALUEUOM)
+- col(location, output=LOCATION)
+- col(locationcategory, output=LOCATIONCATEGORY)
+- col(storetime, output=STORETIME)
+- col(cgid, output=CGID)
+- col(orderid, output=ORDERID)
+- col(linkorderid, output=LINKORDERID)
+- col(ordercategoryname, output=ORDERCATEGORYNAME)
+- col(secondaryordercategoryname, output=SECONDARYORDERCATEGORYNAME)
+- col(ordercategorydescription, output=ORDERCATEGORYDESCRIPTION)
+- col(isopenbag, output=ISOPENBAG)
+- col(continueinnextdept, output=CONTINUEINNEXTDEPT)
+- col(cancelreason, output=CANCELREASON)
+- col(statusdescription, output=STATUSDESCRIPTION)
+- col(comments_editedby, output=COMMENTS_EDITEDBY)
+- col(comments_canceledby, output=COMMENTS_CANCELEDBY)
+- col(comments_date, output=COMMENTS_DATE)
+join:
+- path: D_ITEMS.csv
+  columns:
+  - name: itemid
+    type: int64
+  - name: label
+    type: string
+  callbacks:
+  - col(itemid, output=ITEMID)
+  - col(label, output=LABEL)
+  both_on:
+  - ITEMID

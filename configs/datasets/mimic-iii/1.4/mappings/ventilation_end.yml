@@ -1,0 +1,60 @@
+# Evidence of extubation or transition to unassisted oxygen, not arbitrary device charting.
+type: simple
+mappings:
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_END
+    code: ^(?:[A-Z_]+//)?(?:225792)(?:$|//)
+  level: invasive
+  columns:
+    extension:
+      stay_id: col(stay_id)
+      orderid: col(orderid)
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_END
+    code: ^(?:[A-Z_]+//)?(?:225794)(?:$|//)
+  level: noninvasive
+  columns:
+    extension:
+      stay_id: col(stay_id)
+      orderid: col(orderid)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:640)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(text_value, "^(Extubated|Self Extubation)$")
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:467)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(text_value, "^(Cannula|Nasal Cannula|Face Tent|Aerosol-Cool|Trach Mask|Hi Flow Neb|Non-Rebreather|Venti Mask|Medium Conc Mask|Vapotherm|T-Piece|Hood|Hut|TranstrachealCat|Heated
+    Neb|Ultrasonic Neb)$")
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^(Nasal cannula|Face tent|Aerosol-cool|Trach mask|High flow neb|Non-rebreather|Venti mask|Medium conc mask|T-piece|High
+    flow nasal cannula|Ultrasonic neb|Vapomist)$")
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_START
+    code: ^(?:[A-Z_]+//)?(?:227194|225468|225477)(?:$|//)
+  columns:
+    extension:
+      stay_id: col(stay_id)

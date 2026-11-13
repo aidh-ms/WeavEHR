@@ -1,0 +1,16 @@
+type: simple
+mappings:
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:505|506|220339)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+- pattern:
+    table: labevents
+    event: LAB
+    code: ^(?:[A-Z_]+//)?(?:50819)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)

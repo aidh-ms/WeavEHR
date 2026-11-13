@@ -1,0 +1,38 @@
+type: simple
+mappings:
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:762|763|3580|3693|3723|224639|226512)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:3581|226531)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value) * 0.45359237
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:3582)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value) * 0.028349523125
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:4183)(?:$|//)
+  columns:
+    numeric_value: replace(col(numeric_value) > 100, col(numeric_value) / 1000, col(numeric_value))
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)

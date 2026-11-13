@@ -1,0 +1,68 @@
+path: ICUSTAYS.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: ICUSTAY_ID
+  type: int64
+- name: DBSOURCE
+  type: string
+- name: FIRST_CAREUNIT
+  type: string
+- name: LAST_CAREUNIT
+  type: string
+- name: FIRST_WARDID
+  type: int64
+- name: LAST_WARDID
+  type: int64
+- name: INTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: OUTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: LOS
+  type: float32
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    row_id: col(ROW_ID)
+events:
+- name: icu_admission
+  columns:
+    time: col(INTIME)
+    code:
+    - const("ICU_ADMISSION")
+    extension:
+      available_time: col(INTIME)
+      dbsource: col(DBSOURCE)
+  filters:
+  - drop_na(time)
+- name: icu_discharge
+  columns:
+    time: col(OUTTIME)
+    code:
+    - const("ICU_DISCHARGE")
+    extension:
+      available_time: col(OUTTIME)
+  filters:
+  - drop_na(time)
+- name: icu_length_of_stay
+  columns:
+    time: col(OUTTIME)
+    code:
+    - const("days")
+    numeric_value: col(LOS)
+    extension:
+      available_time: col(OUTTIME)
+  filters:
+  - drop_na(time)

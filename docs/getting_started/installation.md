@@ -51,7 +51,6 @@ WeavEHR builds on a small set of core libraries, installed automatically:
 | [meds](https://github.com/Medical-Event-Data-Standard/meds) | MEDS schema definitions and metadata validation |
 | [pyarrow](https://arrow.apache.org/docs/python/) | Parquet/columnar interchange |
 | [pandas](https://pandas.pydata.org) | Interoperability with pandas-based workflows |
-| [duckdb](https://duckdb.org) | SQL analytics engine |
 | [pyyaml](https://pyyaml.org) | YAML parsing |
 
 ## Getting the data
@@ -59,6 +58,7 @@ WeavEHR builds on a small set of core libraries, installed automatically:
 WeavEHR operates on locally downloaded dataset files (CSV/CSV.GZ) — no database setup is required. The public ICU datasets are distributed via [PhysioNet](https://physionet.org/) and require credentialed access:
 
 - [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/)
+- [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) (a public [demo](https://physionet.org/content/mimiciii-demo/1.4/) is also available)
 - [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) (a freely accessible [demo subset](https://physionet.org/content/eicu-crd-demo/2.0/) is also available)
 - [NWICU](https://physionet.org/content/nwicu/0.1.0/)
 

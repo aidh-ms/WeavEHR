@@ -1,0 +1,127 @@
+type: simple
+mappings:
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:223849)(?:$|//)
+  level: invasive
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^([(]S[)] CMV|APRV|APRV/Biphasic[+]ApnPress|APRV/Biphasic[+]ApnVol|APV [(]cmv[)]|Ambient|Apnea
+    Ventilation|CMV|CMV/ASSIST|CMV/ASSIST/AutoFlow|CMV/AutoFlow|CPAP/PPS|CPAP/PSV|CPAP/PSV[+]Apn TCPL|CPAP/PSV[+]ApnPres|CPAP/PSV[+]ApnVol|MMV|MMV/AutoFlow|MMV/PSV|MMV/PSV/AutoFlow|P-CMV|PCV[+]|PCV[+]/PSV|PCV[+]Assist|PRES/AC|PRVC/AC|PRVC/SIMV|PSV/SBT|SIMV|SIMV/AutoFlow|SIMV/PRES|SIMV/PSV|SIMV/PSV/AutoFlow|SIMV/VOL|SYNCHRON
+    MASTER|SYNCHRON SLAVE|VOL/AC)$")
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  level: noninvasive
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^(Bipap mask|CPAP mask)$")
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:223849)(?:$|//)
+  level: ventilator
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) == "CPAP"
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  level: high_flow
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) == "High flow nasal cannula"
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  level: oxygen
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^(Non-rebreather|Face tent|Aerosol-cool|Venti mask|Medium conc mask|Ultrasonic neb|Vapomist|Oxymizer|High
+    flow neb|Nasal cannula|Trach mask)$")
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:226732)(?:$|//)
+  level: none
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) == "None"
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:467)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^Ventilator$")
+  level: ventilator
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:720)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) != "Other/Remarks"
+  level: ventilator
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:467)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "(?i)^(CPAP|BIPAP).*")
+  level: noninvasive
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:467)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^(Cannula|Nasal Cannula|Face Tent|Aerosol-Cool|Trach Mask|Hi Flow Neb|Non-Rebreather|Venti
+    Mask|Medium Conc Mask|Vapotherm|T-Piece|Hood|Hut|TranstrachealCat|Heated Neb|Ultrasonic Neb)$")
+  level: oxygen
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:467)(?:$|//)
+  level: none
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - strip_str(text_value) == "None"

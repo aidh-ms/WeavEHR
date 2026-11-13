@@ -1,0 +1,52 @@
+path: TRANSFERS.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: ICUSTAY_ID
+  type: int64
+- name: DBSOURCE
+  type: string
+- name: EVENTTYPE
+  type: string
+- name: PREV_CAREUNIT
+  type: string
+- name: CURR_CAREUNIT
+  type: string
+- name: PREV_WARDID
+  type: int64
+- name: CURR_WARDID
+  type: int64
+- name: INTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: OUTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: LOS
+  type: float32
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    row_id: col(ROW_ID)
+events:
+- name: TRANSFER_TO
+  columns:
+    time: col(INTIME)
+    code:
+    - col(EVENTTYPE)
+    - col(CURR_CAREUNIT)
+    extension:
+      available_time: col(INTIME)
+      location_end: col(OUTTIME)
+  filters:
+  - drop_na(time)

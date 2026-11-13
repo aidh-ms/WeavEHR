@@ -1,0 +1,7 @@
+type: simple
+mappings:
+- pattern:
+    table: patients
+    event: MEDS_DEATH
+    code: ^MEDS_DEATH$
+  columns: {}

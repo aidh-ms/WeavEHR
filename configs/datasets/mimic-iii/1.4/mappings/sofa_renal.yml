@@ -1,0 +1,5 @@
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaRenalTransformer
+concepts:
+- urine_output.1.0.0
+- creatinine.1.0.0

@@ -50,6 +50,9 @@ WeavEHR ships with ready-to-use extraction and concept configurations under [`co
 
 | Dataset | Version | Extraction configs | Concept mappings |
 | --- | --- | --- | --- |
+| [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) | 1.4 | 20 tables (CareVue + MetaVision) | 136 mappings, infusions pending; [coverage](configs/datasets/mimic-iii/README.md) |
+| [MIMIC-III demo](https://physionet.org/content/mimiciii-demo/1.4/) | 1.4 | inherited; native uncompressed CSV paths | inherited |
+| [MIMIC-III CareVue subset](https://physionet.org/content/mimic3-carevue/1.4/) | 1.4 | inherited from MIMIC-III | inherited |
 | [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/) | 3.1, 2.2 | 19 tables (ICU + hosp) | ~80 concepts |
 | [MIMIC-IV demo](https://physionet.org/content/mimic-iv-demo/2.2/) | 2.2 | inherited from MIMIC-IV via `extends` | inherited |
 | [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) | 2.0 | 14 tables | in progress |

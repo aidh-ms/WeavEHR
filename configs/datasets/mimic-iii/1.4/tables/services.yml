@@ -1,0 +1,33 @@
+path: SERVICES.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: TRANSFERTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: PREV_SERVICE
+  type: string
+- name: CURR_SERVICE
+  type: string
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
+events:
+- name: SERVICE
+  columns:
+    time: col(TRANSFERTIME)
+    code:
+    - col(CURR_SERVICE)
+    extension:
+      available_time: col(TRANSFERTIME)
+      prev_service: col(PREV_SERVICE)
+  filters:
+  - drop_na(time)

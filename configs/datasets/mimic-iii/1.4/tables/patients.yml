@@ -1,0 +1,77 @@
+path: PATIENTS.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: GENDER
+  type: string
+- name: DOB
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: DOD
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: DOD_HOSP
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: DOD_SSN
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: EXPIRE_FLAG
+  type: int64
+join:
+- path: ADMISSIONS.csv.gz
+  columns:
+  - name: SUBJECT_ID
+    type: int64
+  - name: DEATHTIME
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - SUBJECT_ID
+  filters:
+  - drop_na(DEATHTIME)
+  - first_distinct(SUBJECT_ID, order_by=[DEATHTIME])
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    row_id: col(ROW_ID)
+events:
+- name: MEDS_BIRTH
+  columns:
+    time: col(DOB)
+    code:
+    - const("MEDS_BIRTH")
+    extension:
+      available_time: col(DOB)
+  filters:
+  - drop_na(time)
+- name: GENDER
+  columns:
+    time: col(DOB)
+    code:
+    - col(GENDER)
+    extension:
+      available_time: col(DOB)
+  filters:
+  - drop_na(time)
+- name: MEDS_DEATH
+  columns:
+    time: first_not_null(DEATHTIME, DOD_HOSP, DOD, DOD_SSN, output=time)
+    code:
+    - const("MEDS_DEATH")
+    extension:
+      available_time: first_not_null(DEATHTIME, DOD_HOSP, DOD, DOD_SSN, output=time)
+  filters:
+  - drop_na(time)

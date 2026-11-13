@@ -1,0 +1,116 @@
+path: PROCEDUREEVENTS_MV.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: ICUSTAY_ID
+  type: int64
+- name: STARTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ENDTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ITEMID
+  type: int64
+- name: VALUE
+  type: float32
+- name: VALUEUOM
+  type: string
+- name: LOCATION
+  type: string
+- name: LOCATIONCATEGORY
+  type: string
+- name: STORETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: CGID
+  type: int64
+- name: ORDERID
+  type: int64
+- name: LINKORDERID
+  type: int64
+- name: ORDERCATEGORYNAME
+  type: string
+- name: SECONDARYORDERCATEGORYNAME
+  type: string
+- name: ORDERCATEGORYDESCRIPTION
+  type: string
+- name: ISOPENBAG
+  type: int64
+- name: CONTINUEINNEXTDEPT
+  type: int64
+- name: CANCELREASON
+  type: int64
+- name: STATUSDESCRIPTION
+  type: string
+- name: COMMENTS_EDITEDBY
+  type: string
+- name: COMMENTS_CANCELEDBY
+  type: string
+- name: COMMENTS_DATE
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+join:
+- path: D_ITEMS.csv.gz
+  columns:
+  - name: ITEMID
+    type: int64
+  - name: LABEL
+    type: string
+  both_on:
+  - ITEMID
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    caregiver_id: col(CGID)
+    row_id: col(ROW_ID)
+    orderid: col(ORDERID)
+    linkorderid: col(LINKORDERID)
+filters:
+- not (STATUSDESCRIPTION == "Rewritten") or STATUSDESCRIPTION == None
+events:
+- name: PROCEDURE_START
+  columns:
+    time: col(STARTTIME)
+    code:
+    - col(ITEMID)
+    - col(LABEL)
+    extension:
+      available_time: max(STORETIME, STARTTIME, output=available_time)
+      location: col(LOCATION)
+      locationcategory: col(LOCATIONCATEGORY)
+      ordercategoryname: col(ORDERCATEGORYNAME)
+      ordercategorydescription: col(ORDERCATEGORYDESCRIPTION)
+      isopenbag: col(ISOPENBAG)
+      cancelreason: col(CANCELREASON)
+  filters:
+  - drop_na(time)
+- name: PROCEDURE_END
+  columns:
+    time: col(ENDTIME)
+    code:
+    - col(ITEMID)
+    - col(LABEL)
+    text_value: col(STATUSDESCRIPTION)
+    extension:
+      available_time: max(STORETIME, ENDTIME, output=available_time)
+      value: col(VALUE)
+      valueuom: col(VALUEUOM)
+      continueinnextdept: col(CONTINUEINNEXTDEPT)
+      cancelreason: col(CANCELREASON)
+  filters:
+  - drop_na(time)
