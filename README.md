@@ -39,7 +39,7 @@ flowchart LR
 ```
 
 1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
-2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts (*derived* concepts), or custom Python transformers (*complex* concepts). Concept dependencies are resolved automatically.
+2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). Concept dependencies are resolved automatically.
 3. **Sharding step** *(in development)* — re-partitions harmonised data into analysis-ready shards.
 
 Each step reads its inputs and writes its outputs as a self-contained MEDS dataset inside the project, so intermediate results are inspectable and individual steps can be re-run in isolation.

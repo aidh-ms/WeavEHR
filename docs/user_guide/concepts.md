@@ -125,6 +125,26 @@ Joins use the same keys, `how` and `maintain_order` options as [extraction joins
 
 This is how composite scores or ratios (e.g. concepts that combine two measurements) are expressed declaratively.
 
+#### Reading extracted events
+
+A table or join can read extracted events instead of a concept: replace `concept` with a `pattern`, written exactly as in a simple mapping. This combines source events without wrapping each one in a concept of its own. For example, the time since birth (in Julian years) at each OMOP visit:
+
+```yaml
+type: derived
+table:
+  pattern: {table: visit_occurrence, event: VISIT_START, code: ^.*$}
+  columns: [subject_id, time, dataset, table]
+join:
+  - pattern: {table: person, event: MEDS_BIRTH, code: ^MEDS_BIRTH$}
+    columns: [subject_id, time]
+    both_on: [subject_id]
+    how: left
+event:
+  numeric_value: datetime_diff(time_right, time, "years")
+```
+
+Each table reads exactly one of `concept` and `pattern`. A `pattern` table holds the matching rows of the extracted event files with all their columns (`subject_id`, `time`, `code`, `numeric_value`, `text_value` and the extension columns of the event), plus `dataset`, `version`, `table` and `event` as simple mapping expressions see them; as for concept tables, `columns` selects the ones to keep. Select the columns that the concept's extension expressions use, such as `dataset` and `table`. `pattern` tables are not dependencies, because extraction finishes before any concept runs. If none of the selected event files was extracted, the derived concept is skipped with a warning, as when an input concept has no output.
+
 ### Complex concepts
 
 When declarative YAML is not enough, a complex concept delegates to a Python callable referenced by dotted path:
@@ -133,18 +153,24 @@ When declarative YAML is not enough, a complex concept delegates to a Python cal
 type: complex
 concept_transformer: my_package.transformers.VentilationWindows
 concepts:                           # dependencies, processed first
-  - ventilation_start
-  - ventilation_end
+  - ventilation_start.1.0.0
+  - ventilation_end.1.0.0
+events:                             # optional: extracted events, by input name
+  ventilator_mode:
+    table: chartevents
+    event: CHART
+    code: ^(?:CHART//)?223849(?:$|//)
 kwargs: {}                          # extra arguments for the transformer
 ```
 
-The transformer is instantiated with the concept configuration and called with the `WeavEHRProject`, giving it full access to read prior outputs and write its own:
+The transformer class is instantiated with the concept, the mapping and the running `ConceptStep`, plus the mapping's `kwargs`, and is then called without arguments to write its output. Subclasses of `BaseConceptTransformer` only implement `transform`:
 
 ```python
-class VentilationWindows:
-    def __init__(self, concept, complex_config, **kwargs): ...
-    def __call__(self, project: WeavEHRProject) -> None: ...
+class VentilationWindows(BaseConceptTransformer):
+    def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame: ...
 ```
+
+`dependencies` holds each concept dependency's output under the concept name (`ventilation_start`) and each `events` input under its own name (`ventilator_mode`). An `events` input is selected by a pattern as in a simple mapping and holds the same columns as a `pattern` table of a derived concept, so a transformer can read source details that no concept carries, such as units or order identifiers. An `events` name must differ from the name of every concept in `concepts`, whether or not that concept has output (compared case-insensitively, like identifiers); otherwise the mapping is invalid and skipped with a warning when it is loaded. Without any selected event file, an `events` input is handled like a dependency without output: transformers with `strict_dependencies` fail, others receive it as absent.
 
 Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
 
