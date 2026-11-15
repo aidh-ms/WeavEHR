@@ -22,7 +22,7 @@ config:
 ```
 
 - `config_files` points at directories of table configurations (here: the bundled MIMIC-IV ones). You can list several directories to process multiple datasets in one run, and restrict which configs are loaded with `includes:` / `excludes:` lists of config identifiers.
-- `config.data` maps each dataset name to the local root of its raw files. The name must match the `dataset` referenced by the table configs (the bundled ones use `mimic-iv`, `eicu-crd`, `nwicu`).
+- `config.data` maps each dataset name to the local root of its raw files. The name must match the `dataset` referenced by the table configs (the bundled ones use `mimic-iv`, `mimic-iv-ed`, `eicu-crd`, `nwicu`).
 
 ## 2. Configure the concept step
 

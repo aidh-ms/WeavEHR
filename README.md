@@ -55,6 +55,8 @@ WeavEHR ships with ready-to-use extraction and concept configurations under [`co
 | [MIMIC-III CareVue subset](https://physionet.org/content/mimic3-carevue/1.4/) | 1.4 | inherited from MIMIC-III | inherited |
 | [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/) | 3.1, 2.2 | 19 tables (ICU + hosp) | ~80 concepts |
 | [MIMIC-IV demo](https://physionet.org/content/mimic-iv-demo/2.2/) | 2.2 | inherited from MIMIC-IV via `extends` | inherited |
+| [MIMIC-IV-ED](https://physionet.org/content/mimic-iv-ed/2.2/) | 2.2 | 6 tables | — |
+| [MIMIC-IV-ED demo](https://physionet.org/content/mimic-iv-ed-demo/2.2/) | 2.2 | inherited from MIMIC-IV-ED via `extends` | — |
 | [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) | 2.0 | 14 tables | in progress |
 | [eICU-CRD demo](https://physionet.org/content/eicu-crd-demo/2.0/) | 2.0 | inherited from eICU-CRD via `extends` | inherited |
 | [NWICU](https://physionet.org/content/nwicu/0.1.0/) | 0.1.0 | 9 tables | in progress |

@@ -1,0 +1,88 @@
+# One row per emergency department (ED) stay. intime and outtime are the times the
+# patient entered and left the ED (MIMIC-IV-ED documentation, edstays). The stay's
+# demographics (gender, race) are recorded per stay, so they are dated at intime.
+path: ed/edstays.csv.gz
+
+columns:
+  # subject_id and extensions
+  - name: subject_id
+    type: int64
+  # Null when the patient was not admitted to the hospital after the ED stay.
+  - name: hadm_id
+    type: int64
+  - name: stay_id
+    type: int64
+  # db fields - times
+  - name: intime
+    type: datetime
+    params:
+      format: "%Y-%m-%d %H:%M:%S"
+  - name: outtime
+    type: datetime
+    params:
+      format: "%Y-%m-%d %H:%M:%S"
+  # db fields - values
+  - name: gender
+    type: string
+  - name: race
+    type: string
+  - name: arrival_transport
+    type: string
+  - name: disposition
+    type: string
+
+event_defaults:
+  subject_id: col(subject_id)
+  time: col(intime)
+  extension:
+    available_time: col(intime)
+    stay_id: col(stay_id)
+    # hadm_id exists in the raw data only in this table, so only edstays events carry it.
+    # It is not joined onto the other ED tables: each event keeps the identifiers of its
+    # own raw row, and those tables link to a stay through stay_id alone (the stay's
+    # hadm_id can still be looked up through stay_id).
+    hadm_id: col(hadm_id)
+
+events:
+  # Arrival in the ED. ED_REGISTRATION and ED_OUT are the names the bundled hospital
+  # admissions tables already give the same two events (ED registration and ED out
+  # times): configs/datasets/mimic-iv/2.2/tables/admissions.yml,
+  # mimic-iii/1.4/tables/admissions.yml and nwicu/0.1.0/tables/admissions.yml.
+  # The arrival is coded by how the patient arrived (AMBULANCE, WALK IN, ...), as a code
+  # part, as mimic-iv admissions codes HOSPITAL_ADMISSION by admission type and location
+  # (admissions.yml).
+  - name: ED_REGISTRATION
+    columns:
+      code:
+        - col(arrival_transport)
+
+  # Departure from the ED, coded by where the patient went (ADMITTED, HOME, ...) as a code
+  # part, as mimic-iv admissions codes HOSPITAL_DISCHARGE by discharge location
+  # (admissions.yml). disposition is nullable in the documentation; the departure
+  # itself is still an event (code ED_OUT).
+  - name: ED_OUT
+    columns:
+      time: col(outtime)
+      code:
+        - col(disposition)
+      extension:
+        available_time: col(outtime)
+
+  - name: GENDER
+    columns:
+      code:
+        - col(gender)
+    filters:
+      # A null gender records nothing, so it is not an event; the stay itself is already
+      # recorded by ED_REGISTRATION.
+      - drop_na(gender)
+
+  # Same event name as mimic-iv admissions uses for its race column.
+  - name: ETHNICITY
+    columns:
+      code:
+        - col(race)
+    filters:
+      # A null race records nothing, so it is not an event; the stay itself is already
+      # recorded by ED_REGISTRATION.
+      - drop_na(race)

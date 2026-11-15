@@ -1,0 +1,5 @@
+# The openly available MIMIC-IV-ED demo ships the same six tables with the same
+# schema and file names (under ed/) as full MIMIC-IV-ED v2.2, so all table configs
+# are inherited; only the dataset identity differs.
+dataset: mimic-iv-ed
+version: "2.2"
