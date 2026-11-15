@@ -6,6 +6,7 @@ from polars import LazyFrame
 from weavehr.callbacks._callbacks.algebra import Add, Divide, Multiply, Subtract
 from weavehr.callbacks._callbacks.comparison import Equal, GreaterEqual, GreaterThan, LessEqual, LessThan, NotEqual
 from weavehr.callbacks._callbacks.logical import And, Not, Or
+from weavehr.callbacks.namespace import NamespaceCall
 from weavehr.callbacks.proto import AstValue, CallbackProtocol, CallbackResult, ColumnRef
 from weavehr.callbacks.registry import registry
 
@@ -34,6 +35,9 @@ class ExprInterpreter(ast.NodeVisitor):
         return node.arg, self.visit(node.value)
 
     def visit_Call(self, node) -> AstValue:
+        if isinstance(node.func, ast.Attribute):
+            return self._namespace_call(node)
+
         name = self._get_name(node.func)
 
         cls = registry.get(name)
@@ -47,6 +51,29 @@ class ExprInterpreter(ast.NodeVisitor):
             return cls(*args, **kwargs)
         except TypeError as e:
             raise TypeError(f"Bad arguments for {name}(*{args}, **{kwargs}): {e}") from e
+
+    def _namespace_call(self, node: ast.Call) -> AstValue:
+        """``<receiver>.<namespace>.<method>(...)``: a method of a Polars expression namespace."""
+        method = node.func
+        assert isinstance(method, ast.Attribute)
+        namespace = method.value
+        if not isinstance(namespace, ast.Attribute):
+            raise ValueError(
+                f"Method calls need a Polars namespace, as in text_value.str.to_lowercase(); "
+                f"got {ast.unparse(method)}(...)"
+            )
+        kwargs = dict(self.visit_Keyword(k) for k in node.keywords)
+        output = kwargs.pop("output", None)
+        if output is not None and not isinstance(output, str):
+            raise TypeError(f"output= takes a column name, got {output!r}")
+        return NamespaceCall(
+            self.visit(namespace.value),
+            namespace.attr,
+            method.attr,
+            [self.visit(a) for a in node.args],
+            kwargs,
+            output=output,
+        )
 
     def visit_BinOp(self, node) -> AstValue:
         left = self.visit(node.left)

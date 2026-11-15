@@ -27,6 +27,7 @@ from weavehr.callbacks._callbacks.shortcuts import Col, Const
 from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode, SliceStr, StrContains, StripStr, ZeroPadInt
 from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, ParseDateTime, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
+from weavehr.callbacks.namespace import NamespaceCall
 from weavehr.callbacks.proto import CallbackProtocol, ColumnRef, OutputCallbackProtocol, UnknownColumnError, with_output
 from weavehr.callbacks.registry import register_callback_cls, registry
 
@@ -38,6 +39,7 @@ __all__ = [
     "ColumnRef",
     "UnknownColumnError",
     "with_output",
+    "NamespaceCall",
     "DropNa",
     "FirstDistinct",
     "DropIf",

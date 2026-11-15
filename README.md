@@ -248,7 +248,7 @@ post_join_callbacks:
   - add_offset(admission_timestamp, labresultoffset, output=event_timestamp)
 ```
 
-Arithmetic, comparisons, and boolean logic work as ordinary expressions (`col(weight) / (col(height) * col(height))`), and custom callbacks can be registered from Python.
+Arithmetic, comparisons, and boolean logic work as ordinary expressions (`col(weight) / (col(height) * col(height))`), Polars' string and datetime methods are available directly (`text_value.str.to_lowercase()`, `admittime.dt.year()`), and custom callbacks can be registered from Python.
 
 ## Documentation
 
