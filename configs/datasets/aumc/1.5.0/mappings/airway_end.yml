@@ -1,0 +1,23 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- documented end of an artificial airway
+# (device_exposure end): 4097216 (Tube) and 4208623 (DL-tube), and 4044008 only for
+# "Tracheostoma", whose end is recorded; the other tracheostomy items have no end.
+type: simple
+mappings:
+  - pattern:
+      table: device_exposure
+      event: DEVICE_END
+      code: ^(4097216|4208623)//
+    level: endotracheal_tube
+    columns: &device_columns
+      text_value: col(code)
+      extension:
+        stay_id: col(visit_occurrence_id)
+        device_exposure_id: col(device_exposure_id)
+  - pattern:
+      table: device_exposure
+      event: DEVICE_END
+      code: ^4044008//
+    level: tracheostomy
+    columns: *device_columns
+    filters:
+      - str_contains(code, "eostoma")

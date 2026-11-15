@@ -1,0 +1,27 @@
+type: simple
+mappings:
+  - pattern:
+      table: respiratorycare
+      event: AIRWAY
+      code: ^RESPIRATORY_CARE//(Oral ETT|Nasal ETT)$
+    level: endotracheal_tube
+    columns: &care_columns
+      extension:
+        stay_id: col(stay_id)
+  - pattern:
+      table: respiratorycare
+      event: AIRWAY
+      code: ^RESPIRATORY_CARE//Tracheostomy$
+    level: tracheostomy
+    columns: *care_columns
+  - pattern:
+      table: nursecharting
+      event: NURSE_CHART
+      code: ^Vital Signs//O2 Admin Device//O2 Admin Device$
+    level: tracheostomy
+    columns:
+      text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
+    filters:
+      - str_contains(strip_str(text_value), "(?i)trach")

@@ -8,12 +8,15 @@ mappings:
   - pattern:
       table: inputevents
       event: INFUSION_START
-      code: (221906(//.*)?)
+      code: ^(?:INFUSION_START//)?(?:221906)(?:$|//)
       extensions:
         rateuom: mcg/kg/min
     columns:
       numeric_value: col(originalrate)
       text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
+        linkorderid: col(linkorderid)
   # A genuine cessation is a rate of 0 — the components carry the last rate
   # forward, so a stop has to be charted rather than merely implied. A dose
   # change closes one segment and opens the next, so it is not a stop and must
@@ -21,11 +24,14 @@ mappings:
   - pattern:
       table: inputevents
       event: INFUSION_END
-      code: (221906(//.*)?)
+      code: ^(?:INFUSION_END//)?(?:221906)(?:$|//)
       extensions:
         rateuom: mcg/kg/min
     columns:
       numeric_value: const(0)
       text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
+        linkorderid: col(linkorderid)
     filters:
       - drop_if(text_value == "ChangeDose/Rate")

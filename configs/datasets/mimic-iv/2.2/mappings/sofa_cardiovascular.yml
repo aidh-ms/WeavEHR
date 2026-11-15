@@ -6,3 +6,9 @@ concepts:
   - dobutamine_rate.1.0.0
   - epinephrine_rate.1.0.0
   - norepinephrine_rate.1.0.0
+kwargs:
+  window: 1h
+  # Provisional missing-stop fallback based on MIMIC-IV demo 2.2 durations:
+  # longest linked start/stop episode 40.57h; longest rate segment 31.9h.
+  # Clinical validation pending. See docs/user_guide/concepts.md.
+  pressor_window: 48h

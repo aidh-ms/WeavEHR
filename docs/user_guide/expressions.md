@@ -36,7 +36,7 @@ filters:
   - replace(col(temp_unit) == "F", (col(temp) - 32) / 1.8, col(temp), output=temp_c)
 ```
 
-Some parameters take a column *name* rather than a value: the argument of `col(...)` and the columns of `drop_na`, `first_distinct`, `first_not_null`, `max`, and `split_explode`. These accept a bare name or a quoted name, and the column must exist either way. The quoted form is for names that are not valid identifiers, e.g. `col("Variable Name")`.
+Some parameters take a column *name* rather than a value: the argument of `col(...)` and the columns of `drop_na`, `first_distinct`, `first_not_null`, `min`, `max`, and `split_explode`. These accept a bare name or a quoted name, and the column must exist either way. The quoted form is for names that are not valid identifiers, e.g. `col("Variable Name")`.
 
 Some parameters are always plain text: `output=`, `dtype`, `offset_unit`, `separator`, `format`, and the value of `const(...)`. A bare word there is just text, so `const(kg)` and `const("kg")` both produce the text `kg`, and `output=event_time` names the new column `event_time`.
 
@@ -62,7 +62,10 @@ Configs use expressions in three contexts with different expectations:
 | `const(value, output=...)` | A constant value, e.g. `const(kg)` as a code part or `const(1)` as a flag |
 | `first_not_null(a, b, ..., output=...)` | Row-wise first non-null value (coalesce) — useful for schema harmonisation |
 | `max(a, b, ..., output=...)` | Row-wise maximum across columns |
+| `min(a, b, ..., output=...)` | Row-wise minimum across columns, ignoring nulls when a value is available |
 | `cast(value, dtype, strict=False, output=...)` | Cast to a dtype (`int64`, `float32`, `string`, `datetime`, …) |
+| `strip_str(value, characters=None, output=...)` | Trim whitespace, or a supplied character set, from both ends; e.g. `strip_str(text_value, " %")` turns `"60%"` into `"60"` |
+| `str_contains(value, pattern, output=...)` | Test strings against a regular expression; null values remain null. |
 | `replace(condition, then_value, else_value, output=...)` | Conditional value (`when/then/otherwise`) |
 
 ### Date and time

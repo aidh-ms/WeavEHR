@@ -1,0 +1,90 @@
+path: MICROBIOLOGYEVENTS.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: CHARTDATE
+  type: datetime
+  params:
+    format: '%Y-%m-%d'
+    exact: false
+    strict: false
+- name: CHARTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: SPEC_ITEMID
+  type: int64
+- name: SPEC_TYPE_DESC
+  type: string
+- name: ORG_ITEMID
+  type: int64
+- name: ORG_NAME
+  type: string
+- name: ISOLATE_NUM
+  type: int64
+- name: AB_ITEMID
+  type: int64
+- name: AB_NAME
+  type: string
+- name: DILUTION_TEXT
+  type: string
+- name: DILUTION_COMPARISON
+  type: string
+- name: DILUTION_VALUE
+  type: float32
+- name: INTERPRETATION
+  type: string
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
+    time_precision: replace(CHARTTIME == None, const(day), const(second))
+    time_lower_bound: first_not_null(CHARTTIME, CHARTDATE)
+    time_upper_bound: first_not_null(CHARTTIME, chartdate_plus1)
+callbacks:
+- add_offset(CHARTDATE, 1, offset_unit="days", output=chartdate_plus1)
+events:
+- name: MICROBIOLOGY_SPECIMEN
+  columns:
+    time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
+    code:
+    - col(SPEC_ITEMID)
+    - col(SPEC_TYPE_DESC)
+    extension:
+      available_time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
+  filters:
+  - drop_na(time)
+  - first_distinct(SUBJECT_ID, HADM_ID, time, SPEC_ITEMID)
+- name: MICROBIOLOGY_ORGANISM
+  columns:
+    time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
+    code:
+    - col(ORG_ITEMID)
+    - col(ORG_NAME)
+    extension:
+      available_time: cast(None, "datetime")
+      isolate_num: col(ISOLATE_NUM)
+  filters:
+  - drop_na(time)
+  - drop_na(ORG_ITEMID) or drop_na(ORG_NAME)
+- name: MICROBIOLOGY_SUSCEPTIBILITY
+  columns:
+    time: first_not_null(CHARTTIME, chartdate_plus1, output=time)
+    code:
+    - col(AB_ITEMID)
+    - col(AB_NAME)
+    numeric_value: col(DILUTION_VALUE)
+    text_value: col(INTERPRETATION)
+    extension:
+      available_time: cast(None, "datetime")
+      dilution_text: col(DILUTION_TEXT)
+      dilution_comparison: col(DILUTION_COMPARISON)
+  filters:
+  - drop_na(time)
+  - drop_na(INTERPRETATION)

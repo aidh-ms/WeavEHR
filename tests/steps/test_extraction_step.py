@@ -59,6 +59,17 @@ class TestExtractionStep:
         assert df.schema["text_value"] == pl.String
         assert "stay_id" in df.columns  # extension column preserved
 
+    def test_output_is_moved_from_workspace_to_dataset(self, tmp_path: Path, extraction_config: Path) -> None:
+        project = run_extraction(tmp_path, extraction_config)
+
+        data_path = project.datasets_path / "extraction" / "data"
+        assert sorted(p.relative_to(data_path).as_posix() for p in data_path.rglob("*.parquet")) == [
+            "testdb/1.0/measurements/HEIGHT.parquet",
+            "testdb/1.0/measurements/WEIGHT.parquet",
+            "testdb/1.0/vitals/CHART.parquet",
+        ]
+        assert not list((project.workspace_path / "extraction").rglob("*.parquet"))
+
     @pytest.mark.parametrize(
         ("include_event_name", "expected_codes"),
         [
@@ -182,8 +193,8 @@ class TestExtractionStep:
         )
         assert weight.select("code", "numeric_value").rows() == [("WEIGHT//heavy", 80.0), ("WEIGHT//light", 60.0)]
 
-        workspace = project.workspace_path / "extraction" / "testdb" / "1.0" / "measurements"
-        assert sorted(p.name for p in workspace.iterdir()) == ["HEIGHT.parquet", "WEIGHT.parquet"]
+        output_dir = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "measurements"
+        assert sorted(p.name for p in output_dir.iterdir()) == ["HEIGHT.parquet", "WEIGHT.parquet"]
 
     def test_appends_to_existing_event_output(self, tmp_path: Path, extraction_config: Path) -> None:
         project = WeavEHRProject(tmp_path / "project")
@@ -258,6 +269,18 @@ class TestExtractionStep:
         step.run()
         assert output.stat().st_mtime_ns == first_mtime
 
+    def test_rerun_is_skipped_after_workspace_removed(self, tmp_path: Path, extraction_config: Path) -> None:
+        """The workspace is empty after a run, so removing it must not trigger a full re-extraction."""
+        project = run_extraction(tmp_path, extraction_config)
+        output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
+        first_mtime = output.stat().st_mtime_ns
+        shutil.rmtree(project.workspace_path / "extraction")
+
+        load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
+        ExtractionStep.load(project, extraction_config).run()
+
+        assert output.stat().st_mtime_ns == first_mtime
+
     def test_rerun_after_interrupted_run_starts_from_scratch(
         self, tmp_path: Path, extraction_config: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -280,10 +303,8 @@ class TestExtractionStep:
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         ExtractionStep.load(project, extraction_config).run()
 
-        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         assert dataset_output.exists(), "interrupted run was treated as complete and skipped"
-        assert pl.read_parquet(workspace_output).height == 4
         assert pl.read_parquet(dataset_output).height == 4
         assert (project.datasets_path / "extraction" / "metadata" / "codes.parquet").exists()
         assert marker.exists()
@@ -295,9 +316,7 @@ class TestExtractionStep:
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         ExtractionStep.load(project, extraction_config).run()
 
-        workspace_output = project.workspace_path / "extraction" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
-        assert pl.read_parquet(workspace_output).height == 4
         assert pl.read_parquet(dataset_output).height == 4
 
     def test_missing_dataset_path_is_skipped(self, tmp_path: Path, table_config_dir: Path) -> None:
@@ -487,15 +506,7 @@ config:
         load_extracation_config(config_dir)
         ExtractionStep.load(project, config_file).run()
 
-        output = (
-            project.datasets_path
-            / "extraction"
-            / "data"
-            / "decimaldb"
-            / "1.0"
-            / "vitals"
-            / "CHART.parquet"
-        )
+        output = project.datasets_path / "extraction" / "data" / "decimaldb" / "1.0" / "vitals" / "CHART.parquet"
         df = pl.read_parquet(output).sort("subject_id")
 
         assert df.height == 2

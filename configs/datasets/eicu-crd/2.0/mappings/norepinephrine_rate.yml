@@ -7,5 +7,7 @@ mappings:
   columns:
     numeric_value: col(numeric_value)
     text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
   filters:
   - drop_na(numeric_value)

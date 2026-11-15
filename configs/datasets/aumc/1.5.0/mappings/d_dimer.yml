@@ -1,0 +1,12 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
+#   42870366 = Fibrin D-dimer FEU [Mass/volume] in Blood by Immunoassay
+# Stored in mg/l FEU; converted to ng/mL.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^42870366(//.*)?$"
+    columns:
+      numeric_value: col(numeric_value) * 1000
+      text_value: col(text_value)

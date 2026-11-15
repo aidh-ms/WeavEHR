@@ -1,0 +1,12 @@
+type: simple
+mappings:
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:723|223900)(?:$|//)
+  columns:
+    numeric_value: replace(str_contains(text_value, "^(1[.]0 ET/Trach|No Response-ETT)$"), 1, replace(col(numeric_value) !=
+      None, 0, None))
+    text_value: col(text_value)
+  filters:
+  - drop_na(numeric_value)

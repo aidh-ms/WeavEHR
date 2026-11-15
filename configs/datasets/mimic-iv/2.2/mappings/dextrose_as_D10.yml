@@ -3,7 +3,7 @@ mappings:
   - pattern:
       table: inputevents
       event: INFUSION_END
-      code: (220950(//.*)?)
+      code: ^(?:INFUSION_END//)?(?:220950)(?:$|//)
     columns:
       numeric_value: col(rate)
       text_value: col(text_value)
@@ -14,7 +14,7 @@ mappings:
   - pattern:
       table: inputevents
       event: INFUSION_END
-      code: (228140(//.*)?)
+      code: ^(?:INFUSION_END//)?(?:228140)(?:$|//)
     columns:
       numeric_value: rate * 2
       text_value: col(text_value)

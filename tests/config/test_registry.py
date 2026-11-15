@@ -1,8 +1,10 @@
 """Tests for the configuration registry and directory loading."""
 
+import logging
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
 from pydantic import computed_field
 
 from weavehr.config.base import BaseConfig, BaseDatasetConfig
@@ -165,13 +167,17 @@ class TestRegistryFilter:
 
 
 class TestLoadConfigs:
-    def test_skips_invalid_yaml_files(self, tmp_path: Path) -> None:
+    def test_skips_invalid_yaml_files(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         config_dir = make_config_dir(tmp_path, ["good"])
         (config_dir / "bad.yml").write_text("name: only_a_name_no_version\n")
         (config_dir / "notes.txt").write_text("not yaml at all")
 
-        configs = load_configs(config_dir, RegConfig)
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            configs = load_configs(config_dir, RegConfig)
         assert [c.name for c in configs] == ["good"]
+        # the warning names the file and the validation error
+        assert "bad.yml" in caplog.text
+        assert "version" in caplog.text and "Field required" in caplog.text
 
     def test_missing_path_returns_empty(self, tmp_path: Path) -> None:
         assert load_configs(tmp_path / "does-not-exist", RegConfig) == []

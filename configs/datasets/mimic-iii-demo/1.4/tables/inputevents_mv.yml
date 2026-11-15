@@ -1,0 +1,120 @@
+path: INPUTEVENTS_MV.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: icustay_id
+  type: int64
+- name: starttime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: endtime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: itemid
+  type: int64
+- name: amount
+  type: float32
+- name: amountuom
+  type: string
+- name: rate
+  type: float32
+- name: rateuom
+  type: string
+- name: storetime
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cgid
+  type: int64
+- name: orderid
+  type: int64
+- name: linkorderid
+  type: int64
+- name: ordercategoryname
+  type: string
+- name: secondaryordercategoryname
+  type: string
+- name: ordercomponenttypedescription
+  type: string
+- name: ordercategorydescription
+  type: string
+- name: patientweight
+  type: float32
+- name: totalamount
+  type: float32
+- name: totalamountuom
+  type: string
+- name: isopenbag
+  type: int64
+- name: continueinnextdept
+  type: int64
+- name: cancelreason
+  type: int64
+- name: statusdescription
+  type: string
+- name: comments_editedby
+  type: string
+- name: comments_canceledby
+  type: string
+- name: comments_date
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: originalamount
+  type: float32
+- name: originalrate
+  type: float32
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(icustay_id, output=ICUSTAY_ID)
+- col(starttime, output=STARTTIME)
+- col(endtime, output=ENDTIME)
+- col(itemid, output=ITEMID)
+- col(amount, output=AMOUNT)
+- col(amountuom, output=AMOUNTUOM)
+- col(rate, output=RATE)
+- col(rateuom, output=RATEUOM)
+- col(storetime, output=STORETIME)
+- col(cgid, output=CGID)
+- col(orderid, output=ORDERID)
+- col(linkorderid, output=LINKORDERID)
+- col(ordercategoryname, output=ORDERCATEGORYNAME)
+- col(secondaryordercategoryname, output=SECONDARYORDERCATEGORYNAME)
+- col(ordercomponenttypedescription, output=ORDERCOMPONENTTYPEDESCRIPTION)
+- col(ordercategorydescription, output=ORDERCATEGORYDESCRIPTION)
+- col(patientweight, output=PATIENTWEIGHT)
+- col(totalamount, output=TOTALAMOUNT)
+- col(totalamountuom, output=TOTALAMOUNTUOM)
+- col(isopenbag, output=ISOPENBAG)
+- col(continueinnextdept, output=CONTINUEINNEXTDEPT)
+- col(cancelreason, output=CANCELREASON)
+- col(statusdescription, output=STATUSDESCRIPTION)
+- col(comments_editedby, output=COMMENTS_EDITEDBY)
+- col(comments_canceledby, output=COMMENTS_CANCELEDBY)
+- col(comments_date, output=COMMENTS_DATE)
+- col(originalamount, output=ORIGINALAMOUNT)
+- col(originalrate, output=ORIGINALRATE)
+join:
+- path: D_ITEMS.csv
+  columns:
+  - name: itemid
+    type: int64
+  - name: label
+    type: string
+  callbacks:
+  - col(itemid, output=ITEMID)
+  - col(label, output=LABEL)
+  both_on:
+  - ITEMID

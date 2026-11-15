@@ -8,6 +8,39 @@ from weavehr.callbacks.registry import register_callback_cls
 
 
 @register_callback_cls
+class StrContains(OutputCallbackProtocol):
+    """Test strings against a regular expression; null inputs remain null."""
+
+    def __init__(self, value: AstValue, pattern: str, output: str | None = None) -> None:
+        self.value = value
+        self.pattern = pattern
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        expr = to_expr(lf, self.value).cast(pl.String).str.contains(self.pattern)
+        return with_output(expr, self.output)
+
+
+@register_callback_cls
+class StripStr(OutputCallbackProtocol):
+    """Trim whitespace, or a supplied set of characters, from both ends."""
+
+    def __init__(
+        self,
+        value: AstValue,
+        characters: str | None = None,
+        output: str | None = None,
+    ) -> None:
+        self.value = value
+        self.characters = characters
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        expr = to_expr(lf, self.value).cast(pl.String).str.strip_chars(self.characters)
+        return with_output(expr, self.output)
+
+
+@register_callback_cls
 class ZeroPadInt(OutputCallbackProtocol):
     """Zero-pad the integer portion of a numeric string to a fixed width.
 

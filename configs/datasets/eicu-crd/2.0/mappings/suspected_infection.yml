@@ -1,0 +1,8 @@
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.SustainedAntibioticsTransformer
+concepts:
+  - antibiotics.1.0.0
+  - death.1.0.0
+kwargs:
+  antibiotic_window: 72h
+  max_gap: 24h

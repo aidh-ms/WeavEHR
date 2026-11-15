@@ -1,0 +1,6 @@
+name: ventilator_plateau_pressure
+version: 1.0.0
+unit: cmH2O
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

@@ -9,13 +9,19 @@ been ETL'd into OMOP — for example
 
 ## Versions
 
-- `5.4/` — **reference configuration** for OMOP CDM v5.4. Eleven table configs
-  (`tables/`) covering the clinical, demographic and provenance tables that the
-  AMSTEL ETL populates from AmsterdamUMCdb.
+- `5.3.1/` — **reference configuration** for OMOP CDM v5.3.1. Eleven table
+  configs (`tables/`) covering the clinical, demographic and provenance tables
+  that the AMSTEL ETL populates from AmsterdamUMCdb. They read, for example, the
+  [MIMIC-IV demo in OMOP](https://physionet.org/content/mimic-iv-demo-omop/0.9/).
+- `5.4/` — **extends `5.3.1`** (see `5.4/extends.yml`) and restates only the four
+  tables whose schema changed in CDM 5.4: `device_exposure`, `observation` and
+  `procedure_occurrence` gained columns, and `visit_occurrence` renamed its
+  admission and discharge columns (`admitting_source_*` → `admitted_from_*`,
+  `discharge_to_*` → `discharged_to_*`). AmsterdamUMCdb extends this version.
 
 No per-dataset concept mappings (`mappings/`) ship yet — the table configs only
 extract the raw OMOP events into MEDS. Concepts are mapped on the standardised
-`*_concept_id` codes and can be added later under `5.4/mappings/`.
+`*_concept_id` codes and can be added later under a version's `mappings/`.
 
 ## Configured tables
 

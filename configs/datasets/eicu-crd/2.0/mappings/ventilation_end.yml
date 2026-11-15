@@ -1,10 +1,21 @@
 type: simple
 mappings:
   - pattern:
+      table: respiratorycare
+      event: VENTILATION_END
+      code: ^RESPIRATORY_CARE(//.*)?$
+    columns:
+      extension:
+        stay_id: col(stay_id)
+    filters:
+      - first_distinct(subject_id, stay_id, time)
+  - pattern:
       table: respiratorycharting
       event: RESPIRATORY_CHART
       code: ^respFlowCareData//RT Vent On/Off$
     columns:
       text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
     filters:
-      - (text_value == "Off") or (text_value == "off")
+      - str_contains(text_value, "(?i)^(off|suspended)$")

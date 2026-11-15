@@ -1,0 +1,184 @@
+path: ADMISSIONS.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: ADMITTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: DISCHTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: DEATHTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ADMISSION_TYPE
+  type: string
+- name: ADMISSION_LOCATION
+  type: string
+- name: DISCHARGE_LOCATION
+  type: string
+- name: INSURANCE
+  type: string
+- name: LANGUAGE
+  type: string
+- name: RELIGION
+  type: string
+- name: MARITAL_STATUS
+  type: string
+- name: ETHNICITY
+  type: string
+- name: EDREGTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: EDOUTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: DIAGNOSIS
+  type: string
+- name: HOSPITAL_EXPIRE_FLAG
+  type: int64
+- name: HAS_CHARTEVENTS_DATA
+  type: int64
+join:
+- path: PATIENTS.csv.gz
+  columns:
+  - name: SUBJECT_ID
+    type: int64
+  - name: DOB
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - SUBJECT_ID
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
+events:
+- name: HOSPITAL_ADMISSION
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - col(ADMISSION_TYPE)
+    - col(ADMISSION_LOCATION)
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: HOSPITAL_DISCHARGE
+  columns:
+    time: col(DISCHTIME)
+    code:
+    - col(DISCHARGE_LOCATION)
+    extension:
+      available_time: col(DISCHTIME)
+  filters:
+  - drop_na(time)
+- name: PATIENT_AGE
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - const("PATIENT_AGE")
+    numeric_value: datetime_diff(DOB, ADMITTIME, unit="years")
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: ADMISSION_TYPE
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - col(ADMISSION_TYPE)
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: ED_REGISTRATION
+  columns:
+    time: col(EDREGTIME)
+    code:
+    - const("ED_REGISTRATION")
+    extension:
+      available_time: col(EDREGTIME)
+  filters:
+  - drop_na(time)
+- name: ED_OUT
+  columns:
+    time: col(EDOUTTIME)
+    code:
+    - const("ED_OUT")
+    extension:
+      available_time: col(EDOUTTIME)
+  filters:
+  - drop_na(time)
+- name: INSURANCE
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - col(INSURANCE)
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: LANGUAGE
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - col(LANGUAGE)
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: MARITAL_STATUS
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - col(MARITAL_STATUS)
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: ETHNICITY
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - col(ETHNICITY)
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: RELIGION
+  columns:
+    time: col(ADMITTIME)
+    code:
+    - col(RELIGION)
+    extension:
+      available_time: col(ADMITTIME)
+  filters:
+  - drop_na(time)
+- name: IN_HOSPITAL_MORTALITY
+  columns:
+    time: col(DISCHTIME)
+    code:
+    - const("IN_HOSPITAL_MORTALITY")
+    numeric_value: col(HOSPITAL_EXPIRE_FLAG)
+    extension:
+      available_time: col(DISCHTIME)
+  filters:
+  - drop_na(time)
