@@ -1,9 +1,22 @@
+# Both sources should be in Celsius, but some monitors send Fahrenheit and nurses
+# sometimes enter Fahrenheit in the Celsius field. Values above 50 cannot be Celsius
+# and are converted from Fahrenheit; the source text is kept.
+# vitalperiodic: monitor values, only where a continuous probe was attached.
+# nursecharting: nurse-charted values. Each reading is stored as a "Temperature (C)"
+# row and a "Temperature (F)" row calculated from it; only the (C) rows are mapped.
+# Nurse-charted rows at the same time as a monitor value (often the confirmed monitor
+# value) are kept.
 type: simple
 mappings:
 - pattern:
     table: vitalperiodic
     event: TEMPERATURE
     code: ^VITALS_PERIODIC//C$
-  columns:
-    numeric_value: col(numeric_value)
+  columns: &columns
+    numeric_value: replace(numeric_value > 50, (numeric_value - 32) * 5 / 9, numeric_value)
     text_value: col(text_value)
+- pattern:
+    table: nursecharting
+    event: NURSE_CHART
+    code: ^Vital Signs//Temperature//Temperature \(C\)$
+  columns: *columns

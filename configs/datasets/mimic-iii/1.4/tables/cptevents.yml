@@ -1,0 +1,58 @@
+path: CPTEVENTS.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: COSTCENTER
+  type: string
+- name: CHARTDATE
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: CPT_CD
+  type: string
+- name: CPT_NUMBER
+  type: int64
+- name: CPT_SUFFIX
+  type: string
+- name: TICKET_ID_SEQ
+  type: int64
+- name: SECTIONHEADER
+  type: string
+- name: SUBSECTIONHEADER
+  type: string
+- name: DESCRIPTION
+  type: string
+join:
+- path: ADMISSIONS.csv.gz
+  columns:
+  - name: HADM_ID
+    type: int64
+  - name: DISCHTIME
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  both_on:
+  - HADM_ID
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
+events:
+- name: CPT
+  columns:
+    time: first_not_null(CHARTDATE, DISCHTIME, output=time)
+    code:
+    - const("CPT")
+    - col(CPT_CD)
+    text_value: col(DESCRIPTION)
+    extension:
+      available_time: first_not_null(CHARTDATE, DISCHTIME, output=time)
+  filters:
+  - drop_na(time)

@@ -1,0 +1,6 @@
+name: respiratory_support
+version: 1.0.0
+levels: [invasive, noninvasive, ventilator, high_flow, oxygen, none]
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

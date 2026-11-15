@@ -22,9 +22,9 @@ from weavehr.callbacks._callbacks.conditional import Replace
 from weavehr.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
 from weavehr.callbacks._callbacks.logical import And, Not, Or
 from weavehr.callbacks._callbacks.reshape import SplitExplode
-from weavehr.callbacks._callbacks.selector import FirstNotNull, Max
+from weavehr.callbacks._callbacks.selector import FirstNotNull, Max, Min
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
-from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode, SliceStr, ZeroPadInt
+from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode, SliceStr, StrContains, StripStr, ZeroPadInt
 from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, ParseDateTime, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
 from weavehr.callbacks.proto import CallbackProtocol, ColumnRef, OutputCallbackProtocol, UnknownColumnError, with_output
@@ -48,6 +48,7 @@ __all__ = [
     "DatetimeDiff",
     "FirstNotNull",
     "Max",
+    "Min",
     "Add",
     "Sum",
     "Subtract",
@@ -74,6 +75,8 @@ __all__ = [
     "SplitExplode",
     "ZeroPadInt",
     "SliceStr",
+    "StrContains",
+    "StripStr",
     "ConcatStr",
     "HashEncode",
 ]

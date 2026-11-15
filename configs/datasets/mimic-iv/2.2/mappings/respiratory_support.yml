@@ -1,0 +1,77 @@
+type: simple
+mappings:
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^223849//
+    level: invasive
+    columns: &chart_columns
+      text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
+    filters:
+      - str_contains(strip_str(text_value), "^([(]S[)] CMV|APRV|APRV/Biphasic[+]ApnPress|APRV/Biphasic[+]ApnVol|APV [(]cmv[)]|Ambient|Apnea Ventilation|CMV|CMV/ASSIST|CMV/ASSIST/AutoFlow|CMV/AutoFlow|CPAP/PPS|CPAP/PSV|CPAP/PSV[+]Apn TCPL|CPAP/PSV[+]ApnPres|CPAP/PSV[+]ApnVol|MMV|MMV/AutoFlow|MMV/PSV|MMV/PSV/AutoFlow|P-CMV|PCV[+]|PCV[+]/PSV|PCV[+]Assist|PRES/AC|PRVC/AC|PRVC/SIMV|PSV/SBT|SIMV|SIMV/AutoFlow|SIMV/PRES|SIMV/PSV|SIMV/PSV/AutoFlow|SIMV/VOL|SYNCHRON MASTER|SYNCHRON SLAVE|VOL/AC)$")
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^229314//
+    level: invasive
+    columns: *chart_columns
+    filters:
+      - str_contains(strip_str(text_value), "^(APRV|APV [(]cmv[)]|Ambient|[(]S[)] CMV|P-CMV|SIMV|APV [(]simv[)]|P-SIMV|VS|ASV)$")
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^226732//
+    level: noninvasive
+    columns: *chart_columns
+    filters:
+      - str_contains(strip_str(text_value), "^(Bipap mask|CPAP mask)$")
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^229314//
+    level: noninvasive
+    columns: *chart_columns
+    filters:
+      - str_contains(strip_str(text_value), "^(DuoPaP|NIV|NIV-ST)$")
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^223849//
+    level: ventilator
+    columns: *chart_columns
+    filters:
+      - strip_str(text_value) == "CPAP"
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^229314//
+    level: ventilator
+    columns: *chart_columns
+    filters:
+      - strip_str(text_value) == "SPONT"
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^226732//
+    level: high_flow
+    columns: *chart_columns
+    filters:
+      - strip_str(text_value) == "High flow nasal cannula"
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^226732//
+    level: oxygen
+    columns: *chart_columns
+    filters:
+      - str_contains(strip_str(text_value), "^(Non-rebreather|Face tent|Aerosol-cool|Venti mask|Medium conc mask|Ultrasonic neb|Vapomist|Oxymizer|High flow neb|Nasal cannula|Trach mask)$")
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^226732//
+    level: none
+    columns: *chart_columns
+    filters:
+      - strip_str(text_value) == "None"

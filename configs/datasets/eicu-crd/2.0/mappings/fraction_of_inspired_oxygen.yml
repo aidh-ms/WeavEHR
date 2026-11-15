@@ -1,16 +1,27 @@
+# Contains fractions such as 0.4 and percentage strings such as "60%".
+# Convert numeric fractions in [0.2, 1] to percent.
+# Recover percentage text when the numeric value is absent; retain source text
+# and numeric values outside the conversion interval without range filtering.
 type: simple
 mappings:
   - pattern:
       table: respiratorycharting
       event: RESPIRATORY_CHART
       code: (FiO2(//.*)?)
-    columns:
-      numeric_value: col(numeric_value)
+    columns: &fio2_columns
+      numeric_value: >-
+        replace(
+          numeric_value == None,
+          cast(strip_str(text_value, " %"), "float32"),
+          replace(
+            (numeric_value >= 0.2) & (numeric_value <= 1),
+            numeric_value * 100,
+            numeric_value
+          )
+        )
       text_value: col(text_value)
   - pattern:
       table: lab
       event: LAB
       code: ^(FiO2)(//.*)?$
-    columns:
-      numeric_value: col(numeric_value)
-      text_value: col(text_value)
+    columns: *fio2_columns

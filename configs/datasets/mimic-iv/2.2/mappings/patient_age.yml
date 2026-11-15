@@ -1,9 +1,11 @@
+# Age in whole years at each hospital admission; 90 stands for 90 or older.
 type: simple
 mappings:
   - pattern:
-      table: patients
+      table: admissions
       event: PATIENT_AGE
-      code: PATIENT_AGE
+      code: ^PATIENT_AGE$
     columns:
-      numeric_value: col(numeric_value)
-      text_value: col(text_value)
+      numeric_value: replace(col(numeric_value) > 90, 90, col(numeric_value))
+    filters:
+      - drop_na(numeric_value)

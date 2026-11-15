@@ -1,3 +1,7 @@
+# labmeasurenamesystem is always mg/dL, but some sites report values in mEq/L
+# (labmeasurenameinterface "mEq/L" in any case) without converting them.
+# Mg2+ is divalent (24.305 g/mol): 1 mEq/L = 0.5 mmol/L = 1.215 mg/dL.
+# ricu 0.6.3 divides by 1.215 instead, which reads normal values as low.
 type: simple
 mappings:
   - pattern:
@@ -5,5 +9,10 @@ mappings:
       event: LAB
       code: ^(magnesium)(//.*)?$
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: >-
+        replace(
+          str_contains(labmeasurenameinterface, "(?i)^meq/l$"),
+          numeric_value * 1.215,
+          numeric_value
+        )
       text_value: col(text_value)

@@ -1,4 +1,4 @@
 type: complex
 concept_transformer: weavehr.steps.concept.transformer.sofa.SofaCnsTransformer
 concepts:
-  - gcs_total.1.0.0
+  - gcs.1.0.0

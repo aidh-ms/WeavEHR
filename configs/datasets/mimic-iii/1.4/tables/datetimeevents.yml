@@ -1,0 +1,70 @@
+path: DATETIMEEVENTS.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: ICUSTAY_ID
+  type: int64
+- name: ITEMID
+  type: int64
+- name: CHARTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: STORETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: CGID
+  type: int64
+- name: VALUE
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: VALUEUOM
+  type: string
+- name: WARNING
+  type: int64
+- name: ERROR
+  type: int64
+- name: RESULTSTATUS
+  type: string
+- name: STOPPED
+  type: string
+join:
+- path: D_ITEMS.csv.gz
+  columns:
+  - name: ITEMID
+    type: int64
+  - name: LABEL
+    type: string
+  both_on:
+  - ITEMID
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    caregiver_id: col(CGID)
+    row_id: col(ROW_ID)
+filters:
+- not (ERROR == 1) or ERROR == None
+events:
+- name: TIMESTAMP_OF
+  columns:
+    time: col(CHARTTIME)
+    code:
+    - col(ITEMID)
+    - col(LABEL)
+    extension:
+      available_time: col(STORETIME)
+      datetime_value: col(VALUE)
+      datetime_uom: col(VALUEUOM)
+  filters:
+  - drop_na(time)

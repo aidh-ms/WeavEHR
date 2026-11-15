@@ -1,0 +1,49 @@
+type: simple
+mappings:
+  - pattern:
+      table: procedureevents
+      event: PROCEDURE_START
+      code: ^224385//
+    level: endotracheal_tube
+    columns: &procedure_columns
+      extension:
+        stay_id: col(stay_id)
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^226732//
+    level: endotracheal_tube
+    columns: &chart_columns
+      text_value: col(text_value)
+      extension:
+        stay_id: col(stay_id)
+    filters:
+      - strip_str(text_value) == "Endotracheal tube"
+  - pattern:
+      table: procedureevents
+      event: PROCEDURE_START
+      code: ^(225448|226237)//
+    level: tracheostomy
+    columns: *procedure_columns
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^226732//
+    level: tracheostomy
+    columns: *chart_columns
+    filters:
+      - str_contains(strip_str(text_value), "^(Tracheostomy tube|Trach mask)$")
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^224829//
+    level: tracheostomy
+    columns: *chart_columns
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^227130//
+    level: tracheostomy
+    columns: *chart_columns
+    filters:
+      - strip_str(text_value) == "1"
