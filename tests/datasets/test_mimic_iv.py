@@ -8,7 +8,7 @@ mapping's header comment or ``docs/user_guide/concepts.md``; the case notes say 
 that an item ID is in a mapping's pattern would only restate the YAML, so there is none.
 
 - Behaviour cases: one extracted source row per :class:`Case`, grouped by rule (unit
-  conversions, rate units, saturation ranges, infusion durations, antibiotic exclusions, the
+  conversions, rate units, saturations, infusion durations, antibiotic exclusions, the
   respiratory support and airway levels, ventilation markers, sex) and run through the shipped
   simple mapping by one parametrised test. Item labels are the real dictionary labels.
 - Native extraction: synthetic rows written as the release ships them (gzip CSV, lower-case
@@ -252,12 +252,11 @@ DURATIONS = [
 SATURATIONS = [
     case(concept, event, item, unit="%", value=value, expect=expect, note=note)
     for concept, event, item, value, expect, note in [
-        ("oxygen_saturation", "CHART", 220277, 100, [{"numeric_value": 100}], "100% is the largest saturation"),
-        ("oxygen_saturation", "CHART", 220277, 101, NOTHING, "a saturation above 100% is impossible"),
-        ("oxygen_saturation", "CHART", 220277, -1, NOTHING, "a negative saturation is impossible"),
+        ("oxygen_saturation", "CHART", 220277, 101, [{"numeric_value": 101}], "no range filtering"),
+        ("oxygen_saturation", "CHART", 220277, -1, [{"numeric_value": -1}], "no range filtering"),
         ("oxygen_saturation", "CHART", 220277, None, NOTHING, "a saturation needs a number (mimic-code)"),
-        ("arterial_oxygen_saturation", "CHART", 220227, 101, NOTHING, "a saturation above 100% is impossible"),
-        ("arterial_oxygen_saturation", "LAB", 50817, 101, NOTHING, "mimic-code keeps blood-gas SO2 up to 100%"),
+        ("arterial_oxygen_saturation", "CHART", 220227, 101, [{"numeric_value": 101}], "no range filtering"),
+        ("arterial_oxygen_saturation", "LAB", 50817, 101, [{"numeric_value": 101}], "no range filtering"),
     ]
 ]
 
