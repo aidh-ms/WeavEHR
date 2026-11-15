@@ -6,17 +6,19 @@ IDs AMSTEL assigned to AUMCdb items. Each test pins a rule from
 ``configs/datasets/aumc/README.md`` or from a mapping's header comment that the YAML does not
 show by itself: unit conversions (and the rows of the same analyte that must not convert),
 scale rules that depend on the value, the dropped device maxima, the choice between source
-items that share one OMOP concept, and the classification of ventilator modes and devices. A
-check that a concept ID is in a pattern would only restate the YAML, so there is none.
+items that share one OMOP concept, the classification of ventilator modes and devices, the
+scores of GCS list answers, and the antibiotics excluded or added relative to ricu. A check
+that a concept ID is in a pattern would only restate the YAML, so there is none.
 
 - Behaviour cases: one extracted source row per :class:`Case`, grouped by rule and run through
   the shipped simple mapping by one parametrised test.
 - Native extraction: the rules that select by source value or unit read those parts of the code
   that the inherited OMOP tables assemble, so one case per such rule starts from native OMOP
   rows and runs through the AUMCdb table config and the mapping.
+- Concept pipeline: real concept-step runs of the complex chains GCS -> CNS SOFA and
+  antibiotics + culture orders -> suspected infection.
 
-AUMCdb has no complex or derived mappings, so no concept pipeline runs here. The OMOP table
-configs themselves (time fallbacks, CDM 5.3.1/5.4 differences) are tested in
+The OMOP table configs themselves (time fallbacks, CDM 5.3.1/5.4 differences) are tested in
 ``tests/datasets/test_omop.py``.
 
 No AUMCdb data and no AMSTEL mapping files are available here. The source values and units in
@@ -26,7 +28,7 @@ comments and the README say on synthetic rows, not that AMSTEL writes these stri
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
 
@@ -40,6 +42,7 @@ from tests.datasets.support import (
     check_case,
     extract_native,
     map_rows,
+    run_concepts,
 )
 
 DATASET: Final = "aumc"
@@ -232,6 +235,59 @@ AIRWAYS = [
     ]
 ]
 
+# GCS items are list items: AMSTEL writes the answer as a LOINC value_as_concept_id and leaves
+# value_as_number empty. The expected scores are ricu's aumc egcs/mgcs/vgcs labels and ett_gcs.
+EYE: Final = (3016335, "Actief openen van de ogen")
+MOTOR: Final = (3008223, "Beste motore reactie van de armen")
+VERBAL: Final = (3009094, "Beste verbale reactie")
+GCS = [
+    Case(
+        concept=concept,
+        table="measurement",
+        event="MEASUREMENT",
+        code=code("MEASUREMENT", *item),
+        value=value,
+        text=label,
+        extra={"value_as_concept_id": answer},
+        expect=NOTHING if expected is None else [{"numeric_value": expected}],
+        note=note,
+    )
+    for concept, item, label, answer, value, expected, note in [
+        ("gcs_eye", EYE, "Spontane reactie", 45880466, None, 4, "ricu egcs: Spontane reactie = 4"),
+        ("gcs_eye", (3026019, "A_Eye"), "Op pijn", 45884209, None, 2, "ricu egcs: Op pijn = 2"),
+        ("gcs_eye", EYE, "Spontane reactie", None, 1.0, None, "header: no answer concept, no score"),
+        ("gcs_motor", MOTOR, "Spastische reactie (terugtrekken)", 45882047, None, 4, "ricu mgcs: withdrawal = 4"),
+        ("gcs_motor", MOTOR, "Decortatie reflex (abnormaal buigen)", 45879885, None, 3, "ricu mgcs: flexion = 3"),
+        ("gcs_motor", (3026549, "A_Motoriek"), "Voert opdrachten uit", 45880468, None, 6, "ricu mgcs: obeys = 6"),
+        ("gcs_verbal", VERBAL, "Verwarde conversatie", 45883906, None, 4, "ricu vgcs: Verwarde conversatie = 4"),
+        ("gcs_verbal", (3013144, "A_Verbal"), "Geen geluid", 45877384, None, 1, "ricu vgcs: Geen geluid = 1"),
+        ("gcs_verbal", VERBAL, "Geïntubeerd", 36311192, None, None, "header: intubated is no verbal score"),
+        ("gcs_unable", VERBAL, "Geïntubeerd", 36311192, None, 1, "ricu ett_gcs: Geïntubeerd"),
+        ("gcs_unable", VERBAL, "Helder en adequaat (communicatie mogelijk)", 45877602, None, 0, "a score clears it"),
+        ("gcs_unable", (3013144, "A_Verbal"), "Georiënteerd", 45877602, None, 0, "a score clears it"),
+        ("gcs_unable", VERBAL, None, None, None, None, "header: no answer concept, no flag"),
+    ]
+]
+
+# drug_source_value is "<item> (<ordercategory>)".
+ANTIBIOTICS = [
+    Case(
+        concept="antibiotics",
+        table="drug_exposure",
+        event="DRUG_START",
+        code=code("DRUG_START", concept_id, source),
+        expect=[{"numeric_value": 1}] if antibiotic else NOTHING,
+        note=note,
+    )
+    for concept_id, source, antibiotic, note in [
+        (43295826, "Vancomycine (Injecties Antimicrobiele middelen)", True, "a ricu abx item marks treatment"),
+        (40928582, "Meropenem (Meronem) (Injecties Antimicrobiele middelen)", True, "header: added as in MIMIC-IV"),
+        (40088729, "Tobramycine oogzalf (Tobrex) (Niet iv Antimicrobiele middelen)", False, "header: eye product"),
+        (43035851, "Zilversulfadiazine (Flammazine) (Niet iv Zalven/Crèmes/Druppels)", False, "header: skin product"),
+        (902722, "SDD drank (4 x dgs) (Niet iv Antimicrobiele middelen)", False, "header: SDD is no treatment"),
+    ]
+]
+
 CASES = [
     *MOLAR_CONVERSIONS,
     *MASS_CONVERSIONS,
@@ -242,6 +298,8 @@ CASES = [
     *SOURCE_SELECTION,
     *RESPIRATORY_SUPPORT,
     *AIRWAYS,
+    *GCS,
+    *ANTIBIOTICS,
 ]
 
 
@@ -318,6 +376,23 @@ NATIVE_RULES = [
         [{"code": "airway_end//tracheostomy", "time": END_TIME, "stay_id": str(VISIT_ID), "device_exposure_id": "1"}],
         id="device_source_value decides a recorded tracheostomy end",
     ),
+    pytest.param(
+        "measurement",
+        "MEASUREMENT",
+        "body_fluid_sampling",
+        [
+            {
+                "person_id": 1,
+                "measurement_id": 1,
+                "visit_occurrence_id": VISIT_ID,
+                "measurement_datetime": TIME,
+                "measurement_concept_id": 4107893,
+                "measurement_source_value": "Bloedkweken afnemen",
+            }
+        ],
+        [{"code": "body_fluid_sampling", "time": TIME, "numeric_value": 1}],
+        id="a culture order without value or unit is a sampling marker",
+    ),
 ]
 
 
@@ -336,3 +411,102 @@ def test_source_text_rules_read_the_code_of_native_omop_rows(
     result = map_rows(concept, dataset=DATASET, version=VERSION, table=table, event=event, rows=extracted.to_dicts())
 
     assert_rows(result, expect)
+
+
+# --- Concept pipeline -----------------------------------------------------------------------------
+
+
+def at(hours: float) -> datetime:
+    """``hours`` after :data:`TIME`."""
+    return TIME + timedelta(hours=hours)
+
+
+def test_cns_sofa_scores_gcs_answers_and_intubation(tmp_path: Path) -> None:
+    """GCS answer concepts become a GCS total and a CNS SOFA score.
+
+    Both subjects open no eyes and show no motor response. Subject 1 makes no sound: GCS 3. Subject 2
+    is intubated (Geïntubeerd), which as in ricu sets the GCS to 15. CNS SOFA points follow Vincent
+    et al. (1996): GCS 15 scores 0, a GCS below 6 scores 4.
+    """
+    answers = [(EYE, 45877537), (MOTOR, 45878992)]
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["gcs_eye", "gcs_motor", "gcs_verbal", "gcs_unable", "gcs", "sofa_cns"],
+        sources={
+            "measurement/MEASUREMENT": [
+                {"subject_id": subject, "time": TIME, "code": code("MEASUREMENT", *item), "value_as_concept_id": answer}
+                for subject, verbal in [(1, 45877384), (2, 36311192)]
+                for item, answer in [*answers, (VERBAL, verbal)]
+            ]
+        },
+    )
+
+    assert_rows(
+        outputs["gcs"],
+        [{"subject_id": 1, "time": TIME, "numeric_value": 3}, {"subject_id": 2, "time": TIME, "numeric_value": 15}],
+        context="gcs",
+    )
+    assert_rows(
+        outputs["sofa_cns"],
+        [{"subject_id": 1, "time": TIME, "numeric_value": 4}, {"subject_id": 2, "time": TIME, "numeric_value": 0}],
+        context="sofa_cns",
+    )
+
+
+def test_suspected_infection_pairs_antibiotics_with_culture_orders(tmp_path: Path) -> None:
+    """Antibiotic administrations and culture orders become suspected infection.
+
+    Pairing follows docs/user_guide/concepts.md: a culture within 24 h after an antibiotic, or an
+    antibiotic within 72 h after a culture, dated at the earlier event. Subject 1 gets vancomycin and
+    a blood culture 10 h later. Subject 2's SDD culture order writes one measurement row per culture
+    concept and pairs once with cefotaxime 2 h later. Subject 3's vancomycin follows its culture by
+    80 h. Subject 4's tobramycin eye ointment is no antibiotic.
+    """
+
+    def drug(subject: int, hours: float, concept_id: int) -> dict[str, Any]:
+        return {"subject_id": subject, "time": at(hours), "code": code("DRUG_START", concept_id)}
+
+    def culture(subject: int, hours: float, concept_id: int, source: str = "Bloedkweken afnemen") -> dict[str, Any]:
+        return {"subject_id": subject, "time": at(hours), "code": code("MEASUREMENT", concept_id, source)}
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["antibiotics", "body_fluid_sampling", "suspected_infection"],
+        sources={
+            "drug_exposure/DRUG_START": [
+                drug(1, 0, 43295826),
+                drug(2, 2, 44125812),
+                drug(3, 80, 43295826),
+                drug(4, 0, 40088729),
+            ],
+            "measurement/MEASUREMENT": [
+                culture(1, 10, 4107893),
+                *[culture(2, 0, concept_id, "SDD-kweken afnemen") for concept_id in (4024958, 4015189, 3040827)],
+                culture(3, 0, 4107893),
+                culture(4, 1, 4107893),
+            ],
+        },
+    )
+
+    assert_rows(
+        outputs["antibiotics"],
+        [
+            {"subject_id": subject, "time": at(hours), "numeric_value": 1}
+            for subject, hours in [(1, 0), (2, 2), (3, 80)]
+        ],
+        context="antibiotics",
+    )
+    assert_rows(
+        outputs["body_fluid_sampling"],
+        [{"subject_id": subject, "numeric_value": 1} for subject in (1, 2, 2, 2, 3, 4)],
+        context="body_fluid_sampling",
+    )
+    assert_rows(
+        outputs["suspected_infection"],
+        [{"subject_id": 1, "time": at(0), "numeric_value": 1}, {"subject_id": 2, "time": at(0), "numeric_value": 1}],
+        context="suspected_infection",
+    )

@@ -1,0 +1,16 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- the verbal GCS items (OMOP 3009094, item
+# 6735; 3013144, item 13066) as ricu's ett_gcs flag:
+#   36311192 = Intubated (Geïntubeerd, item 6735 only) -> 1: the GCS is not assessable
+#   any other answer, i.e. a verbal score              -> 0: clears the correction
+# Rows without an answer concept are dropped.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^(3009094|3013144)(//.*)?$"
+    columns:
+      numeric_value: replace(value_as_concept_id == 36311192, 1, replace(value_as_concept_id != None, 0, None))
+      text_value: col(text_value)
+    filters:
+      - drop_na(numeric_value)

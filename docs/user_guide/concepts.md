@@ -208,8 +208,12 @@ MIMIC-IV maps verbal item 223900 to 1 for `No Response-ETT`, including entries
 without a numeric verbal value, and to 0 for other numeric verbal assessments.
 Other null-valued entries produce no flag. `gcs_verbal` keeps the original
 numeric value and text, including verbal 1 or null. MIMIC-IV 3.1 and the 2.2
-demo inherit this mapping. No correction mapping is currently supplied for
-eICU; RASS and ventilation status are not interpreted by `GcsTransformer`.
+demo inherit this mapping. AUMCdb maps the verbal answer "Geïntubeerd" to 1
+and every verbal score to 0; there, `gcs_eye`, `gcs_motor` and `gcs_verbal`
+score the list answers from their OMOP answer concepts, because the OMOP
+export carries no numeric GCS value. No correction mapping is currently
+supplied for eICU; RASS and ventilation status are not interpreted by
+`GcsTransformer`.
 
 Only numeric GCS components or recorded totals generate assessments. Flags
 and expiry alone create no assessment; they take effect at the next numeric
@@ -401,7 +405,7 @@ validation and assessment on representative data.
 
 `suspected_infection` is the shared output concept. Each dataset's
 `suspected_infection.yml` selects its evidence rule: antibiotic/culture pairing
-for MIMIC-IV, or sustained antibiotic treatment for eICU.
+for MIMIC-IV and AUMCdb, or sustained antibiotic treatment for eICU.
 
 `AntibioticsWithCultureTransformer` pairs antibiotic treatment with body-fluid sampling:
 sampling follows antibiotics within 24 hours, or antibiotics follow sampling
@@ -436,6 +440,14 @@ without a recorded route or drug type do not qualify. Drug-name exclusions inspe
 the original prescription code. Prescription markers use the prescribed treatment
 start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo 2.2 inherit
 these mappings.
+
+The AUMCdb antibiotic mapping selects ricu's aumc antibiotic items by their OMOP
+drug concepts, adds the antibacterials of the MIMIC-IV list that ricu lacks for
+AUMCdb (meropenem, imipenem, ceftazidime, clarithromycin, chloramphenicol,
+nitrofurantoin) and, like the MIMIC-IV mapping, excludes eye and skin products.
+Markers use the administration start. Body-fluid sampling is ricu's culture
+orders, dated at their registration. As in ricu, SDD surveillance cultures and the
+intravenous cefotaxime of the SDD regimen count; see the AUMCdb README.
 
 The eICU antibiotic inputs follow the drug selection and binary markers in
 [YAIB-cohorts at 74ac699](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/configs/medications/concept-dict.json).

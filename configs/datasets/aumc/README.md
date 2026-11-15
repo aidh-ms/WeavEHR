@@ -39,9 +39,10 @@ for that clinical concept.
 
 ### Coverage
 
-Currently mapped (all `simple`, all from the OMOP `measurement` table): the
+Currently mapped (`simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
-respiratory numerics (SpO2, respiratory rate, FiO2) and urine output.
+respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. GCS,
+CNS SOFA and suspected infection are described below.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -56,6 +57,46 @@ Respiratory support and the airway markers (`respiratory_support`,
 modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). On
 AUMCdb 1.5.0 they select the listed items as intended. Whether a heat-moisture
 exchanger (Kunstneus) always means a tracheostomy is still open.
+
+#### GCS and CNS SOFA
+
+The GCS components are AUMCdb list items. AMSTEL leaves their
+`value_as_number` empty and stores the answer as a LOINC `value_as_concept_id`
+(the Dutch label is in `text_value`), so `gcs_eye`, `gcs_motor` and
+`gcs_verbal` score the answer concept as ricu scores the labels. The old items
+(6732, 6734, 6735) and the newer ones (13077, 13072, 13066) share these answer
+concepts. A verbal "Geïntubeerd" is no verbal score: it sets `gcs_unable` to 1,
+as ricu's `ett_gcs` does, and any verbal score sets it to 0. AUMCdb records no
+GCS total, so `gcs` sums the current components (complex mapping, as for
+MIMIC-IV) and `sofa_cns` scores it.
+
+#### Suspected infection
+
+`suspected_infection` pairs `antibiotics` with `body_fluid_sampling`
+(`AntibioticsWithCultureTransformer`, as for MIMIC-IV and in ricu).
+
+- `antibiotics`: `drug_exposure` starts of ricu's aumc `abx` items, by the
+  drug concept IDs AMSTEL assigned. ricu's list has 68 numbers, but 34 of them
+  are the items' record counts in AMSTEL's mapping file (e.g. 25776, the
+  vancomycin total), not itemids. Like the MIMIC-IV mapping, it adds the
+  antibacterials of the MIMIC-IV drug list that ricu's aumc list lacks
+  (meropenem, imipenem, ceftazidime, clarithromycin, chloramphenicol,
+  nitrofurantoin) and drops the eye and skin products ricu keeps (tobramycin
+  and dexamethasone/gentamicin eye ointment, ofloxacin eye drops, silver
+  sulfadiazine cream).
+- `body_fluid_sampling`: ricu's aumc `samp` items are culture orders
+  (`procedureorderitems`), which AMSTEL writes to `measurement` without a value
+  under culture concepts (blood, sputum, urine, throat, ...), dated at the
+  order's registration.
+
+Selective digestive decontamination (SDD) is routine in AUMCdb. As in ricu,
+the SDD surveillance cultures (SDD-kweken afnemen, about twice as many orders
+as blood cultures), MRSA screening and research cultures count as sampling,
+and the intravenous cefotaxime of the SDD regimen counts as an antibiotic,
+while the SDD decontamination products themselves do not. Patients on SDD may
+therefore get a suspected infection early in their admission. Whether to
+exclude surveillance cultures is open; the mappings are not yet validated on
+AUMCdb.
 
 ### Validation against ricu
 
@@ -117,13 +158,22 @@ definitions:
   values, so the concept is not mapped (INR is mapped separately).
 
 Not yet mapped / not cleanly mappable from OMOP:
-- **Drug infusion rates** (`*_rate`, `*_duration`): AMSTEL stores the rate in
-  the free-text `drug_exposure.sig` field, so a numeric rate cannot be recovered
-  from the OMOP export.
-- **Outcomes / length-of-stay** and **ventilation windows**: derived from
-  `visit_occurrence`/`death`; need `derived`/`complex` mappings.
-- **GCS / RASS**, demographics, drug *presence*, and microbiology: mappable from
-  `listitems`/`person`/`drug_exposure`/`specimen`, pending.
+- **Drug infusion rates** (`*_rate`, `*_duration`): AMSTEL writes the rate into
+  the text field `drug_exposure.sig` from a fixed template
+  (`<amount> <unit> @ <dose> <unit>[/kg]/<min|uur> = <rate> <rateunit>`).
+  Reading it needs `sig` in the table config and a callback that extracts a
+  number from text; pending.
+- **Ventilation windows** (`ventilation_start`, `ventilation_end`): AMSTEL
+  writes the processitems Beademen and Beademen non-invasief, with their stop
+  time, to `procedure_occurrence`; pending.
+- **Outcomes / length-of-stay**: derived from `visit_occurrence`/`death`; need
+  `derived`/`complex` mappings.
+- **RASS**: the item is a list item, so its `value_as_number` is empty and the
+  current mapping yields no values. AMSTEL maps "+3 erg geagiteerd" and
+  "+2 geagiteerd" to one answer concept, so the score has to come from the
+  label (ricu reads its first two characters); pending.
+- Demographics, other drug *presence* and microbiology results: mappable from
+  `person`/`drug_exposure`/`specimen`, pending.
 - **troponin_I**, **erythrocyte_distribution_width**, **totcal_CO2**: no
   approved AMSTEL target in AUMCdb.
 - **prothrombine_time** (seconds): the only item holds INR values (see above).

@@ -1,0 +1,7 @@
+# AUMCdb records culture orders (procedureorderitems), so suspected infection
+# pairs antibiotics with body-fluid sampling as in ricu and the MIMIC-IV mapping.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.AntibioticsWithCultureTransformer
+concepts:
+  - antibiotics.1.0.0
+  - body_fluid_sampling.1.0.0

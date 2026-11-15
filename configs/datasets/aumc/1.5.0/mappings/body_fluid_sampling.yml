@@ -1,0 +1,34 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- culture orders. ricu's aumc samp items are
+# procedureorderitems, which AMSTEL writes to measurement (no value, dated at the
+# order's registration) under these measurement_concept_ids:
+#   4107893  = Blood culture                     (Bloedkweken afnemen)
+#   4015189  = Microbial culture of sputum       (Sputumkweek afnemen, Research Sputumkweek
+#                                                 COUrSe, SDD-kweken, SDD Inventarisatiekweken)
+#   4024509  = Urine culture                     (Urinekweek afnemen)
+#   1761466  = Staph aureus and MRSA screening   (MRSA kweken afnemen)
+#   3040827  = Bacteria identified in Anal by Culture (Rectumkweek, Perineumkweek, SDD-kweken,
+#                                                 SDD Inventarisatiekweken)
+#   3003714  = ... in Wound by Culture           (Wondkweek afnemen)
+#   3009986  = ... in Catheter tip by Culture    (Cathetertipkweek afnemen)
+#   3025037  = ... in Peritoneal fluid by Culture (Ascitesvochtkweek afnemen)
+#   3008334  = ... in Drain by Aerobe culture    (Drainvochtkweek afnemen)
+#   4024958  = Throat culture                    (Keelkweek, SDD-kweken, SDD Inventarisatiekweken)
+#   37392597 = Stool culture                     (Faeceskweek afnemen)
+#   4196406  = Legionella rapid test             (Legionella sneltest (urine))
+#   4189544  = Microbial culture                 (X-Kweek nader te bepalen)
+#   4098503  = Cerebrospinal fluid culture       (Liquorkweek afnemen)
+#   37117051 = Nasal culture for bacteria        (Neuskweek afnemen, Research Neuskweek COUrSe)
+# No other AUMCdb source maps to these concepts. An order mapped to several
+# concepts (e.g. SDD-kweken) writes one row per concept at the same time; the
+# suspected-infection pairing collapses them. The procedure_occurrence rows
+# AMSTEL also writes for some orders are not read.
+# As in ricu, surveillance (SDD, MRSA) and research cultures count as sampling.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: ^(1761466|3003714|3008334|3009986|3025037|3040827|4015189|4024509|4024958|4098503|4107893|4189544|4196406|37117051|37392597)//
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
