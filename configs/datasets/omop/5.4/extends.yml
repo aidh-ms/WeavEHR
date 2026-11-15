@@ -1,0 +1,7 @@
+# OMOP CDM 5.4 differs from the 5.3.1 reference in four of the configured
+# tables, which tables/ restates: device_exposure and observation gained
+# columns, procedure_occurrence gained an end date, and visit_occurrence renamed
+# its admission and discharge columns. All other table configs are inherited
+# unchanged.
+dataset: omop
+version: "5.3.1"

@@ -1,0 +1,92 @@
+path: CALLOUT.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: SUBMIT_WARDID
+  type: int64
+- name: SUBMIT_CAREUNIT
+  type: string
+- name: CURR_WARDID
+  type: int64
+- name: CURR_CAREUNIT
+  type: string
+- name: CALLOUT_WARDID
+  type: int64
+- name: CALLOUT_SERVICE
+  type: string
+- name: REQUEST_TELE
+  type: int64
+- name: REQUEST_RESP
+  type: int64
+- name: REQUEST_CDIFF
+  type: int64
+- name: REQUEST_MRSA
+  type: int64
+- name: REQUEST_VRE
+  type: int64
+- name: CALLOUT_STATUS
+  type: string
+- name: CALLOUT_OUTCOME
+  type: string
+- name: DISCHARGE_WARDID
+  type: int64
+- name: ACKNOWLEDGE_STATUS
+  type: string
+- name: CREATETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: UPDATETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ACKNOWLEDGETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: OUTCOMETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: FIRSTRESERVATIONTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: CURRENTRESERVATIONTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    row_id: col(ROW_ID)
+events:
+- name: CALLOUT_REQUEST
+  columns:
+    time: col(CREATETIME)
+    code:
+    - col(CALLOUT_SERVICE)
+    extension:
+      available_time: col(CREATETIME)
+  filters:
+  - drop_na(time)
+- name: CALLOUT_OUTCOME
+  columns:
+    time: col(OUTCOMETIME)
+    code:
+    - col(CALLOUT_OUTCOME)
+    extension:
+      available_time: col(OUTCOMETIME)
+  filters:
+  - drop_na(time)

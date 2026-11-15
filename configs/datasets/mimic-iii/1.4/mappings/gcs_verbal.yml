@@ -1,0 +1,16 @@
+type: simple
+mappings:
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:223900)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:723)(?:$|//)
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)

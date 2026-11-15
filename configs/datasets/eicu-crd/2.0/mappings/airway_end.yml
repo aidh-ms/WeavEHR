@@ -1,0 +1,9 @@
+type: simple
+mappings:
+  - pattern:
+      table: respiratorycare
+      event: AIRWAY
+      code: ^RESPIRATORY_CARE//No Artificial Airway$
+    columns:
+      extension:
+        stay_id: col(stay_id)

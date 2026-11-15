@@ -39,7 +39,7 @@ flowchart LR
 ```
 
 1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
-2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts (*derived* concepts), or custom Python transformers (*complex* concepts). Concept dependencies are resolved automatically.
+2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). Concept dependencies are resolved automatically.
 3. **Sharding step** *(in development)* — re-partitions harmonised data into analysis-ready shards.
 
 Each step reads its inputs and writes its outputs as a self-contained MEDS dataset inside the project, so intermediate results are inspectable and individual steps can be re-run in isolation.
@@ -50,17 +50,20 @@ WeavEHR ships with ready-to-use extraction and concept configurations under [`co
 
 | Dataset | Version | Extraction configs | Concept mappings |
 | --- | --- | --- | --- |
+| [MIMIC-III](https://physionet.org/content/mimiciii/1.4/) | 1.4 | 20 tables (CareVue + MetaVision) | 136 mappings, infusions pending; [coverage](configs/datasets/mimic-iii/README.md) |
+| [MIMIC-III demo](https://physionet.org/content/mimiciii-demo/1.4/) | 1.4 | inherited; native uncompressed CSV paths | inherited |
+| [MIMIC-III CareVue subset](https://physionet.org/content/mimic3-carevue/1.4/) | 1.4 | inherited from MIMIC-III | inherited |
 | [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/) | 3.1, 2.2 | 19 tables (ICU + hosp) | ~80 concepts |
 | [MIMIC-IV demo](https://physionet.org/content/mimic-iv-demo/2.2/) | 2.2 | inherited from MIMIC-IV via `extends` | inherited |
 | [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) | 2.0 | 14 tables | in progress |
 | [eICU-CRD demo](https://physionet.org/content/eicu-crd-demo/2.0/) | 2.0 | inherited from eICU-CRD via `extends` | inherited |
 | [NWICU](https://physionet.org/content/nwicu/0.1.0/) | 0.1.0 | 9 tables | in progress |
-| [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) | 5.4 | 11 tables (reusable model reference, read from Parquet) | — *(added per OMOP dataset)* |
+| [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) | 5.3.1, 5.4 | 11 tables (reusable model reference, read from Parquet; 5.4 extends 5.3.1) | — *(added per OMOP dataset)* |
 | [AmsterdamUMCdb](https://github.com/AmsterdamUMC/AmsterdamUMCdb) (OMOP, via [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL)) | 1.5.0 | inherited from OMOP CDM via `extends` | ~60 concepts (in progress) |
 | [HiRID](https://physionet.org/content/hirid/1.1.1/) | 1.1.1 | 3 tables (native long format) | ~60 concepts (in progress) |
 | [SICdb](https://physionet.org/content/sicdb/1.0.6/) | 1.0.6 | 4 tables (native long format) | ~55 concepts (in progress) |
 
-The **OMOP CDM 5.4** entry is a reusable *model* configuration rather than a single dataset: any data exported to the OMOP Common Data Model inherits its table configs via `extends` and adds only concept mappings. **AmsterdamUMCdb** is the first such dataset, read through its [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL) OMOP CDM 5.4 export, with concept mappings keyed on the OMOP `concept_id`s that AMSTEL assigns. **HiRID** is read in its native long format (`observations`/`pharma`/`general`), with concept mappings keyed on HiRID `variableid`s and unit conversions ported from [`ricu`](https://github.com/eth-mds/ricu).  **SICdb** is read in its native long format, with concept mappings keyed on SICdb `LaboratoryID`/`DataID`s and unit conversions ported from `ricu`.
+The **OMOP CDM** entry (5.3.1 as the reference, 5.4 extending it) is a reusable *model* configuration rather than a single dataset: any data exported to the OMOP Common Data Model inherits its table configs via `extends` and adds only concept mappings. **AmsterdamUMCdb** is the first such dataset, read through its [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL) OMOP CDM 5.4 export, with concept mappings keyed on the OMOP `concept_id`s that AMSTEL assigns. **HiRID** is read in its native long format (`observations`/`pharma`/`general`), with concept mappings keyed on HiRID `variableid`s and unit conversions ported from [`ricu`](https://github.com/eth-mds/ricu).  **SICdb** is read in its native long format, with concept mappings keyed on SICdb `LaboratoryID`/`DataID`s and unit conversions ported from `ricu`.
 
 The shared concept dictionary in [`configs/concepts/`](configs/concepts/) currently covers ~90 concepts across vital signs, blood gas, clinical chemistry, hematology, medications (incl. vasopressors and antibiotics), neurological scores, respiratory parameters, fluid output, and demographics.
 

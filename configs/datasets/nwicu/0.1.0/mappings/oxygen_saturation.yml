@@ -3,7 +3,7 @@ mappings:
   - pattern:
       table: chartevents
       event: CHART
-      code: (320277(//.*)?)
+      code: ^(?:CHART//)?(?:320277)(?:$|//)
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)
@@ -11,7 +11,7 @@ mappings:
   - pattern:
       table: labevents
       event: LAB
-      code: (100109(//.*)?)
+      code: ^(?:LAB//)?(?:100109)(?:$|//)
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)

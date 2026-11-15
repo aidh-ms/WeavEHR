@@ -1,0 +1,10 @@
+type: simple
+mappings:
+  - pattern:
+      table: procedureevents
+      event: PROCEDURE_START
+      code: ^(227194|225468|225477)//
+    level: endotracheal_tube
+    columns:
+      extension:
+        stay_id: col(stay_id)

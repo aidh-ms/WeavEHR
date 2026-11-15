@@ -1,0 +1,21 @@
+type: simple
+mappings:
+- pattern:
+    table: procedureevents_mv
+    event: PROCEDURE_START
+    code: ^(?:[A-Z_]+//)?(?:225468|225477|227194)(?:$|//)
+  level: endotracheal_tube
+  columns:
+    extension:
+      stay_id: col(stay_id)
+- pattern:
+    table: chartevents
+    event: CHART
+    code: ^(?:[A-Z_]+//)?(?:640)(?:$|//)
+  columns:
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+  filters:
+  - str_contains(strip_str(text_value), "^(Extubated|Self Extubation)$")
+  level: endotracheal_tube

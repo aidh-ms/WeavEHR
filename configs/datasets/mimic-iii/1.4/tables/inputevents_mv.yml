@@ -1,0 +1,152 @@
+path: INPUTEVENTS_MV.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: ICUSTAY_ID
+  type: int64
+- name: STARTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ENDTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ITEMID
+  type: int64
+- name: AMOUNT
+  type: float32
+- name: AMOUNTUOM
+  type: string
+- name: RATE
+  type: float32
+- name: RATEUOM
+  type: string
+- name: STORETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: CGID
+  type: int64
+- name: ORDERID
+  type: int64
+- name: LINKORDERID
+  type: int64
+- name: ORDERCATEGORYNAME
+  type: string
+- name: SECONDARYORDERCATEGORYNAME
+  type: string
+- name: ORDERCOMPONENTTYPEDESCRIPTION
+  type: string
+- name: ORDERCATEGORYDESCRIPTION
+  type: string
+- name: PATIENTWEIGHT
+  type: float32
+- name: TOTALAMOUNT
+  type: float32
+- name: TOTALAMOUNTUOM
+  type: string
+- name: ISOPENBAG
+  type: int64
+- name: CONTINUEINNEXTDEPT
+  type: int64
+- name: CANCELREASON
+  type: int64
+- name: STATUSDESCRIPTION
+  type: string
+- name: COMMENTS_EDITEDBY
+  type: string
+- name: COMMENTS_CANCELEDBY
+  type: string
+- name: COMMENTS_DATE
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ORIGINALAMOUNT
+  type: float32
+- name: ORIGINALRATE
+  type: float32
+join:
+- path: D_ITEMS.csv.gz
+  columns:
+  - name: ITEMID
+    type: int64
+  - name: LABEL
+    type: string
+  both_on:
+  - ITEMID
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    caregiver_id: col(CGID)
+    row_id: col(ROW_ID)
+    orderid: col(ORDERID)
+    linkorderid: col(LINKORDERID)
+filters:
+- not (STATUSDESCRIPTION == "Rewritten") or STATUSDESCRIPTION == None
+events:
+- name: INFUSION_START
+  columns:
+    time: col(STARTTIME)
+    code:
+    - col(ITEMID)
+    - col(LABEL)
+    extension:
+      available_time: max(STORETIME, STARTTIME, output=available_time)
+      ordercategoryname: col(ORDERCATEGORYNAME)
+      secondaryordercategoryname: col(SECONDARYORDERCATEGORYNAME)
+      ordercomponenttypedescription: col(ORDERCOMPONENTTYPEDESCRIPTION)
+      ordercategorydescription: col(ORDERCATEGORYDESCRIPTION)
+      originalamount: col(ORIGINALAMOUNT)
+      amountuom: col(AMOUNTUOM)
+      originalrate: col(ORIGINALRATE)
+      rateuom: col(RATEUOM)
+      totalamount: col(TOTALAMOUNT)
+      totalamountuom: col(TOTALAMOUNTUOM)
+      isopenbag: col(ISOPENBAG)
+      cancelreason: col(CANCELREASON)
+      patientweight: col(PATIENTWEIGHT)
+  filters:
+  - drop_na(time)
+- name: INFUSION_END
+  columns:
+    time: col(ENDTIME)
+    code:
+    - col(ITEMID)
+    - col(LABEL)
+    text_value: col(STATUSDESCRIPTION)
+    extension:
+      available_time: max(STORETIME, ENDTIME, output=available_time)
+      rate: col(RATE)
+      rateuom: col(RATEUOM)
+      amount: col(AMOUNT)
+      amountuom: col(AMOUNTUOM)
+      continueinnextdept: col(CONTINUEINNEXTDEPT)
+      duration_minutes: cast(ENDTIME - STARTTIME, "int64") / 60000000
+      cancelreason: col(CANCELREASON)
+      patientweight: col(PATIENTWEIGHT)
+  filters:
+  - drop_na(time)
+- name: SUBJECT_WEIGHT_AT_INFUSION
+  columns:
+    time: col(STARTTIME)
+    code:
+    - const(kg)
+    numeric_value: col(PATIENTWEIGHT)
+    extension:
+      available_time: col(STORETIME)
+      cancelreason: col(CANCELREASON)
+      patientweight: col(PATIENTWEIGHT)
+  filters:
+  - first_distinct(SUBJECT_ID, time, order_by=[available_time])
+  - drop_na(time)

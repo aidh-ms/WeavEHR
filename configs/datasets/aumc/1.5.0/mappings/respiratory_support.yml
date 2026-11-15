@@ -1,0 +1,53 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- ventilator modes (procedure_concept_id) and
+# oxygen devices (device_concept_id):
+#   noninvasive: mode 40486624, or any listed mode whose source value contains "NIV";
+#                device 45767337 (CPAP)
+#   invasive:    modes 4055375, 4245036, 37152362 (MMV), 37152364 (SIMV(PC) + PS),
+#                37152363 (SIMV(VC) + PS), 37151339 (PRVC)
+#   ventilator:  ambiguous modes 37154096 (PS/CPAP), 4055262 (BIPAP), 4165535 (CPAP),
+#                37152413 (VC), 37151337 (PC)
+#   oxygen:      devices 4224038 (O2-bril), 4322904 (Kapje), 4145528 (Non-Rebreathing
+#                masker), 45759142 (Nasaal, Diep Nasaal), 4138487 (Kinnebak),
+#                4219814 (Nebulizer), 4192506 (Waterset)
+# The Guedel airway (4235033) and Ambu bag (4160626) are not counted as supplemental
+# oxygen.
+type: simple
+mappings:
+  - pattern:
+      table: procedure_occurrence
+      event: PROCEDURE
+      code: ^(40486624|4055375|4245036|37152362|37152364|37152363|37151339|37154096|4055262|4165535|37152413|37151337)//
+    level: noninvasive
+    columns: &source_columns
+      text_value: col(code)
+      extension:
+        stay_id: col(visit_occurrence_id)
+    filters:
+      - str_contains(code, "//40486624//|NIV")
+  - pattern:
+      table: procedure_occurrence
+      event: PROCEDURE
+      code: ^(4055375|4245036|37152362|37152364|37152363|37151339)//
+    level: invasive
+    columns: *source_columns
+    filters: &not_niv
+      - not str_contains(code, "NIV")
+  - pattern:
+      table: procedure_occurrence
+      event: PROCEDURE
+      code: ^(37154096|4055262|4165535|37152413|37151337)//
+    level: ventilator
+    columns: *source_columns
+    filters: *not_niv
+  - pattern:
+      table: device_exposure
+      event: DEVICE_START
+      code: ^45767337//
+    level: noninvasive
+    columns: *source_columns
+  - pattern:
+      table: device_exposure
+      event: DEVICE_START
+      code: ^(4224038|4322904|4145528|45759142|4138487|4219814|4192506)//
+    level: oxygen
+    columns: *source_columns

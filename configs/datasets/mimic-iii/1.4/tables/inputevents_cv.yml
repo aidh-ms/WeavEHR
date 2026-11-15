@@ -1,0 +1,86 @@
+path: INPUTEVENTS_CV.csv.gz
+columns:
+- name: ROW_ID
+  type: int64
+- name: SUBJECT_ID
+  type: int64
+- name: HADM_ID
+  type: int64
+- name: ICUSTAY_ID
+  type: int64
+- name: CHARTTIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: ITEMID
+  type: int64
+- name: AMOUNT
+  type: float32
+- name: AMOUNTUOM
+  type: string
+- name: RATE
+  type: float32
+- name: RATEUOM
+  type: string
+- name: STORETIME
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: CGID
+  type: int64
+- name: ORDERID
+  type: int64
+- name: LINKORDERID
+  type: int64
+- name: STOPPED
+  type: string
+- name: NEWBOTTLE
+  type: int64
+- name: ORIGINALAMOUNT
+  type: float32
+- name: ORIGINALAMOUNTUOM
+  type: string
+- name: ORIGINALROUTE
+  type: string
+- name: ORIGINALRATE
+  type: float32
+- name: ORIGINALRATEUOM
+  type: string
+- name: ORIGINALSITE
+  type: string
+join:
+- path: D_ITEMS.csv.gz
+  columns:
+  - name: ITEMID
+    type: int64
+  - name: LABEL
+    type: string
+  both_on:
+  - ITEMID
+event_defaults:
+  subject_id: col(SUBJECT_ID)
+  extension:
+    hadm_id: col(HADM_ID)
+    stay_id: col(ICUSTAY_ID)
+    caregiver_id: col(CGID)
+    row_id: col(ROW_ID)
+events:
+- name: INFUSION_RATE
+  columns:
+    time: col(CHARTTIME)
+    code:
+    - col(ITEMID)
+    - col(LABEL)
+    numeric_value: col(RATE)
+    text_value: col(STOPPED)
+    extension:
+      available_time: col(STORETIME)
+      rateuom: col(RATEUOM)
+      amount: col(AMOUNT)
+      amountuom: col(AMOUNTUOM)
+      orderid: col(ORDERID)
+      linkorderid: col(LINKORDERID)
+  filters:
+  - drop_na(time)

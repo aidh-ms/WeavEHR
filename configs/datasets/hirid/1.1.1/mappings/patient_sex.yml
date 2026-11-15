@@ -1,4 +1,5 @@
 # HiRID v1.1.1 -- general_table SEX event [ricu sex]
+# Female, Male or Other; no event when sex is unknown.
 type: simple
 mappings:
   - pattern:
@@ -7,3 +8,5 @@ mappings:
       code: "^(sex)(//.*)?$"
     columns:
       text_value: col(text_value)
+    filters:
+      - (text_value == "Female") or (text_value == "Male") or (text_value == "Other")

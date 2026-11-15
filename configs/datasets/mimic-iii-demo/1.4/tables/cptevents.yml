@@ -1,0 +1,57 @@
+path: CPTEVENTS.csv
+columns:
+- name: row_id
+  type: int64
+- name: subject_id
+  type: int64
+- name: hadm_id
+  type: int64
+- name: costcenter
+  type: string
+- name: chartdate
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: cpt_cd
+  type: string
+- name: cpt_number
+  type: int64
+- name: cpt_suffix
+  type: string
+- name: ticket_id_seq
+  type: int64
+- name: sectionheader
+  type: string
+- name: subsectionheader
+  type: string
+- name: description
+  type: string
+callbacks:
+- col(row_id, output=ROW_ID)
+- col(subject_id, output=SUBJECT_ID)
+- col(hadm_id, output=HADM_ID)
+- col(costcenter, output=COSTCENTER)
+- col(chartdate, output=CHARTDATE)
+- col(cpt_cd, output=CPT_CD)
+- col(cpt_number, output=CPT_NUMBER)
+- col(cpt_suffix, output=CPT_SUFFIX)
+- col(ticket_id_seq, output=TICKET_ID_SEQ)
+- col(sectionheader, output=SECTIONHEADER)
+- col(subsectionheader, output=SUBSECTIONHEADER)
+- col(description, output=DESCRIPTION)
+join:
+- path: ADMISSIONS.csv
+  columns:
+  - name: hadm_id
+    type: int64
+  - name: dischtime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  callbacks:
+  - col(hadm_id, output=HADM_ID)
+  - col(dischtime, output=DISCHTIME)
+  both_on:
+  - HADM_ID

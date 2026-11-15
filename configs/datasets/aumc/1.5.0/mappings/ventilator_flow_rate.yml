@@ -1,0 +1,16 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
+#   3011557 = Peak inspiratory gas flow setting Ventilator
+# Insp. Flow max, stored in l/min. It often shows exactly 120 l/min, mostly together
+# with Tidal Volume (Set) = 2.0 l (see ventilator_tidal_volume_set). These look like
+# device maxima rather than settings and are dropped.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^3011557(//.*)?$"
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+    filters:
+      - drop_if(col(numeric_value) == 120)

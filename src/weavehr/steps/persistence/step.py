@@ -25,9 +25,7 @@ from weavehr.storage.project import WeavEHRProject
 logger = get_logger(__name__)
 
 
-class PersistenceStep(
-    ConfigurableBaseStep[ExtractionStepConfig, TableConfig]
-):
+class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
     """Persist configured source CSV columns as Parquet files."""
 
     @classmethod
@@ -109,17 +107,11 @@ class PersistenceStep(
             )
             return
 
-        output_file = (
-            self._workspace_dir.path
-            / dataset_name
-            / dataset_version
-            / f"{table_name}.parquet"
-        )
+        output_file = self._workspace_dir.path / dataset_name / dataset_version / f"{table_name}.parquet"
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(
-            "Persisting %d configured columns from source table '%s' "
-            "from %s to %s",
+            "Persisting %d configured columns from source table '%s' from %s to %s",
             len(dtypes),
             table_name,
             source_file,
@@ -154,11 +146,15 @@ class PersistenceStep(
 
         return Path(filename).stem
 
+    @property
+    def output_path(self) -> Path:
+        """The persisted source tables stay in the workspace (see `collect`)."""
+        return self._project.workspace_path / self._step_name
+
     def collect(self) -> None:
         """Skip MEDS collection for persisted source tables."""
         logger.info(
-            "Skipping MEDS collection for step '%s'; "
-            "persisted source tables remain in the workspace",
+            "Skipping MEDS collection for step '%s'; persisted source tables remain in the workspace",
             self._step_name,
         )
 
