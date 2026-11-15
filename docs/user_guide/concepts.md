@@ -97,6 +97,13 @@ The corresponding eICU mappings preserve only `stay_id`. Their
 records, so these mappings do not invent an infusion identifier. The cardiovascular
 SOFA consumer applies the alignment and expiry policy described below.
 
+The AUMCdb mappings are `derived`: the OMOP export has no rate field, so they read
+the dose rate from the text in `drug_exposure.sig` and divide a rate not per kg by
+the admission weight (`patient_weight`, joined on `stay_id`). Each `drug_exposure`
+row is one rate segment; its start maps to the rate and its end to zero, both
+keeping `stay_id` and `drug_exposure_id`, which identifies the segment because the
+export drops the source order ID. See the AUMCdb README.
+
 ### Derived concepts
 
 Derived concepts are computed **from other concepts** rather than from raw events. WeavEHR resolves the dependency graph automatically (topological ordering), so derived concepts can build on other derived concepts.
@@ -345,7 +352,8 @@ worst MAP in that hour. The `window` mapping argument controls this lookback.
 
 Pressor rates have a separate `pressor_window` timeout. Within each dataset,
 patient, stay and drug, native `linkorderid` values identify independent
-infusions across rate changes. A zero stops only its matching infusion. A
+infusions across rate changes; `kwargs.pressor_id_column` names another
+identifier column (AUMCdb uses `drug_exposure_id`, one per rate segment). A zero stops only its matching infusion. A
 subsequent positive rate restarts it; a positive rate at the same timestamp as
 a zero takes precedence. Concurrent infusions contribute their **maximum rate**,
 not their sum, following the overlap aggregation in
@@ -378,6 +386,7 @@ distributions**, not validated as clinical cutoffs:
 | --- | --- | --- | --- |
 | MIMIC-IV 2.2 | `1h` | `48h` | Among 1,055 mapped rate segments, the longest was 31.9 h; the longest reconstructed linked start/stop episode was 40.57 h. The fallback rounds above both observed maxima. |
 | eICU-CRD 2.0 | `1h` | `6h` | Among 666 gaps after positive mapped rate observations, the median was 1 h and the 95th percentile was 5.99 h. Thirty-two gaps (4.8%) exceeded 6 h. |
+| AUMCdb 1.5.0 | `1h` | `48h` | Not measured (no AUMCdb data was available). Every rate segment carries its recorded stop, which ends it regardless of the timeout; the MIMIC-IV value only bounds a segment without one. |
 
 The MIMIC analysis used
 [`inputevents.csv.gz` from demo 2.2](https://physionet.org/files/mimic-iv-demo/2.2/icu/inputevents.csv.gz),

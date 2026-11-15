@@ -1,0 +1,50 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- Epinephrine syringe pumps: ricu's aumc item
+# 6818 in ordercategory 2. Spuitpompen, drug_concept_id 19076867.
+# Epinephrine injections (ordercategory Injecties Circulatie/Diuretica,
+# concept 40038600) are boluses without a rate and are not read.
+#
+# Each drugitems row is one rate segment, which AMSTEL writes to drug_exposure with
+# its start and stop. OMOP has no rate field, so AMSTEL writes the rate into sig:
+#   <amount> <unit> @ <dose> <doseunit>[/kg]/<min|uur> [= <pump rate> <unit>]
+# e.g. "4 mg @ 0.1 µg/kg/min = 3 ml/uur". As in ricu (aumc_rate_kg) and
+# AmsterdamUMCdb's SOFA code, the dose rate becomes mcg/kg/min: mg x 1000, per
+# hour (uur) / 60, and a rate not per kg is divided by the admission weight
+# (patient_weight). A segment without a dose rate, with another unit or, if not
+# per kg, without a weight is dropped, its end included.
+#
+# A segment's start carries its rate and its end a rate of 0, linked by
+# drug_exposure_id (AMSTEL drops the source orderid). A rate change ends one
+# segment and starts the next at the same time; cardiovascular SOFA keeps the
+# new rate.
+type: derived
+table:
+  pattern:
+    table: drug_exposure
+    code: ^19076867//
+  columns: [subject_id, time, event, dataset, table, sig, drug_exposure_id, visit_occurrence_id]
+  callbacks:
+    - cast(visit_occurrence_id, "string", output=stay_id)
+    # The dose rate follows "@": a number and a unit, e.g. "0.1 µg/kg/min".
+    - sig.str.extract("@ [^ ]+ ([^ ]+)", 1, output=dose_unit)
+    # Only µg or mg (µ in either Unicode form), optionally per kg, per minute or hour (uur).
+    - replace(dose_unit.str.contains("^(µg|μg|mg)(/kg)?/(min|uur)$"), cast(sig.str.extract("@ ([0-9][0-9.e-]*) ", 1), "float64"), None, output=dose)
+    - replace(dose_unit.str.starts_with("mg/"), dose * 1000, dose, output=dose_mcg)
+    - replace(dose_unit.str.ends_with("/uur"), dose_mcg / 60, dose_mcg, output=dose_mcg_min)
+    - dose_unit.str.contains("/kg/", output=per_kg)
+  post_callbacks:
+    - replace(per_kg, dose_mcg_min, dose_mcg_min / weight, output=rate)
+join:
+  - concept: patient_weight.1.0.0
+    how: left
+    both_on: [subject_id, stay_id]
+    columns: [subject_id, stay_id, numeric_value]
+    callbacks:
+      - col(numeric_value, output=weight)
+event:
+  numeric_value: replace(event == "DRUG_END", 0, rate)
+  text_value: col(sig)
+  extension:
+    stay_id: col(stay_id)
+    drug_exposure_id: col(drug_exposure_id)
+filters:
+  - drop_na(rate)

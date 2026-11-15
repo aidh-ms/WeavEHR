@@ -67,11 +67,20 @@ def effective_table_cases() -> list[Any]:
     return cases
 
 
-def concept_output_schema(concept_reference: str) -> pl.Schema:
-    """Output schema of a concept referenced as ``<name>.<version>`` by a derived mapping."""
+def concept_output_schema(concept_reference: str, dataset: str, version: str) -> pl.Schema:
+    """Output schema of a concept referenced as ``<name>.<version>`` by a derived mapping of a dataset version.
+
+    Besides the concept's own extension columns, a simple mapping writes the extension columns
+    its ``columns.extension`` adds for that dataset version (e.g. a ``stay_id`` to join on).
+    """
     name = concept_reference.split(".", 1)[0]
     (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")
-    extension_columns = yaml.safe_load(concept_file.read_text()).get("extension_columns") or {}
+    extension_columns = list(yaml.safe_load(concept_file.read_text()).get("extension_columns") or {})
+    dataset_concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS).get_dataset_concept(
+        dataset, version
+    )
+    if isinstance(dataset_concept, SimpleDatasetConceptConfig):
+        extension_columns += [column for m in dataset_concept.mappings for column in m.columns.extension]
     return pl.Schema(MEDS_SCHEMA | {column: pl.String() for column in extension_columns})
 
 
@@ -239,7 +248,7 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
                 if table.pattern is not None:
                     return empty_event_input(dataset, version, table.pattern, source)
                 assert table.concept is not None
-                return pl.LazyFrame(schema=concept_output_schema(table.concept))
+                return pl.LazyFrame(schema=concept_output_schema(table.concept, dataset, version))
 
             assert_resolves(lambda: ConceptStep.build_derived_frame(concept, dataset_concept, scan), source)
 

@@ -288,6 +288,23 @@ ANTIBIOTICS = [
     ]
 ]
 
+WEIGHT = [
+    Case(
+        concept="patient_weight",
+        table="measurement",
+        event="MEASUREMENT",
+        code=code("MEASUREMENT", concept_id, source, "kg"),
+        value=85.0,
+        extra=IN_VISIT,
+        expect=[{"numeric_value": 85.0, "stay_id": str(VISIT_ID)}] if admission else NOTHING,
+        note=note,
+    )
+    for concept_id, source, admission, note in [
+        (3013762, "weight", True, "header: the admission weight, keyed by its admission"),
+        (3025315, SOURCE, False, "header: other body weight items are not read"),
+    ]
+]
+
 CASES = [
     *MOLAR_CONVERSIONS,
     *MASS_CONVERSIONS,
@@ -300,6 +317,7 @@ CASES = [
     *AIRWAYS,
     *GCS,
     *ANTIBIOTICS,
+    *WEIGHT,
 ]
 
 
@@ -509,4 +527,116 @@ def test_suspected_infection_pairs_antibiotics_with_culture_orders(tmp_path: Pat
         outputs["suspected_infection"],
         [{"subject_id": 1, "time": at(0), "numeric_value": 1}, {"subject_id": 2, "time": at(0), "numeric_value": 1}],
         context="suspected_infection",
+    )
+
+
+NOREPINEPHRINE: Final = (2907531, "Noradrenaline (Norepinefrine) (2. Spuitpompen)")
+"""drug_concept_id and drug_source_value of ricu's norepinephrine item 7229 in syringe pumps."""
+
+
+def segment(drug_exposure_id: int, sig: str, start: float, stop: float, stay: int = VISIT_ID) -> dict[str, list]:
+    """The DRUG_START and DRUG_END rows AMSTEL writes for one drugitems rate segment of norepinephrine."""
+    row = {"subject_id": 1, "sig": sig, "drug_exposure_id": drug_exposure_id}
+    return {
+        event: [{**row, "time": at(hours), "code": code(event, *NOREPINEPHRINE), "visit_occurrence_id": stay}]
+        for event, hours in [("DRUG_START", start), ("DRUG_END", stop)]
+    }
+
+
+def drug_sources(*segments: dict[str, list]) -> dict[str, list]:
+    return {
+        f"drug_exposure/{event}": [row for s in segments for row in s[event]] for event in ("DRUG_START", "DRUG_END")
+    }
+
+
+ADMISSION_WEIGHT: Final = {
+    "subject_id": 1,
+    "time": TIME,
+    "code": code("MEASUREMENT", 3013762, "weight", "kg"),
+    "numeric_value": 85.0,
+    "visit_occurrence_id": VISIT_ID,
+}
+
+
+def test_vasopressor_rates_read_the_dose_rate_from_sig(tmp_path: Path) -> None:
+    """AMSTEL's sig text becomes a norepinephrine rate in mcg/kg/min, per segment.
+
+    The conversions hold by definition: 1 mg is 1000 µg, 1 h is 60 min, and a rate not per kg is
+    divided by the admission weight of its stay (85 kg; stay 20 has none). Each kept segment
+    starts at its rate and ends at 0, linked by drug_exposure_id. A segment without a dose rate
+    (a bolus, a pump rate only) is dropped, its end included.
+    """
+    kept = {
+        1: "4 mg @ 0.1 µg/kg/min = 3 ml/uur",
+        2: "4 mg @ 6 µg/kg/uur = 3 ml/uur",
+        3: "4 mg @ 0.006 mg/kg/uur = 3 ml/uur",
+        4: "4 mg @ 8.5 µg/min = 2 ml/uur",
+        5: "4 mg @ 0.51 mg/uur = 6 ml/uur",
+    }
+    dropped = [segment(6, "4 mg @ 8.5 µg/min = 2 ml/uur", 0, 1, stay=20), segment(7, "1 mg", 0, 1)]
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["patient_weight", "norepinephrine_rate"],
+        sources={
+            **drug_sources(*[segment(i, sig, 0, 1) for i, sig in kept.items()], *dropped),
+            "measurement/MEASUREMENT": [ADMISSION_WEIGHT],
+        },
+    )
+
+    assert_rows(
+        outputs["norepinephrine_rate"],
+        [
+            {"code": "norepinephrine_rate//mcg/kg/min", "time": at(hours), "numeric_value": rate, **ids}
+            for i in kept
+            for hours, rate in [(0, 0.1), (1, 0.0)]
+            for ids in [{"drug_exposure_id": str(i), "stay_id": str(VISIT_ID)}]
+        ],
+        context="norepinephrine_rate",
+    )
+
+
+def test_cardiovascular_sofa_follows_rate_segments_and_their_stop(tmp_path: Path) -> None:
+    """Norepinephrine segments and their recorded stops drive cardiovascular SOFA.
+
+    Pump A changes its rate at 2 h: one segment ends and the next starts at the same time, and
+    the new rate counts. Pump B, a new syringe, starts at 4 h before A stops at 5 h; since each
+    stop ends only the segment with its drug_exposure_id, B still counts after 5 h. Points follow
+    Vincent et al. (1996): norepinephrine up to 0.1 mcg/kg/min scores 3, above 0.1 scores 4, and
+    without vasopressors a MAP below 70 mmHg scores 1.
+    """
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=[
+            "mean_arterial_pressure",
+            "patient_weight",
+            "norepinephrine_rate",
+            "epinephrine_rate",
+            "dopamine_rate",
+            "dobutamine_rate",
+            "sofa_cardiovascular",
+        ],
+        sources={
+            **drug_sources(
+                segment(1, "4 mg @ 0.05 µg/kg/min = 1.5 ml/uur", 0, 2),
+                segment(2, "4 mg @ 0.2 µg/kg/min = 6 ml/uur", 2, 5),
+                segment(3, "4 mg @ 0.05 µg/kg/min = 1.5 ml/uur", 4, 6),
+            ),
+            "measurement/MEASUREMENT": [
+                ADMISSION_WEIGHT,
+                {"subject_id": 1, "time": at(7), "code": code("MEASUREMENT", 21490852), "numeric_value": 65.0},
+            ],
+        },
+    )
+
+    assert_rows(
+        outputs["sofa_cardiovascular"],
+        [
+            {"time": at(hours), "numeric_value": score}
+            for hours, score in [(0, 3), (2, 4), (4, 4), (5, 3), (6, 0), (7, 1)]
+        ],
+        context="sofa_cardiovascular",
     )

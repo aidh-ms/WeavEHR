@@ -42,7 +42,8 @@ for that clinical concept.
 Currently mapped (`simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
 respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. GCS,
-CNS SOFA and suspected infection are described below.
+CNS SOFA, suspected infection, the vasopressor rates and cardiovascular SOFA
+are described below.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -97,6 +98,36 @@ while the SDD decontamination products themselves do not. Patients on SDD may
 therefore get a suspected infection early in their admission. Whether to
 exclude surveillance cultures is open; the mappings are not yet validated on
 AUMCdb.
+
+#### Vasopressors and cardiovascular SOFA
+
+`norepinephrine_rate`, `epinephrine_rate`, `dopamine_rate` and
+`dobutamine_rate` map ricu's aumc items (7229, 6818, 7179, 7178) in syringe
+pumps (ordercategory 2. Spuitpompen); epinephrine injections are boluses and
+not read. OMOP has no rate field, so AMSTEL writes the dose rate into
+`drug_exposure.sig` from a fixed template:
+
+```text
+<amount> <unit> @ <dose> <doseunit>[/kg]/<min|uur> [= <pump rate> <unit>]
+e.g. 4 mg @ 0.1 µg/kg/min = 3 ml/uur
+```
+
+The OMOP `drug_exposure` table config therefore keeps `sig` as an extension,
+and the rate mappings are `derived`: they read the dose with `sig.str.extract(...)`,
+convert mg to µg and per hour (uur) to per minute, and divide a rate not per
+kg by the admission weight, as ricu (`aumc_rate_kg`) and AmsterdamUMCdb's own
+SOFA code do. `patient_weight` is that admission weight: AMSTEL's midpoint of
+the weight group (55 to 115 kg; ricu uses 50 and 120 kg for the open-ended
+groups), joined on the admission (`stay_id`). A segment without a dose rate,
+with another unit or, if not per kg, without a weight is dropped.
+
+Each drugitems row is one rate segment with its own start and stop. AMSTEL
+drops the source `orderid`, so `drug_exposure_id` identifies the segment: its
+start maps to the rate, its end to 0, and `sofa_cardiovascular` links them
+with `pressor_id_column: drug_exposure_id`. A rate change ends one segment
+and starts the next at the same time, which keeps the new rate; a second
+pump overlapping the first keeps counting after the first one stops.
+The vasopressor durations (`*_duration`) are not mapped.
 
 ### Validation against ricu
 
@@ -158,11 +189,9 @@ definitions:
   values, so the concept is not mapped (INR is mapped separately).
 
 Not yet mapped / not cleanly mappable from OMOP:
-- **Drug infusion rates** (`*_rate`, `*_duration`): AMSTEL writes the rate into
-  the text field `drug_exposure.sig` from a fixed template
-  (`<amount> <unit> @ <dose> <unit>[/kg]/<min|uur> = <rate> <rateunit>`).
-  Reading it needs `sig` in the table config and a callback that extracts a
-  number from text; pending.
+- **Other infusion rates and durations** (`phenylephrine_rate`,
+  `vasopressin_rate`, `*_duration`): readable from `drug_exposure.sig` like the
+  four SOFA vasopressors above; pending.
 - **Ventilation windows** (`ventilation_start`, `ventilation_end`): AMSTEL
   writes the processitems Beademen and Beademen non-invasief, with their stop
   time, to `procedure_occurrence`; pending.
