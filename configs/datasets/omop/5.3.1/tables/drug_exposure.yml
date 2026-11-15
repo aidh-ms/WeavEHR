@@ -50,6 +50,8 @@ columns:
     type: string
   - name: stop_reason
     type: string
+  - name: sig
+    type: string
 
 post_join_callbacks:
   - first_not_null(drug_exposure_start_datetime, drug_exposure_start_date, output=drug_start)
@@ -61,6 +63,8 @@ event_defaults:
     drug_exposure_id: col(drug_exposure_id)
     visit_occurrence_id: col(visit_occurrence_id)
     provider_id: col(provider_id)
+    # Free-text dosing instructions; some ETLs (e.g. AMSTEL for AUMCdb) write the infusion rate here.
+    sig: col(sig)
 
 events:
   - name: DRUG_START
