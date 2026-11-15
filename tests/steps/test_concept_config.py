@@ -84,8 +84,8 @@ class TestConceptConfig:
         with caplog.at_level(logging.WARNING, logger="weavehr"):
             concept = ConceptConfig.load(concept_file, dataset_paths=mapping_dirs, **defaults)
 
-        assert concept.get_dataset_concept("mimic-iv", "1.0") is None
-        kept = concept.get_dataset_concept("eicu-crd", "1.0")
+        assert concept.get_dataset_concepts("mimic-iv", "1.0") == []
+        [kept] = concept.get_dataset_concepts("eicu-crd", "1.0")
         assert isinstance(kept, SimpleDatasetConceptConfig)
         assert kept.mappings[0].level == "invasive"
         assert "undeclared levels ['invasiv']" in caplog.text
@@ -110,11 +110,11 @@ class TestConceptConfig:
         concept = ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
 
         assert len(concept.dataset_concepts) == 1
-        dataset_concept = concept.get_dataset_concept("mimic-iv", "3.1")
+        [dataset_concept] = concept.get_dataset_concepts("mimic-iv", "3.1")
         assert isinstance(dataset_concept, SimpleDatasetConceptConfig)
         assert dataset_concept.dataset == "mimic-iv"
         assert dataset_concept.version == "3.1"
-        assert concept.get_dataset_concept("eicu-crd", "2.0") is None
+        assert concept.get_dataset_concepts("eicu-crd", "2.0") == []
 
     def test_load_skips_invalid_dataset_concept(self, tmp_path: Path) -> None:
         concept_file = tmp_path / "heart_rate.yml"
@@ -273,3 +273,107 @@ event:
     def test_join_cross_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
             self.make_derived(join=[{"concept": "patient_height.1.0.0", "how": "cross"}])
+
+
+SINGLE_MAPPING = """\
+type: simple
+mappings:
+  - pattern: {table: chartevents, code: "220045"}
+    columns: {numeric_value: col(numeric_value)}
+"""
+SIMPLE_MAPPING = """\
+- type: simple
+  mappings:
+    - pattern: {table: chartevents, code: "220045"}
+      columns: {numeric_value: col(numeric_value)}
+"""
+DERIVED_MAPPING = """\
+- type: derived
+  table: {concept: other.1.0.0}
+  event: {numeric_value: numeric_value}
+"""
+
+
+class TestMappingLists:
+    """A dataset's mapping file may hold a list of mappings, each in the usual syntax."""
+
+    @staticmethod
+    def load(tmp_path: Path, mapping: str, concept: str = "") -> ConceptConfig:
+        mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
+        mapping_dir.mkdir(parents=True)
+        (mapping_dir / "heart_rate.yml").write_text(mapping)
+        concept_file = tmp_path / "concept.yml"
+        concept_file.write_text(f"name: heart_rate\nversion: 1.0.0\n{concept}")
+        return ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
+
+    @pytest.mark.parametrize(
+        ("mapping", "types"),
+        [
+            pytest.param(SINGLE_MAPPING, ["simple"], id="mapping"),
+            pytest.param(SIMPLE_MAPPING, ["simple"], id="one-entry-list"),
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, ["simple", "derived"], id="list"),
+        ],
+    )
+    def test_mappings_load_in_order(self, tmp_path: Path, mapping: str, types: list[str]) -> None:
+        [reference] = self.load(tmp_path / "reference", SINGLE_MAPPING).dataset_concepts
+        dataset_concepts = self.load(tmp_path / "loaded", mapping).get_dataset_concepts("mimic-iv", "3.1")
+
+        assert [dc.type for dc in dataset_concepts] == types
+        # A list entry loads exactly like the same mapping on its own.
+        assert dataset_concepts[0] == reference
+        # Identity comes from the dataset directory for every mapping of the list.
+        assert {(dc.name, dc.dataset, dc.version) for dc in dataset_concepts} == {("heart_rate", "mimic-iv", "3.1")}
+
+    @pytest.mark.parametrize(
+        ("mapping", "concept", "error"),
+        [
+            pytest.param(SIMPLE_MAPPING + "- type: nonsense\n", "", "mapping 2: ", id="invalid"),
+            pytest.param(SIMPLE_MAPPING + "- just a string\n", "", "mapping 2: expected a mapping, got str", id="str"),
+            pytest.param(
+                SIMPLE_MAPPING + DERIVED_MAPPING + "  level: invasiv\n",
+                "levels: [invasive]\n",
+                "mapping 2: undeclared levels ['invasiv']",
+                id="undeclared-level",
+            ),
+            pytest.param("[]\n", "", "the list of mappings is empty", id="empty"),
+        ],
+    )
+    def test_one_bad_mapping_skips_the_whole_dataset(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, mapping: str, concept: str, error: str
+    ) -> None:
+        """Keeping the valid mappings of a list would silently drop the rows of the invalid one."""
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            loaded = self.load(tmp_path, mapping, concept)
+
+        assert loaded.dataset_concepts == []
+        assert error in caplog.text
+
+    @pytest.mark.parametrize(
+        ("base", "override", "types"),
+        [
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, None, ["simple", "derived"], id="list-inherited"),
+            pytest.param(SINGLE_MAPPING, "[]\n", [], id="empty-list-replaces-mapping"),
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, "[]\n", [], id="empty-list-replaces-list"),
+        ],
+    )
+    def test_lists_through_extends(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        base: str,
+        override: str | None,
+        types: list[str],
+    ) -> None:
+        self.load(tmp_path, base)
+        demo_mappings = tmp_path / "mimic-iv-demo" / "3.1" / "mappings"
+        demo_mappings.mkdir(parents=True)
+        (demo_mappings.parent / "extends.yml").write_text("dataset: mimic-iv\nversion: '3.1'\n")
+        if override is not None:
+            (demo_mappings / "heart_rate.yml").write_text(override)
+
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            concept = ConceptConfig.load(tmp_path / "concept.yml", dataset_paths=[demo_mappings])
+
+        assert [dc.type for dc in concept.get_dataset_concepts("mimic-iv-demo", "3.1")] == types
+        # An emptied mapping is rejected like any empty list, not merged into the inherited one.
+        assert ("the list of mappings is empty" in caplog.text) == (override is not None)

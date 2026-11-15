@@ -294,6 +294,9 @@ def _load_inherited_configs[T: BaseConfig](
 
     configs = []
     for name, data in resolve_effective_configs(path).items():
+        if not isinstance(data, dict):
+            logger.warning("failed to load inherited config '%s' from %s: not a mapping", name, path)
+            continue
         data.setdefault("dataset", version_dir.parent.name)
         data.setdefault("version", version_dir.name)
         data.setdefault("name", Path(name).name)

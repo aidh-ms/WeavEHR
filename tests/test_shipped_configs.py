@@ -338,13 +338,15 @@ def test_mimic_versions_inherit_reference_configs() -> None:
 
     # the demo overrides exactly one table: the procedureevents column casing
     assert {name for name in reference if demo[name] != reference[name]} == {"procedureevents"}
-    demo_columns = {c["name"] for c in demo["procedureevents"]["columns"]}
+    demo_table, reference_table = demo["procedureevents"], reference["procedureevents"]
+    assert isinstance(demo_table, dict) and isinstance(reference_table, dict)
+    demo_columns = {c["name"] for c in demo_table["columns"]}
     assert {"ORIGINALAMOUNT", "ORIGINALRATE"} <= demo_columns
-    reference_columns = {c["name"] for c in reference["procedureevents"]["columns"]}
+    reference_columns = {c["name"] for c in reference_table["columns"]}
     assert {"originalamount", "originalrate"} <= reference_columns
     # everything but the columns is inherited
-    assert demo["procedureevents"]["events"] == reference["procedureevents"]["events"]
-    assert demo["procedureevents"]["join"] == reference["procedureevents"]["join"]
+    assert demo_table["events"] == reference_table["events"]
+    assert demo_table["join"] == reference_table["join"]
 
     # identity comes from the version dir, not from where the files live
     labevents = load_effective_table(CONFIG_ROOT / "datasets" / "mimic-iv" / "3.1" / "tables", "labevents")
@@ -363,7 +365,7 @@ def test_mimic_demo_inherits_concept_mappings() -> None:
         CONFIG_ROOT / "concepts" / "vitals" / "heart_rate.yml",
         dataset_paths=[CONFIG_ROOT / "datasets" / "mimic-iv-demo" / "2.2" / "mappings"],
     )
-    dataset_concept = concept.get_dataset_concept("mimic-iv-demo", "2.2")
+    [dataset_concept] = concept.get_dataset_concepts("mimic-iv-demo", "2.2")
     assert isinstance(dataset_concept, SimpleDatasetConceptConfig)
     assert dataset_concept.version == "2.2"
     assert dataset_concept.mappings
@@ -632,16 +634,25 @@ def invariant_cases(invariant: Invariant) -> list[Any]:
 
 
 def simple_dataset_concepts(mapping_dir: Path) -> list[SimpleDatasetConceptConfig]:
-    """The effective simple dataset concepts of a dataset version, validated as `ConceptConfig.load` does."""
+    """The effective simple dataset concepts of a dataset version, validated as `ConceptConfig.load` does.
+
+    A concept whose mapping file lists several simple mappings is returned as one, holding all
+    their mappings, so the invariants hold across them.
+    """
     adapter = TypeAdapter(DatasetConceptConfigUnion)
     dataset, version = mapping_dir.parent.parent.name, mapping_dir.parent.name
     concepts = []
     for name, data in sorted(resolve_effective_configs(mapping_dir).items()):
-        dataset_concept = adapter.validate_python(
-            {**data, "dataset": dataset, "version": version, "name": Path(name).name}
-        )
-        if isinstance(dataset_concept, SimpleDatasetConceptConfig):
-            concepts.append(dataset_concept)
+        identity = {"dataset": dataset, "version": version, "name": Path(name).name}
+        entries = data if isinstance(data, list) else [data]
+        simple = [
+            dataset_concept
+            for dataset_concept in (adapter.validate_python({**entry, **identity}) for entry in entries)
+            if isinstance(dataset_concept, SimpleDatasetConceptConfig)
+        ]
+        if simple:
+            mappings = [mapping for dataset_concept in simple for mapping in dataset_concept.mappings]
+            concepts.append(simple[0].model_copy(update={"mappings": mappings}))
     return concepts
 
 

@@ -105,7 +105,7 @@ def test_check_case_fails_on_a_wrong_expectation(expect: Any, message: str) -> N
 def test_check_case_fails_on_a_duplicate_row(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two mappings matching one source row emit it twice, which a single expected row must reject."""
     concept = load_concept("temperature", "mimic-iv", "2.2")
-    mapping = concept.get_dataset_concept("mimic-iv", "2.2")
+    [mapping] = concept.get_dataset_concepts("mimic-iv", "2.2")
     assert isinstance(mapping, SimpleDatasetConceptConfig)
     mapping.mappings.extend(m for m in list(mapping.mappings) if "223761" in m.pattern.code)
     monkeypatch.setattr(support, "load_concept", lambda *_: concept)

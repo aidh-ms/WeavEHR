@@ -23,7 +23,7 @@ START = datetime(2140, 1, 1)
 def mapped(name: str, table: str, item: int, value: float | None, text: str | None = None) -> pl.DataFrame:
     concept_file = next(CONFIGS.glob(f"concepts/*/{name}.yml"))
     concept = ConceptConfig.load(concept_file, dataset_paths=[DATASET / "mappings"])
-    config = concept.get_dataset_concept("mimic-iii", "1.4")
+    [config] = concept.get_dataset_concepts("mimic-iii", "1.4")
     assert isinstance(config, SimpleDatasetConceptConfig)
     source = pl.LazyFrame(
         {

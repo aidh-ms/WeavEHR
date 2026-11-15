@@ -73,7 +73,7 @@ def relative_id(path: Path) -> str:
 def load_effective_table(subdir: Path, name: str) -> TableConfig:
     """Build a TableConfig from effective data, raising on validation errors."""
     data = resolve_effective_config(subdir, name)
-    assert data is not None, f"{relative_id(subdir)}/{name} does not resolve"
+    assert isinstance(data, dict), f"{relative_id(subdir)}/{name} does not resolve to a mapping"
     data.setdefault("dataset", subdir.parent.parent.name)
     data.setdefault("version", subdir.parent.name)
     data.setdefault("name", Path(name).name)
@@ -146,7 +146,7 @@ def _concept_file(name: str) -> Path:
 
 def _load_concept(name: str, mapping_dir: Path, dataset: str, version: str) -> ConceptConfig:
     concept = ConceptConfig.load(_concept_file(name), dataset_paths=[mapping_dir])
-    if concept.get_dataset_concept(dataset, version) is None:
+    if not concept.get_dataset_concepts(dataset, version):
         if resolve_effective_config(mapping_dir, name) is None:
             raise ValueError(f"{dataset} {version} has no mapping for concept {name!r} ({mapping_dir})")
         raise ValueError(
@@ -160,8 +160,8 @@ def load_concept(name: str, dataset: str, version: str) -> ConceptConfig:
     """Load a shipped concept definition with its effective mapping for one dataset version.
 
     The mapping is resolved through the version's ``extends.yml`` chain, exactly as the
-    bundled configs are loaded. The returned concept carries only this mapping, so
-    ``concept.get_dataset_concept(dataset, version)`` is never None.
+    bundled configs are loaded. The returned concept carries only this mapping (one or a
+    list of them), so ``concept.get_dataset_concepts(dataset, version)`` is never empty.
 
     Raises:
         ValueError: The concept, the dataset version or the mapping does not exist, or the
@@ -253,17 +253,18 @@ def map_rows(
     """
     if isinstance(concept, str):
         concept = load_concept(concept, dataset, version)
-    dataset_concept = concept.get_dataset_concept(dataset, version)
-    if not isinstance(dataset_concept, SimpleDatasetConceptConfig):
-        kind = "no" if dataset_concept is None else f"a {dataset_concept.type}"
+    dataset_concepts = concept.get_dataset_concepts(dataset, version)
+    if not dataset_concepts or not all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts):
+        kind = " and ".join(f"a {dc.type}" for dc in dataset_concepts) or "no"
         raise ValueError(
             f"{concept.name} has {kind} mapping for {dataset} {version}; map_rows runs simple mappings "
             "(use run_concepts for derived and complex concepts)"
         )
 
-    mappings = [m for m in dataset_concept.mappings if m.pattern.table == table and m.pattern.event in (None, event)]
+    all_mappings = [m for dc in dataset_concepts if isinstance(dc, SimpleDatasetConceptConfig) for m in dc.mappings]
+    mappings = [m for m in all_mappings if m.pattern.table == table and m.pattern.event in (None, event)]
     if not mappings:
-        targets = sorted({f"{m.pattern.table}/{m.pattern.event or '*'}" for m in dataset_concept.mappings})
+        targets = sorted({f"{m.pattern.table}/{m.pattern.event or '*'}" for m in all_mappings})
         raise ValueError(
             f"no {dataset} {version} mapping of {concept.name} reads {table}/{event}; mappings read {targets}"
         )
@@ -608,7 +609,7 @@ def _source_key(key: str) -> tuple[str, str]:
     return table, event
 
 
-def _event_patterns(mapping: DatasetConceptConfigUnion | None) -> list[MappingPatternConfig]:
+def _event_patterns(mapping: DatasetConceptConfigUnion) -> list[MappingPatternConfig]:
     """The patterns by which a dataset concept reads extracted events."""
     if isinstance(mapping, SimpleDatasetConceptConfig):
         return [m.pattern for m in mapping.mappings]
@@ -689,15 +690,19 @@ def run_concepts(
             loaded[name] = _load_concept(name, override_dir, dataset, version)
         else:
             loaded[name] = load_concept(name, dataset, version)
-    mappings = {name: concept.get_dataset_concept(dataset, version) for name, concept in loaded.items()}
+    mappings = {name: concept.get_dataset_concepts(dataset, version) for name, concept in loaded.items()}
 
     identifiers = {concept.identifier for concept in loaded.values()}
-    for name, mapping in mappings.items():
-        if isinstance(mapping, DerivedDatasetConceptConfig | ComplexDatasetConceptConfig):
-            if missing := sorted(mapping.dependencies - identifiers):
-                raise ValueError(f"{name} depends on concepts that are not run: {missing}")
+    for name, dataset_concepts in mappings.items():
+        if missing := sorted(ConceptStep.concept_dependencies(dataset_concepts) - identifiers):
+            raise ValueError(f"{name} depends on concepts that are not run: {missing}")
 
-    read = [(pattern.table, pattern.event) for mapping in mappings.values() for pattern in _event_patterns(mapping)]
+    read = [
+        (pattern.table, pattern.event)
+        for dataset_concepts in mappings.values()
+        for mapping in dataset_concepts
+        for pattern in _event_patterns(mapping)
+    ]
     schemas = extracted_event_schemas(dataset, version)
     project = WeavEHRProject(root / "project")
     extraction = project.add_dataset(EXTRACTION_STEP.lower())

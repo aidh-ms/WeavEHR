@@ -15,7 +15,9 @@ of a reference version:
 - Files that exist only in the base are inherited unchanged.
 - Files that exist in both are deep-merged: mappings are merged recursively
   with the extending file taking precedence, while lists and scalar values
-  are replaced wholesale.
+  are replaced wholesale. A file whose top level is a list (e.g. a concept
+  mapping file holding several mappings) likewise replaces the inherited
+  file wholesale, as does a mapping file overriding an inherited list.
 - A file in the extending version containing ``deleted: true`` removes the
   inherited configuration entirely (e.g. for tables excluded from a demo
   dataset).
@@ -39,6 +41,9 @@ logger = get_logger(__name__)
 EXTENDS_FILE = "extends.yml"
 
 CONFIG_SUFFIXES = {".yml", ".yaml"}
+
+ConfigData = dict[str, Any] | list[Any]
+"""The data of one configuration file: a mapping, or a list (e.g. several concept mappings)."""
 
 
 def has_extends(subdir: Path) -> bool:
@@ -117,7 +122,7 @@ def resolve_version_chain(version_dir: Path) -> list[Path]:
     return chain
 
 
-def resolve_effective_configs(subdir: Path) -> dict[str, dict[str, Any]]:
+def resolve_effective_configs(subdir: Path) -> dict[str, ConfigData]:
     """Resolve the effective configuration data for a version subdirectory.
 
     Walks the version's inheritance chain (base first) and overlays the
@@ -137,7 +142,7 @@ def resolve_effective_configs(subdir: Path) -> dict[str, dict[str, Any]]:
     return _overlay_version_chain(subdir, "**/*.*")
 
 
-def resolve_effective_config(subdir: Path, name: str) -> dict[str, Any] | None:
+def resolve_effective_config(subdir: Path, name: str) -> ConfigData | None:
     """Resolve the effective configuration data of a single configuration.
 
     Equivalent to ``resolve_effective_configs(subdir).get(name)``, but only
@@ -157,9 +162,9 @@ def resolve_effective_config(subdir: Path, name: str) -> dict[str, Any] | None:
     return _overlay_version_chain(subdir, f"{glob.escape(name)}.*").get(name)
 
 
-def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, dict[str, Any]]:
+def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, ConfigData]:
     """Overlay the configuration files matching ``pattern`` along the inheritance chain of ``subdir``."""
-    effective: dict[str, dict[str, Any]] = {}
+    effective: dict[str, ConfigData] = {}
 
     for version_dir in resolve_version_chain(subdir.parent):
         directory = version_dir / subdir.name
@@ -171,16 +176,23 @@ def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, dict[str, An
                 continue
 
             name = file_path.relative_to(directory).with_suffix("").as_posix()
-            data = yaml.safe_load(file_path.read_text()) or {}
+            data = yaml.safe_load(file_path.read_text())
+            # An empty file is an empty mapping; an empty list (`[]`) stays a list and replaces what it overrides.
+            if data is None:
+                data = {}
 
-            if data.get("deleted") is True:
+            if isinstance(data, dict) and data.get("deleted") is True:
                 logger.debug("Config %s deleted by %s", name, file_path)
                 effective.pop(name, None)
                 continue
 
-            if name in effective:
+            inherited = effective.get(name)
+            # A list on either side is replaced wholesale, like a list inside a mapping.
+            if isinstance(inherited, dict) and isinstance(data, dict):
                 logger.debug("Merging %s onto inherited config %s", file_path, name)
-                data = deep_merge(effective[name], data)
+                data = deep_merge(inherited, data)
+            elif inherited is not None:
+                logger.debug("Replacing inherited config %s with %s", name, file_path)
 
             effective[name] = data
 
