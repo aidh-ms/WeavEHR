@@ -925,19 +925,19 @@ def test_sepsis3_needs_a_sofa_rise_of_two_around_a_suspected_infection(tmp_path:
     assert_rows(outputs["sepsis3"], [{"subject_id": 1, "time": at(5)}], context="sepsis3")
 
 
-SEPSIS3_ON_COMPONENTS: Final = (
+SEPSIS3_ON_TOTAL: Final = (
     "type: complex\n"
     "concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer\n"
     "concepts:\n"
     "  - suspected_infection.1.0.0\n"
-    + "".join(f"  - {name}.1.0.0\n" for name in SOFA if name.startswith("sofa_"))
-    + "kwargs:\n  rise: components\n"
+    "  - sofa.1.0.0\n"
+    "kwargs:\n  rise: total\n"
 )
-"""The shipped sepsis3 mapping with the rise measured on the SOFA components."""
+"""A sepsis3 mapping with the rise measured on the SOFA total, as in ricu."""
 
 
-def test_sepsis3_on_the_components_ignores_a_blood_gas_scored_after_the_blood_pressure(tmp_path: Path) -> None:
-    """The rise on the SOFA total counts components as they arrive; the rise on the components does not.
+def test_sepsis3_ignores_a_blood_gas_scored_after_the_blood_pressure(tmp_path: Path) -> None:
+    """The shipped rise, on the SOFA components, ignores components as they arrive; the rise on the total does not.
 
     Both subjects get vancomycin at 0 h and a blood culture 1 h later: a suspected infection at 0 h.
     Subject 1, ventilated, has a MAP of 65 mmHg at 0 h (cardiovascular 1) and its first blood gas
@@ -969,5 +969,5 @@ def test_sepsis3_on_the_components_ignores_a_blood_gas_scored_after_the_blood_pr
         )
         return outputs["sepsis3"].select("subject_id", "time").sort("subject_id").rows()
 
-    assert onsets({}) == [(1, at(1)), (2, at(5))]
-    assert onsets({"sepsis3": SEPSIS3_ON_COMPONENTS}) == [(2, at(5))]
+    assert onsets({}) == [(2, at(5))]
+    assert onsets({"sepsis3": SEPSIS3_ON_TOTAL}) == [(1, at(1)), (2, at(5))]

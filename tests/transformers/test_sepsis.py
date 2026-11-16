@@ -422,6 +422,7 @@ def test_empty_sepsis_input_produces_no_onsets(tmp_path: Path, empty: str) -> No
 
 
 def test_shipped_sepsis_mappings_run_through_the_concept_pipeline(tmp_path: Path) -> None:
+    from tests.datasets.support import SOFA_COMPONENTS
     from tests.transformers.test_sofa import _concept_output, _run_pipeline, _simple_mapping_yml
 
     mappings = Path(__file__).parents[2] / "configs" / "datasets" / "mimic-iv" / "2.2" / "mappings"
@@ -443,14 +444,18 @@ def test_shipped_sepsis_mappings_run_through_the_concept_pipeline(tmp_path: Path
 2,2024-01-01 02:00:00,CULTURE,1
 """,
         concepts=[
-            ("sofa", "points"),
+            *[(name, "points") for name in SOFA_COMPONENTS],
             ("antibiotics", None),
             ("body_fluid_sampling", None),
             ("suspected_infection", None),
             ("sepsis3", None),
         ],
         mappings={
-            "sofa": _simple_mapping_yml("SOFA"),
+            # One component carries the scores; with one component the rise equals the total's.
+            **{
+                name: _simple_mapping_yml("SOFA" if name == "sofa_coagulation" else "NO_SUCH_CODE")
+                for name in SOFA_COMPONENTS
+            },
             "antibiotics": _simple_mapping_yml("ANTIBIOTIC"),
             "body_fluid_sampling": _simple_mapping_yml("CULTURE"),
             "suspected_infection": (mappings / "suspected_infection.yml").read_text(),
