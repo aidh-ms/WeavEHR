@@ -185,6 +185,7 @@ SOURCE_SELECTION = measurements(
         ("crrt_prefilter_replacement_rate", 1988543, SUBSTITUTION, None, 2000.0, None, "header: predilution only"),
         ("crrt_ultrafiltrate_output", 3020433, "CVVH Onttrokken", None, 150.0, 150.0, "header: CVVH Onttrokken"),
         ("crrt_ultrafiltrate_output", 3020433, SOURCE, None, 150.0, None, "header: 3020433 holds other outputs too"),
+        ("urine_output", 3016267, "Spoelblaas Uit", "ml", 500.0, None, "header: bladder irrigation output is no urine"),
     ]
 )
 
@@ -477,6 +478,26 @@ NATIVE_RULES = [
         [{"code": "body_fluid_sampling", "time": TIME, "numeric_value": 1}],
         id="a culture order without value or unit is a sampling marker",
     ),
+    pytest.param(
+        "measurement",
+        "MEASUREMENT",
+        "urine_output",
+        [
+            {
+                "person_id": 1,
+                "measurement_id": measurement_id,
+                "visit_occurrence_id": VISIT_ID,
+                "measurement_datetime": TIME,
+                "measurement_concept_id": 3014315,
+                "measurement_source_value": "UrineCAD",
+                "unit_source_value": "ml",
+                "value_as_number": value,
+            }
+            for measurement_id, value in [(1, 100.0), (2, 100.0), (3, 50.0)]
+        ],
+        [{"time": TIME, "numeric_value": 100.0}, {"time": TIME, "numeric_value": 50.0}],
+        id="AMSTEL's second copy of a urine row is dropped",
+    ),
 ]
 
 
@@ -706,3 +727,123 @@ def test_cardiovascular_sofa_follows_rate_segments_and_their_stop(tmp_path: Path
         ],
         context="sofa_cardiovascular",
     )
+
+
+GAS: Final = [
+    (code("MEASUREMENT", 3027315, "PO2 (bloed)", "mmHg"), 80.0),
+    (code("MEASUREMENT", 3025408, "O2 concentratie", "Geen"), 50.0),
+]
+"""PaO2 80 mmHg at FiO2 50 %: a PaO2/FiO2 of 160 mmHg."""
+
+
+def blood_gas(hours: float) -> list[dict[str, Any]]:
+    return [{"subject_id": 1, "time": at(hours), "code": item, "numeric_value": value} for item, value in GAS]
+
+
+def beademen(procedure_occurrence_id: int, start: float, stop: float | None) -> dict[str, Any]:
+    """The PROCEDURE row AMSTEL writes for one Beademen record, with its stop as procedure_end."""
+    return {
+        "subject_id": 1,
+        "time": at(start),
+        "code": code("PROCEDURE", *BEADEMEN),
+        "visit_occurrence_id": VISIT_ID,
+        "procedure_occurrence_id": procedure_occurrence_id,
+        "procedure_end": None if stop is None else at(stop),
+    }
+
+
+RESPIRATORY_SOFA: Final = [
+    "O2_partial_pressure",
+    "fraction_of_inspired_oxygen",
+    "ventilation_start",
+    "ventilation_end",
+    "sofa_respiratory",
+]
+
+SOFA: Final = [
+    *RESPIRATORY_SOFA,
+    "platelet_count",
+    "sofa_coagulation",
+    "total_bilirubin",
+    "sofa_liver",
+    "mean_arterial_pressure",
+    "patient_weight",
+    "norepinephrine_rate",
+    "epinephrine_rate",
+    "dopamine_rate",
+    "dobutamine_rate",
+    "sofa_cardiovascular",
+    "gcs_eye",
+    "gcs_motor",
+    "gcs_verbal",
+    "gcs_unable",
+    "gcs",
+    "sofa_cns",
+    "urine_output",
+    "creatinine",
+    "sofa_renal",
+    "sofa",
+]
+"""The SOFA total and all its dependencies."""
+
+
+def test_respiratory_sofa_counts_ventilation_until_each_record_stops(tmp_path: Path) -> None:
+    """Ventilation records gate the 3 and 4 points of respiratory SOFA until their own stop.
+
+    Beademen runs from 0 h to 4 h, and a tracheostomy is in place from 2 h to 6 h. Each stop ends
+    only the record with its record_id, so ventilation lasts until 6 h. A PaO2/FiO2 of 160 mmHg
+    scores 3 with respiratory support and 2 without (Vincent et al. 1996). Blood gases at 1, 5
+    and 7 h are current for 2 h, so the record changes at 2 h and 6 h are scored too, while the
+    end of Beademen at 4 h, 3 h after the last gas, is not.
+    """
+    device = {"subject_id": 1, "visit_occurrence_id": VISIT_ID, "device_exposure_id": 2}
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=RESPIRATORY_SOFA,
+        sources={
+            "procedure_occurrence/PROCEDURE": [beademen(1, 0, 4)],
+            "device_exposure/DEVICE_START": [{**device, "time": at(2), "code": code("DEVICE_START", *TRACHEOSTOMA)}],
+            "device_exposure/DEVICE_END": [{**device, "time": at(6), "code": code("DEVICE_END", *TRACHEOSTOMA)}],
+            "measurement/MEASUREMENT": [*blood_gas(1), *blood_gas(5), *blood_gas(7)],
+        },
+    )
+
+    assert_rows(
+        outputs["sofa_respiratory"],
+        [{"time": at(hours), "numeric_value": score} for hours, score in [(1, 3), (2, 3), (5, 3), (6, 2), (7, 2)]],
+        context="sofa_respiratory",
+    )
+
+
+def test_sofa_sums_the_aumcdb_components(tmp_path: Path) -> None:
+    """AUMCdb inputs at one time give a SOFA total that sums the component scores.
+
+    Points follow Vincent et al. (1996): platelets of 40 x 10^3/uL score 3, bilirubin of
+    60 umol/L (3.5 mg/dL) 2, creatinine of 250 umol/L (2.8 mg/dL) 2, a MAP of 65 mmHg without
+    vasopressors 1, and a PaO2/FiO2 of 160 mmHg during Beademen 3. Without GCS and urine records
+    the CNS score is unknown and adds 0, and the renal score rests on creatinine. The total is 11.
+    """
+
+    def measurement(concept_id: int, value: float) -> dict[str, Any]:
+        return {"subject_id": 1, "time": TIME, "code": code("MEASUREMENT", concept_id), "numeric_value": value}
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=SOFA,
+        sources={
+            "procedure_occurrence/PROCEDURE": [beademen(1, -1, None)],
+            "measurement/MEASUREMENT": [
+                *blood_gas(0),
+                measurement(3007461, 40.0),
+                measurement(3006140, 60.0),
+                measurement(3020564, 250.0),
+                measurement(21490852, 65.0),
+            ],
+        },
+    )
+
+    assert_rows(outputs["sofa"], [{"time": TIME, "numeric_value": 11}], context="sofa")

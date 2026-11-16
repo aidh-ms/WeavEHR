@@ -344,6 +344,13 @@ markers within a stay is 1.0 hours, the 95th percentile is 4.9 hours, and 3.5% o
 20,240 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
 their procedure episodes are linked by `orderid`.
 
+The AUMCdb mappings select ricu's `mech_vent` process items: Beademen and
+Tracheostoma (invasive) and Beademen non-invasief (noninvasive), each record
+with its own start and stop. The markers carry `record_id`, the record's
+`procedure_occurrence_id` or `device_exposure_id`, and the AUMCdb mapping
+sets `ventilation_id_column: record_id` with no fallback expiry, as ricu
+uses these windows as they are. See the AUMCdb README.
+
 ### Cardiovascular SOFA
 
 `sofa_cardiovascular` reassesses at every MAP or pressor input event, including

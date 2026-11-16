@@ -1,0 +1,12 @@
+# The ventilation records (Beademen, Beademen non-invasief, Tracheostoma) link their start
+# and end by record_id. Each record ends at its recorded stop, so no ventilation_window is set:
+# ricu, too, reads these windows as they are.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaRespiratoryTransformer
+concepts:
+  - O2_partial_pressure.1.0.0
+  - fraction_of_inspired_oxygen.1.0.0
+  - ventilation_start.1.0.0
+  - ventilation_end.1.0.0
+kwargs:
+  ventilation_id_column: record_id

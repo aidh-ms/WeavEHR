@@ -41,9 +41,9 @@ for that clinical concept.
 
 Currently mapped (`simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
-respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. GCS,
-CNS SOFA, suspected infection, the vasopressor rates, cardiovascular SOFA and
-the ventilation windows are described below.
+respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. The
+ventilation windows, GCS, suspected infection, the vasopressor rates and SOFA
+are described below.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -81,8 +81,8 @@ OMOP has no end event for a procedure. The CDM 5.4 table writes the stop as
 it, and a record without a stop has no end. The tracheostomy's stop is its
 `DEVICE_END`. `record_id` links a start to its end: the record's
 `procedure_occurrence_id` or `device_exposure_id`. AMSTEL numbers the rows of
-both tables from one sequence, so the IDs don't clash. Respiratory SOFA can
-therefore pair the markers with `ventilation_id_column: record_id` and no
+both tables from one sequence, so the IDs don't clash. Respiratory SOFA
+pairs the markers with `ventilation_id_column: record_id` and no
 `ventilation_window`. That is how ricu reads these windows: it uses them as
 they are, with no 6-hour matching or 30-minute minimum length.
 
@@ -156,6 +156,29 @@ and starts the next at the same time, which keeps the new rate; a second
 pump overlapping the first keeps counting after the first one stops.
 The vasopressor durations (`*_duration`) are not mapped.
 
+#### SOFA
+
+`sofa` sums the six components, all complex mappings as for MIMIC-IV. CNS and
+cardiovascular SOFA are described above. The other four read:
+
+- `sofa_respiratory`: PaO2 (ricu's items, kPa converted to mmHg), FiO2 and the
+  ventilation windows, paired by `record_id`. FiO2 reads O2 concentratie, as
+  ricu does, and also Zephyros O2i and O2 Volume, which the AUMCdb medical
+  review kept; O2 Volume's values lie in the same % range.
+- `sofa_coagulation`: platelets.
+- `sofa_liver`: total bilirubin, converted from µmol/L.
+- `sofa_renal`: creatinine, converted from µmol/L, and the 24-hour urine
+  output. `urine_output` reads more urine items than ricu (indwelling
+  catheter only), such as spontaneous voids, incontinence, suprapubic
+  catheter, ureteral splints and nephrostomies. It leaves out the bladder irrigation output (Spoelblaas
+  Uit), which holds the irrigation fluid too, and keeps one of the two copies
+  AMSTEL writes of each urine row (see below).
+
+FiO2 has no plausibility limits here or for the other datasets. On AUMCdb its
+values reach 2,393,872 (95th percentile 65). A value above 100 lowers
+PaO2/FiO2 and can raise the respiratory score; ricu drops FiO2 outside 21 to
+100 %.
+
 ### Validation against ricu
 
 The AUMC mappings were validated against `ricu` over the first 168 hours of
@@ -187,11 +210,14 @@ error.
 The same repeat-admission timing difference explains the remaining >=1% value
 differences for CRP, base excess, troponin T, and band-form neutrophils.
 
-Urine output is a separate AMSTEL ETL case. The relevant legacy urine events
-are duplicated in the OMOP representation because the corresponding unit
-source code occurs twice in AMSTEL's source-to-concept mapping. This produces
-the remaining urine coverage and value discrepancy and is not corrected in
-the WeavEHR concept mapping.
+Urine output is a separate AMSTEL ETL case. AMSTEL writes every urine row
+twice, because the unit `ml` occurs twice in its source-to-concept mapping;
+the copies differ only in `measurement_id`. This produced the urine coverage
+and value discrepancy of the validation. A second copy doubles every urine
+sum, and renal SOFA grades the 24-hour volume, so `urine_output` now keeps
+one row per subject, time, code and value. Albumin, fibrinogen, INR and MCV
+rows are doubled too; their values are not summed, so they are left as they
+are.
 
 Neutrophils and lymphocytes are intentionally not considered fully reproduced
 by the current `simple` mappings. The corresponding `ricu` concepts can use

@@ -1,14 +1,20 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3014315 = Urine output
-#   3007123 = Urine output --post void
-#   3016267 = Urine output by in and out urethral catheter
-#   21491173 = Urine output measured by nephrostomy
+#   3014315 = Urine output (UrineCAD, UrineIncontinentie, UrineSplint Li/Re, UrineSupraPubis, UrineUP)
+#   3007123 = Urine output --post void (UrineSpontaan)
+#   21491173 = Urine output measured by nephrostomy (Nefrodrain li/re Uit)
+# Not read: 3016267 (Urine output by in and out urethral catheter). Its only item is the bladder
+# irrigation output Spoelblaas Uit, which holds the irrigation fluid as well as the urine.
+#
+# AMSTEL writes every urine row twice: its unit map lists "ml" twice, so each AUMCdb row becomes
+# two measurement rows that differ only in measurement_id. Each row counts once.
 type: simple
 mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: "^(3014315|3007123|3016267|21491173)(//.*)?$"
+      code: "^(3014315|3007123|21491173)(//.*)?$"
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)
+    filters:
+      - first_distinct(subject_id, time, code, numeric_value)
