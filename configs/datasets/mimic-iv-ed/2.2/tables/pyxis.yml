@@ -1,0 +1,53 @@
+# Medicine dispensations through the Pyxis system. med_rn groups the rows of one
+# dispensation; a medicine with several Generic Sequence Numbers has one row per GSN,
+# told apart by gsn_rn, so a row is not necessarily a unique dispensation
+# (MIMIC-IV-ED documentation, pyxis).
+path: ed/pyxis.csv.gz
+
+columns:
+  # subject_id and extensions
+  - name: subject_id
+    type: int64
+  - name: stay_id
+    type: int64
+  # db fields - times
+  # The documentation describes charttime as the dispensation time and as the closest
+  # approximation to the administration time.
+  - name: charttime
+    type: datetime
+    params:
+      format: "%Y-%m-%d %H:%M:%S"
+  # db fields - values
+  - name: med_rn
+    type: int64
+  - name: name
+    type: string
+  - name: gsn_rn
+    type: int64
+  # string: GSNs have leading zeros. The documentation states that a gsn of 0 means
+  # the GSN is missing; the raw value is kept as it is.
+  - name: gsn
+    type: string
+
+# charttime is nullable in the documentation; an event needs a time.
+filters:
+  - drop_na(charttime)
+
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    stay_id: col(stay_id)
+
+events:
+  # One event per raw row (per dispensation and GSN); med_rn and gsn_rn are kept so
+  # that a user can group the rows of one dispensation.
+  - name: MEDICATION_DISPENSATION
+    columns:
+      time: col(charttime)
+      code:
+        - col(name)
+      extension:
+        available_time: col(charttime)
+        med_rn: col(med_rn)
+        gsn_rn: col(gsn_rn)
+        gsn: col(gsn)
