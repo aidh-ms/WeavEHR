@@ -112,10 +112,12 @@ MIMIC-IV) and `sofa_cns` scores it.
   nitrofurantoin) and drops the eye and skin products ricu keeps (tobramycin
   and dexamethasone/gentamicin eye ointment, ofloxacin eye drops, silver
   sulfadiazine cream).
-- `body_fluid_sampling`: the culture orders among ricu's aumc `samp` items
-  (`procedureorderitems`) that are taken on suspicion of infection. AMSTEL
-  writes them to `measurement` without a value under culture concepts (blood,
-  sputum, urine, throat, ...), dated at the order's registration.
+- `body_fluid_sampling`: ricu's aumc `samp` items are culture orders
+  (`procedureorderitems`), which AMSTEL writes to `measurement` without a value
+  under culture concepts (blood, sputum, urine, throat, ...), dated at the
+  order's registration. Each order is `diagnostic` or `screening` (below);
+  `suspected_infection` pairs antibiotics with the diagnostic ones only
+  (`sampling_levels: [diagnostic]`).
 
 Selective digestive decontamination (SDD) is routine in AUMCdb. When it
 starts, inventory cultures are taken (SDD Inventarisatiekweken afnemen, 3,101
@@ -123,15 +125,18 @@ orders), followed by twice-weekly surveillance cultures for the rest of the stay
 (SDD-kweken afnemen, 10,483 orders, against 5,439 blood culture orders), and
 intravenous cefotaxime is given for the first days. Those cultures are taken by
 protocol, not on suspicion of infection, and so are the MRSA screening and the
-research cultures of the COUrSe study. Unlike ricu, `body_fluid_sampling`
-leaves them out. ricu counts them, so paired with the regimen's cefotaxime
-they date a suspected infection at every SDD start and twice a week after; on
-AUMCdb 1.5.0, 23,435 suspected infections in 4,446 patients rested on SDD
-cultures alone. The cefotaxime still counts as an antibiotic: it cannot be told
+research cultures of the COUrSe study. `body_fluid_sampling` keeps them as
+`screening` (they share their culture concepts with diagnostic orders and are
+told apart by source value), and unlike ricu `suspected_infection` does not
+pair them. ricu does, so paired with the regimen's cefotaxime they date a
+suspected infection at every SDD start and twice a week after; on AUMCdb
+1.5.0, 23,435 suspected infections in 4,446 patients rested on SDD cultures
+alone, and leaving them out lowers the patients with Sepsis-3 from 31% to 24%
+of all patients. The cefotaxime still counts as an antibiotic: it cannot be told
 apart from treatment, and with a clinical culture it forms a suspected
 infection as any antibiotic does. The SDD decontamination products are no
 antibiotics here, as in ricu. Throat, nose, rectal and perineal cultures
-outside SDD (a few hundred orders) still count.
+outside SDD (a few hundred orders) are diagnostic.
 
 #### Vasopressors and cardiovascular SOFA
 

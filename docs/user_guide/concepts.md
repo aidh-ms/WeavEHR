@@ -429,6 +429,15 @@ within 72 hours. The earlier event dates the suspicion. Both boundaries are
 inclusive; neither positive culture results nor a sustained antibiotic course
 are required.
 
+`body_fluid_sampling` can tell cultures taken on suspicion of infection
+(`diagnostic`) from cultures taken by protocol (`screening`, e.g. surveillance
+or research cultures); a mapping that does not tell them apart sets no level.
+`kwargs.sampling_levels` keeps only the cultures with one of the listed levels;
+by default every culture counts, as in ricu. The AUMCdb mapping sets
+`sampling_levels: [diagnostic]`, leaving out its selective digestive
+decontamination (SDD) surveillance, MRSA screening and research cultures; see
+the AUMCdb README.
+
 `sepsis3` assesses **every** suspected-infection window independently. Within
 the inclusive interval from 48 hours before suspicion to 24 hours after it,
 the first observed SOFA rise of at least `kwargs.sofa_increase` (default: 2)

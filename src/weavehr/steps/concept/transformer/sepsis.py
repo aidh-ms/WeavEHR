@@ -64,14 +64,31 @@ class AntibioticsWithCultureTransformer(BaseConceptTransformer):
     A partner need not be unique across pairs; duplicate onset times collapse.
     Neither positive cultures nor a sustained antibiotic course are required.
     Missing either input produces no suspected-infection events.
+
+    ``sampling_levels`` keeps only the cultures whose ``body_fluid_sampling``
+    code carries one of these levels, e.g. ``[diagnostic]`` to leave out
+    screening cultures taken by protocol. By default every culture counts, as
+    in ricu.
     """
 
     strict_dependencies = False
 
     def __init__(
-        self, concept: "ConceptConfig", complex_config: "ComplexDatasetConceptConfig", step: "ConceptStep"
+        self,
+        concept: "ConceptConfig",
+        complex_config: "ComplexDatasetConceptConfig",
+        step: "ConceptStep",
+        *,
+        sampling_levels: list[str] | None = None,
     ) -> None:
         super().__init__(concept, complex_config, step)
+        if sampling_levels is not None and (
+            isinstance(sampling_levels, str)
+            or not sampling_levels
+            or not all(isinstance(level, str) and level for level in sampling_levels)
+        ):
+            raise ValueError("sampling_levels must be a non-empty list of level names")
+        self._sampling_levels = list(sampling_levels) if sampling_levels is not None else None
 
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
         required = {"antibiotics", "body_fluid_sampling"}
@@ -80,7 +97,13 @@ class AntibioticsWithCultureTransformer(BaseConceptTransformer):
             return _empty_events()
 
         antibiotics = _markers(dependencies["antibiotics"]).unique().sort("subject_id", "time")
-        sampling = _markers(dependencies["body_fluid_sampling"]).unique().sort("subject_id", "time")
+        sampling = dependencies["body_fluid_sampling"]
+        if self._sampling_levels is not None:
+            code = pl.col("code").cast(pl.String)
+            sampling = sampling.filter(
+                pl.any_horizontal([code.str.ends_with(f"//{level}") for level in self._sampling_levels])
+            )
+        sampling = _markers(sampling).unique().sort("subject_id", "time")
 
         def pair(earlier: pl.LazyFrame, later: pl.LazyFrame, window: str) -> pl.LazyFrame:
             return (

@@ -1,5 +1,8 @@
 name: body_fluid_sampling
 version: 1.0.0
+# diagnostic: taken on suspicion of infection; screening: taken by protocol (e.g. surveillance or
+# research cultures). Mappings that do not tell them apart set no level.
+levels: [diagnostic, screening]
 extension_columns:
   dataset: col("dataset")
   table: col("table")

@@ -335,24 +335,24 @@ ANTIBIOTICS = [
     ]
 ]
 
-# Culture orders count as sampling only when taken on suspicion of infection; the screening and
-# research orders share their concepts with clinical cultures and are told apart by source value.
+# Culture orders taken by protocol are screening, the others diagnostic; the screening and research
+# orders share their concepts with diagnostic cultures and are told apart by source value.
 CULTURES = [
     Case(
         concept="body_fluid_sampling",
         table="measurement",
         event="MEASUREMENT",
         code=code("MEASUREMENT", concept_id, source),
-        expect=[{"numeric_value": 1}] if sampling else NOTHING,
+        expect=[{"code": f"body_fluid_sampling//{level}", "numeric_value": 1}],
         note=note,
     )
-    for concept_id, source, sampling, note in [
-        (4015189, "Sputumkweek afnemen", True, "a clinical sputum culture"),
-        (4015189, "SDD-kweken afnemen", False, "header: SDD surveillance is taken by protocol"),
-        (4024958, "SDD Inventarisatiekweken afnemen", False, "header: SDD inventory at SDD start"),
-        (4015189, "Research Sputumkweek COUrSe", False, "header: a research culture"),
-        (1761466, "MRSA kweken afnemen", False, "header: MRSA screening"),
-        (3040827, "Rectumkweek afnemen", True, "a rectal culture outside SDD"),
+    for concept_id, source, level, note in [
+        (4015189, "Sputumkweek afnemen", "diagnostic", "a clinical sputum culture"),
+        (4015189, "SDD-kweken afnemen", "screening", "header: SDD surveillance is taken by protocol"),
+        (4024958, "SDD Inventarisatiekweken afnemen", "screening", "header: SDD inventory at SDD start"),
+        (4015189, "Research Sputumkweek COUrSe", "screening", "header: a research culture"),
+        (1761466, "MRSA kweken afnemen", "screening", "header: MRSA screening"),
+        (3040827, "Rectumkweek afnemen", "diagnostic", "a rectal culture outside SDD"),
     ]
 ]
 
@@ -497,7 +497,7 @@ NATIVE_RULES = [
                 "measurement_source_value": "Bloedkweken afnemen",
             }
         ],
-        [{"code": "body_fluid_sampling", "time": TIME, "numeric_value": 1}],
+        [{"code": "body_fluid_sampling//diagnostic", "time": TIME, "numeric_value": 1}],
         id="a culture order without value or unit is a sampling marker",
     ),
     pytest.param(
@@ -588,7 +588,8 @@ def test_suspected_infection_pairs_antibiotics_with_culture_orders(tmp_path: Pat
     Pairing follows docs/user_guide/concepts.md: a culture within 24 h after an antibiotic, or an
     antibiotic within 72 h after a culture, dated at the earlier event. Subject 1 gets vancomycin and
     a blood culture 10 h later. Subject 2's SDD surveillance culture order (one measurement row per
-    culture concept) is taken by protocol, so cefotaxime 2 h later forms no suspected infection.
+    culture concept) is screening, taken by protocol, so cefotaxime 2 h later forms no suspected
+    infection.
     Subject 5's sputum culture at 1 h does pair with the same cefotaxime, dated at the culture.
     Subject 3's vancomycin follows its culture by 80 h. Subject 4's tobramycin eye ointment is no
     antibiotic.
@@ -634,7 +635,17 @@ def test_suspected_infection_pairs_antibiotics_with_culture_orders(tmp_path: Pat
     )
     assert_rows(
         outputs["body_fluid_sampling"],
-        [{"subject_id": subject, "numeric_value": 1} for subject in (1, 3, 4, 5)],
+        [
+            {"subject_id": subject, "code": f"body_fluid_sampling//{level}", "numeric_value": 1}
+            for subject, level in [
+                (1, "diagnostic"),
+                *[(2, "screening")] * 3,
+                (3, "diagnostic"),
+                (4, "diagnostic"),
+                (5, "screening"),
+                (5, "diagnostic"),
+            ]
+        ],
         context="body_fluid_sampling",
     )
     assert_rows(

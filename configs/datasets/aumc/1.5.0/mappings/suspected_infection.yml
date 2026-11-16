@@ -1,7 +1,13 @@
 # AUMCdb records culture orders (procedureorderitems), so suspected infection
-# pairs antibiotics with body-fluid sampling as in ricu and the MIMIC-IV mapping.
+# pairs antibiotics with body-fluid sampling as in ricu and the MIMIC-IV mapping,
+# but only with diagnostic cultures: the SDD surveillance, MRSA screening and research
+# cultures (body_fluid_sampling//screening) are taken by protocol, not on suspicion.
+# ricu counts them; paired with the SDD regimen's cefotaxime, they would date a
+# suspected infection at every SDD start and twice a week after.
 type: complex
 concept_transformer: weavehr.steps.concept.transformer.sepsis.AntibioticsWithCultureTransformer
 concepts:
   - antibiotics.1.0.0
   - body_fluid_sampling.1.0.0
+kwargs:
+  sampling_levels: [diagnostic]
