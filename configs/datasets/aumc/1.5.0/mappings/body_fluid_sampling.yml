@@ -1,34 +1,41 @@
-# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- culture orders. ricu's aumc samp items are
-# procedureorderitems, which AMSTEL writes to measurement (no value, dated at the
-# order's registration) under these measurement_concept_ids:
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- culture orders taken on suspicion of infection.
+# ricu's aumc samp items are procedureorderitems, which AMSTEL writes to measurement
+# (no value, dated at the order's registration) under these measurement_concept_ids:
 #   4107893  = Blood culture                     (Bloedkweken afnemen)
-#   4015189  = Microbial culture of sputum       (Sputumkweek afnemen, Research Sputumkweek
-#                                                 COUrSe, SDD-kweken, SDD Inventarisatiekweken)
+#   4015189  = Microbial culture of sputum       (Sputumkweek afnemen; not read: Research
+#                                                 Sputumkweek COUrSe, SDD-kweken afnemen,
+#                                                 SDD Inventarisatiekweken afnemen)
 #   4024509  = Urine culture                     (Urinekweek afnemen)
-#   1761466  = Staph aureus and MRSA screening   (MRSA kweken afnemen)
-#   3040827  = Bacteria identified in Anal by Culture (Rectumkweek, Perineumkweek, SDD-kweken,
-#                                                 SDD Inventarisatiekweken)
+#   3040827  = Bacteria identified in Anal by Culture (Rectumkweek afnemen, Perineumkweek
+#                                                 afnemen; not read: the SDD orders)
 #   3003714  = ... in Wound by Culture           (Wondkweek afnemen)
 #   3009986  = ... in Catheter tip by Culture    (Cathetertipkweek afnemen)
 #   3025037  = ... in Peritoneal fluid by Culture (Ascitesvochtkweek afnemen)
 #   3008334  = ... in Drain by Aerobe culture    (Drainvochtkweek afnemen)
-#   4024958  = Throat culture                    (Keelkweek, SDD-kweken, SDD Inventarisatiekweken)
+#   4024958  = Throat culture                    (Keelkweek afnemen; not read: the SDD orders)
 #   37392597 = Stool culture                     (Faeceskweek afnemen)
 #   4196406  = Legionella rapid test             (Legionella sneltest (urine))
 #   4189544  = Microbial culture                 (X-Kweek nader te bepalen)
 #   4098503  = Cerebrospinal fluid culture       (Liquorkweek afnemen)
-#   37117051 = Nasal culture for bacteria        (Neuskweek afnemen, Research Neuskweek COUrSe)
-# No other AUMCdb source maps to these concepts. An order mapped to several
-# concepts (e.g. SDD-kweken) writes one row per concept at the same time; the
-# suspected-infection pairing collapses them. The procedure_occurrence rows
-# AMSTEL also writes for some orders are not read.
-# As in ricu, surveillance (SDD, MRSA) and research cultures count as sampling.
+#   37117051 = Nasal culture for bacteria        (Neuskweek afnemen; not read: Research
+#                                                 Neuskweek COUrSe)
+# Not read, unlike ricu: orders taken by protocol rather than on suspicion of infection.
+# These are the SDD inventory cultures at the start of selective digestive decontamination
+# and its twice-weekly surveillance cultures (SDD Inventarisatiekweken afnemen,
+# SDD-kweken afnemen), MRSA screening (1761466, MRSA kweken afnemen, its only source) and
+# the research cultures of the COUrSe study. Paired with the regimen's intravenous
+# cefotaxime, the SDD orders would date a suspected infection at every SDD start and
+# twice a week after.
+# No other AUMCdb source maps to these concepts. The procedure_occurrence rows AMSTEL
+# also writes for some orders are not read.
 type: simple
 mappings:
   - pattern:
       table: measurement
       event: MEASUREMENT
-      code: ^(1761466|3003714|3008334|3009986|3025037|3040827|4015189|4024509|4024958|4098503|4107893|4189544|4196406|37117051|37392597)//
+      code: ^(3003714|3008334|3009986|3025037|3040827|4015189|4024509|4024958|4098503|4107893|4189544|4196406|37117051|37392597)//
     columns:
       numeric_value: const(1)
       text_value: col(text_value)
+    filters:
+      - not str_contains(code, "//(SDD|Research)[ -]")

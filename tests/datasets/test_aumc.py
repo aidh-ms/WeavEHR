@@ -335,6 +335,27 @@ ANTIBIOTICS = [
     ]
 ]
 
+# Culture orders count as sampling only when taken on suspicion of infection; the screening and
+# research orders share their concepts with clinical cultures and are told apart by source value.
+CULTURES = [
+    Case(
+        concept="body_fluid_sampling",
+        table="measurement",
+        event="MEASUREMENT",
+        code=code("MEASUREMENT", concept_id, source),
+        expect=[{"numeric_value": 1}] if sampling else NOTHING,
+        note=note,
+    )
+    for concept_id, source, sampling, note in [
+        (4015189, "Sputumkweek afnemen", True, "a clinical sputum culture"),
+        (4015189, "SDD-kweken afnemen", False, "header: SDD surveillance is taken by protocol"),
+        (4024958, "SDD Inventarisatiekweken afnemen", False, "header: SDD inventory at SDD start"),
+        (4015189, "Research Sputumkweek COUrSe", False, "header: a research culture"),
+        (1761466, "MRSA kweken afnemen", False, "header: MRSA screening"),
+        (3040827, "Rectumkweek afnemen", True, "a rectal culture outside SDD"),
+    ]
+]
+
 WEIGHT = [
     Case(
         concept="patient_weight",
@@ -365,6 +386,7 @@ CASES = [
     *VENTILATION,
     *GCS,
     *ANTIBIOTICS,
+    *CULTURES,
     *WEIGHT,
 ]
 
@@ -565,9 +587,11 @@ def test_suspected_infection_pairs_antibiotics_with_culture_orders(tmp_path: Pat
 
     Pairing follows docs/user_guide/concepts.md: a culture within 24 h after an antibiotic, or an
     antibiotic within 72 h after a culture, dated at the earlier event. Subject 1 gets vancomycin and
-    a blood culture 10 h later. Subject 2's SDD culture order writes one measurement row per culture
-    concept and pairs once with cefotaxime 2 h later. Subject 3's vancomycin follows its culture by
-    80 h. Subject 4's tobramycin eye ointment is no antibiotic.
+    a blood culture 10 h later. Subject 2's SDD surveillance culture order (one measurement row per
+    culture concept) is taken by protocol, so cefotaxime 2 h later forms no suspected infection.
+    Subject 5's sputum culture at 1 h does pair with the same cefotaxime, dated at the culture.
+    Subject 3's vancomycin follows its culture by 80 h. Subject 4's tobramycin eye ointment is no
+    antibiotic.
     """
 
     def drug(subject: int, hours: float, concept_id: int) -> dict[str, Any]:
@@ -587,12 +611,15 @@ def test_suspected_infection_pairs_antibiotics_with_culture_orders(tmp_path: Pat
                 drug(2, 2, 44125812),
                 drug(3, 80, 43295826),
                 drug(4, 0, 40088729),
+                drug(5, 2, 44125812),
             ],
             "measurement/MEASUREMENT": [
                 culture(1, 10, 4107893),
                 *[culture(2, 0, concept_id, "SDD-kweken afnemen") for concept_id in (4024958, 4015189, 3040827)],
                 culture(3, 0, 4107893),
                 culture(4, 1, 4107893),
+                culture(5, 0, 4015189, "SDD-kweken afnemen"),
+                culture(5, 1, 4015189, "Sputumkweek afnemen"),
             ],
         },
     )
@@ -601,18 +628,18 @@ def test_suspected_infection_pairs_antibiotics_with_culture_orders(tmp_path: Pat
         outputs["antibiotics"],
         [
             {"subject_id": subject, "time": at(hours), "numeric_value": 1}
-            for subject, hours in [(1, 0), (2, 2), (3, 80)]
+            for subject, hours in [(1, 0), (2, 2), (3, 80), (5, 2)]
         ],
         context="antibiotics",
     )
     assert_rows(
         outputs["body_fluid_sampling"],
-        [{"subject_id": subject, "numeric_value": 1} for subject in (1, 2, 2, 2, 3, 4)],
+        [{"subject_id": subject, "numeric_value": 1} for subject in (1, 3, 4, 5)],
         context="body_fluid_sampling",
     )
     assert_rows(
         outputs["suspected_infection"],
-        [{"subject_id": 1, "time": at(0), "numeric_value": 1}, {"subject_id": 2, "time": at(0), "numeric_value": 1}],
+        [{"subject_id": 1, "time": at(0), "numeric_value": 1}, {"subject_id": 5, "time": at(1), "numeric_value": 1}],
         context="suspected_infection",
     )
 

@@ -112,19 +112,26 @@ MIMIC-IV) and `sofa_cns` scores it.
   nitrofurantoin) and drops the eye and skin products ricu keeps (tobramycin
   and dexamethasone/gentamicin eye ointment, ofloxacin eye drops, silver
   sulfadiazine cream).
-- `body_fluid_sampling`: ricu's aumc `samp` items are culture orders
-  (`procedureorderitems`), which AMSTEL writes to `measurement` without a value
-  under culture concepts (blood, sputum, urine, throat, ...), dated at the
-  order's registration.
+- `body_fluid_sampling`: the culture orders among ricu's aumc `samp` items
+  (`procedureorderitems`) that are taken on suspicion of infection. AMSTEL
+  writes them to `measurement` without a value under culture concepts (blood,
+  sputum, urine, throat, ...), dated at the order's registration.
 
-Selective digestive decontamination (SDD) is routine in AUMCdb. As in ricu,
-the SDD surveillance cultures (SDD-kweken afnemen, about twice as many orders
-as blood cultures), MRSA screening and research cultures count as sampling,
-and the intravenous cefotaxime of the SDD regimen counts as an antibiotic,
-while the SDD decontamination products themselves do not. Patients on SDD may
-therefore get a suspected infection early in their admission. Whether to
-exclude surveillance cultures is open; the mappings are not yet validated on
-AUMCdb.
+Selective digestive decontamination (SDD) is routine in AUMCdb. When it
+starts, inventory cultures are taken (SDD Inventarisatiekweken afnemen, 3,101
+orders), followed by twice-weekly surveillance cultures for the rest of the stay
+(SDD-kweken afnemen, 10,483 orders, against 5,439 blood culture orders), and
+intravenous cefotaxime is given for the first days. Those cultures are taken by
+protocol, not on suspicion of infection, and so are the MRSA screening and the
+research cultures of the COUrSe study. Unlike ricu, `body_fluid_sampling`
+leaves them out. ricu counts them, so paired with the regimen's cefotaxime
+they date a suspected infection at every SDD start and twice a week after; on
+AUMCdb 1.5.0, 23,435 suspected infections in 4,446 patients rested on SDD
+cultures alone. The cefotaxime still counts as an antibiotic: it cannot be told
+apart from treatment, and with a clinical culture it forms a suspected
+infection as any antibiotic does. The SDD decontamination products are no
+antibiotics here, as in ricu. Throat, nose, rectal and perineal cultures
+outside SDD (a few hundred orders) still count.
 
 #### Vasopressors and cardiovascular SOFA
 
@@ -174,18 +181,20 @@ cardiovascular SOFA are described above. The other four read:
   Uit), which holds the irrigation fluid too, and keeps one of the two copies
   AMSTEL writes of each urine row (see below).
 
-FiO2 has no plausibility limits here or for the other datasets. On AUMCdb its
-values reach 2,393,872 (95th percentile 65). A value above 100 lowers
-PaO2/FiO2 and can raise the respiratory score; ricu drops FiO2 outside 21 to
-100 %.
+FiO2 has no plausibility limits here or for the other datasets; ricu drops
+FiO2 outside 21 to 100 %. A value above 100 lowers PaO2/FiO2 and can raise the
+respiratory score, but on AUMCdb 1.5.0 only 21 rows (20 patients) exceed 100.
 
 #### Sepsis-3
 
 `sepsis3` pairs `suspected_infection` with `sofa` as for MIMIC-IV: a SOFA rise
 of at least 2 points over the lowest score so far in the window from 48 hours
-before to 24 hours after a suspected infection. It inherits the open points of
-its inputs: the SDD cultures and cefotaxime in suspected infection, and the
-FiO2 limits in SOFA.
+before to 24 hours after a suspected infection.
+
+AUMCdb has many Sepsis-3 onsets at the start of the ICU stay, also in ricu: YAIB
+(van de Water et al., ICLR 2024, Fig. 7 and Table 14) finds an onset before the
+6th ICU hour in 19.7% of AUMCdb stays, against 11.4% in MIMIC-IV, and 72% of
+AUMCdb admissions are surgical. Prediction tasks exclude such onsets.
 
 ### Validation against ricu
 
