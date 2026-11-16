@@ -1,0 +1,38 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- end of ricu's aumc mech_vent windows: the stop of the
+# processitems Beademen (9328, invasive), Beademen non-invasief (10740, noninvasive) and
+# Tracheostoma (12635, invasive). See ventilation_start for the items and the other rows that
+# share their concepts.
+#
+# OMOP has no end event for a procedure: the 5.4 table writes the stop as procedure_end on the
+# PROCEDURE event, so the end is dated by it, and a record without a stop has no end. The
+# tracheostomy's stop is the DEVICE_END event. record_id links the end to its start.
+type: simple
+mappings:
+  - pattern:
+      table: procedure_occurrence
+      event: PROCEDURE
+      code: ^4230167//Beademen$
+    level: invasive
+    columns: &procedure_columns
+      time: col(procedure_end)
+      extension:
+        stay_id: col(visit_occurrence_id)
+        record_id: col(procedure_occurrence_id)
+    filters: &recorded_end
+      - drop_na(time)
+  - pattern:
+      table: procedure_occurrence
+      event: PROCEDURE
+      code: ^40486624//Beademen non-invasief$
+    level: noninvasive
+    columns: *procedure_columns
+    filters: *recorded_end
+  - pattern:
+      table: device_exposure
+      event: DEVICE_END
+      code: ^4044008//Tracheostoma$
+    level: invasive
+    columns:
+      extension:
+        stay_id: col(visit_occurrence_id)
+        record_id: col(device_exposure_id)

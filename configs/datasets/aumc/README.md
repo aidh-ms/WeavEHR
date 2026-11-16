@@ -42,8 +42,8 @@ for that clinical concept.
 Currently mapped (`simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
 respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. GCS,
-CNS SOFA, suspected infection, the vasopressor rates and cardiovascular SOFA
-are described below.
+CNS SOFA, suspected infection, the vasopressor rates, cardiovascular SOFA and
+the ventilation windows are described below.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -58,6 +58,33 @@ Respiratory support and the airway markers (`respiratory_support`,
 modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). On
 AUMCdb 1.5.0 they select the listed items as intended. Whether a heat-moisture
 exchanger (Kunstneus) always means a tracheostomy is still open.
+
+#### Ventilation windows
+
+`ventilation_start` and `ventilation_end` map ricu's aumc `mech_vent` items.
+These are AUMCdb process items, each record with its own start and stop:
+
+| Item | AMSTEL target | Level |
+| --- | --- | --- |
+| 9328 Beademen | `procedure_occurrence` 4230167 | invasive |
+| 10740 Beademen non-invasief | `procedure_occurrence` 40486624 | noninvasive |
+| 12635 Tracheostoma | `device_exposure` 4044008 | invasive |
+
+As in ricu, a tracheostomy counts as invasive ventilation for as long as it
+is in place, whether or not a ventilator is attached. The mappings select the
+source value too: 40486624 also holds the NIV ventilator modes (which
+`respiratory_support` reads) and CPAP orders, and 4044008 holds the retired
+tracheostomy items and the O2 route list value, none of which ricu reads.
+
+OMOP has no end event for a procedure. The CDM 5.4 table writes the stop as
+`procedure_end` on the `PROCEDURE` event, so `ventilation_end` is dated by
+it, and a record without a stop has no end. The tracheostomy's stop is its
+`DEVICE_END`. `record_id` links a start to its end: the record's
+`procedure_occurrence_id` or `device_exposure_id`. AMSTEL numbers the rows of
+both tables from one sequence, so the IDs don't clash. Respiratory SOFA can
+therefore pair the markers with `ventilation_id_column: record_id` and no
+`ventilation_window`. That is how ricu reads these windows: it uses them as
+they are, with no 6-hour matching or 30-minute minimum length.
 
 #### GCS and CNS SOFA
 
@@ -192,9 +219,6 @@ Not yet mapped / not cleanly mappable from OMOP:
 - **Other infusion rates and durations** (`phenylephrine_rate`,
   `vasopressin_rate`, `*_duration`): readable from `drug_exposure.sig` like the
   four SOFA vasopressors above; pending.
-- **Ventilation windows** (`ventilation_start`, `ventilation_end`): AMSTEL
-  writes the processitems Beademen and Beademen non-invasief, with their stop
-  time, to `procedure_occurrence`; pending.
 - **Outcomes / length-of-stay**: derived from `visit_occurrence`/`death`; need
   `derived`/`complex` mappings.
 - **RASS**: the item is a list item, so its `value_as_number` is empty and the

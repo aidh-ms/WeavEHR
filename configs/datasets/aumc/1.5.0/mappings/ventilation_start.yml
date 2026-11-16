@@ -1,0 +1,40 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- start of ricu's aumc mech_vent windows, the processitems
+#   9328  Beademen              -> procedure_occurrence 4230167 (Artificial ventilation): invasive
+#   10740 Beademen non-invasief -> procedure_occurrence 40486624 (Non-invasive positive pressure
+#                                  ventilation): noninvasive
+#   12635 Tracheostoma          -> device_exposure 4044008 (Tracheostomy tube): invasive, as in ricu
+# Each record has a start and a stop; ventilation_end maps the stop.
+#
+# Other rows share these concepts, so each mapping also selects the source value. 40486624 also
+# holds the ventilator modes "PC in NIV" and "PS/CPAP in NIV" (read by respiratory_support) and the
+# orders "CPAP geven" and "Boussignac"; 4044008 also holds the retired tracheostomy items
+# ("Xx-Niet meer gebruiken ... Tracheostoma ...") and the O2 route list value. ricu reads none of them.
+#
+# record_id links a start to its end: the record's procedure_occurrence_id or device_exposure_id.
+# AMSTEL numbers the rows of both tables from one sequence (its stem table), so they never clash.
+type: simple
+mappings:
+  - pattern:
+      table: procedure_occurrence
+      event: PROCEDURE
+      code: ^4230167//Beademen$
+    level: invasive
+    columns: &procedure_columns
+      extension:
+        stay_id: col(visit_occurrence_id)
+        record_id: col(procedure_occurrence_id)
+  - pattern:
+      table: procedure_occurrence
+      event: PROCEDURE
+      code: ^40486624//Beademen non-invasief$
+    level: noninvasive
+    columns: *procedure_columns
+  - pattern:
+      table: device_exposure
+      event: DEVICE_START
+      code: ^4044008//Tracheostoma$
+    level: invasive
+    columns:
+      extension:
+        stay_id: col(visit_occurrence_id)
+        record_id: col(device_exposure_id)

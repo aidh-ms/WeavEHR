@@ -235,6 +235,52 @@ AIRWAYS = [
     ]
 ]
 
+BEADEMEN: Final = (4230167, "Beademen")
+BEADEMEN_NIV: Final = (40486624, "Beademen non-invasief")
+TRACHEOSTOMA: Final = (4044008, "Tracheostoma")
+RETIRED_TRACHEOSTOMA: Final = (4044008, "Xx-Niet meer gebruiken Tracheostoma (Shiley)(= Proces Tracheostoma)")
+RECORD_ID: Final = 30
+END: Final = datetime(2024, 1, 2, 6)
+"""Stop of a ventilation record, after the start the cases default to."""
+
+# Table, event and record ID column of a ventilation record's source row.
+PROCEDURE: Final = ("procedure_occurrence", "PROCEDURE", "procedure_occurrence_id")
+DEVICE_START: Final = ("device_exposure", "DEVICE_START", "device_exposure_id")
+DEVICE_END: Final = ("device_exposure", "DEVICE_END", "device_exposure_id")
+
+# The levels are ricu's aumc mech_vent: Beademen (9328) and Tracheostoma (12635) are invasive,
+# Beademen non-invasief (10740) is noninvasive. Every end is asserted at the record's stop.
+VENTILATION = [
+    Case(
+        concept=concept,
+        table=table,
+        event=event,
+        code=code(event, *item),
+        extra={**IN_VISIT, id_column: RECORD_ID, **extra},
+        expect=NOTHING
+        if level is None
+        else [
+            {
+                "code": f"{concept}//{level}",
+                "stay_id": str(VISIT_ID),
+                "record_id": str(RECORD_ID),
+                **({"time": END} if concept == "ventilation_end" else {}),
+            }
+        ],
+        note=note,
+    )
+    for concept, (table, event, id_column), item, extra, level, note in [
+        ("ventilation_start", PROCEDURE, BEADEMEN, {}, "invasive", "ricu mech_vent: Beademen is invasive"),
+        ("ventilation_start", PROCEDURE, BEADEMEN_NIV, {}, "noninvasive", "ricu mech_vent: Beademen non-invasief"),
+        ("ventilation_start", PROCEDURE, (40486624, "PC in NIV"), {}, None, "header: an NIV mode is no record"),
+        ("ventilation_start", DEVICE_START, TRACHEOSTOMA, {}, "invasive", "ricu mech_vent: a tracheostomy"),
+        ("ventilation_start", DEVICE_START, RETIRED_TRACHEOSTOMA, {}, None, "header: ricu reads no retired item"),
+        ("ventilation_end", PROCEDURE, BEADEMEN_NIV, {"procedure_end": END}, "noninvasive", "header: procedure_end"),
+        ("ventilation_end", PROCEDURE, BEADEMEN, {"procedure_end": None}, None, "header: no stop, no end"),
+        ("ventilation_end", DEVICE_END, TRACHEOSTOMA, {"time": END}, "invasive", "header: the device end is the stop"),
+    ]
+]
+
 # GCS items are list items: AMSTEL writes the answer as a LOINC value_as_concept_id and leaves
 # value_as_number empty. The expected scores are ricu's aumc egcs/mgcs/vgcs labels and ett_gcs.
 EYE: Final = (3016335, "Actief openen van de ogen")
@@ -315,6 +361,7 @@ CASES = [
     *SOURCE_SELECTION,
     *RESPIRATORY_SUPPORT,
     *AIRWAYS,
+    *VENTILATION,
     *GCS,
     *ANTIBIOTICS,
     *WEIGHT,
@@ -393,6 +440,25 @@ NATIVE_RULES = [
         ],
         [{"code": "airway_end//tracheostomy", "time": END_TIME, "stay_id": str(VISIT_ID), "device_exposure_id": "1"}],
         id="device_source_value decides a recorded tracheostomy end",
+    ),
+    pytest.param(
+        "procedure_occurrence",
+        "PROCEDURE",
+        "ventilation_end",
+        [
+            {
+                "person_id": 1,
+                "procedure_occurrence_id": procedure_occurrence_id,
+                "visit_occurrence_id": VISIT_ID,
+                "procedure_datetime": TIME,
+                "procedure_end_datetime": end,
+                "procedure_concept_id": 4230167,
+                "procedure_source_value": "Beademen",
+            }
+            for procedure_occurrence_id, end in [(1, END_TIME), (2, None)]
+        ],
+        [{"code": "ventilation_end//invasive", "time": END_TIME, "stay_id": str(VISIT_ID), "record_id": "1"}],
+        id="procedure_end_datetime dates the end of ventilation",
     ),
     pytest.param(
         "measurement",
