@@ -455,6 +455,44 @@ first infection window.
 Pairing, window lengths and the cumulative-minimum baseline follow
 [ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-sep3.R).
 
+`kwargs.rise` sets what the rise is measured on:
+
+- `total` (default): the `sofa` total, as in ricu. A component without a score
+  in its 24-hour SOFA window counts 0 in the total, so the total also rises
+  when a component is scored for the first time, or scored again after its
+  score expired. Cardiovascular SOFA 0 at minute 5 and respiratory SOFA 2 at
+  minute 10 are a rise of 2. ricu adds the components per hour, so it counts
+  the same rise when the two scores fall in different hours.
+- `components`: the SOFA components. The mapping lists them instead of `sofa`
+  (by default every dependency but `suspected_infection` and `sofa` is a
+  component; `kwargs.terms` names them instead). Each takes its worst score in
+  `[t - kwargs.sofa_window, t]` (default 24 hours) at the times the total is
+  evaluated. Within each infection window, a component takes its first score
+  in the window at the times before it and keeps its last score where it has
+  none in its SOFA window; a component never scored in the window counts 0.
+  The rise is measured on their sum, so only a change in a scored component
+  raises it, and an expired score cannot hide a rise in another component. A
+  component first scored late in the window at a high value raises nothing,
+  even where the measurement was ordered because the patient got worse.
+
+```yaml
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer
+concepts:
+  - suspected_infection.1.0.0
+  - sofa_respiratory.1.0.0
+  - sofa_coagulation.1.0.0
+  - sofa_liver.1.0.0
+  - sofa_cardiovascular.1.0.0
+  - sofa_cns.1.0.0
+  - sofa_renal.1.0.0
+kwargs:
+  rise: components
+```
+
+The shipped mappings use `total`. `components` departs from ricu; use one
+setting for every dataset that is compared.
+
 The MIMIC-IV antibiotic mapping extends ricu's prescription regex with
 ceftriaxone, meropenem and linezolid, which also appear in
 [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/medication/antibiotic.sql),

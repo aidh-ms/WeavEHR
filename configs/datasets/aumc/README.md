@@ -204,6 +204,13 @@ AUMCdb has many Sepsis-3 onsets at the start of the ICU stay, also in ricu: YAIB
 6th ICU hour in 19.7% of AUMCdb stays, against 11.4% in MIMIC-IV, and 72% of
 AUMCdb admissions are surgical. Prediction tasks exclude such onsets.
 
+The rise is measured on the SOFA total, as in ricu. In AUMCdb blood pressure
+arrives every minute, well before blood gases, ventilation and laboratory
+values, so the first totals of a stay often hold the cardiovascular score
+alone and the total rises as the other components arrive. `rise: components`
+measures the rise on the components instead, so a component's first score
+does not count as a rise (see the Sepsis-3 section of the user guide).
+
 ### Validation against ricu
 
 The AUMC mappings were validated against `ricu` over the first 168 hours of

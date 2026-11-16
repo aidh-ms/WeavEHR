@@ -19,6 +19,7 @@ from weavehr.steps.concept.transformer.sepsis import (
     AntibioticsWithCultureTransformer,
     SustainedAntibioticsTransformer,
 )
+from weavehr.steps.concept.transformer.sofa import SofaTransformer
 
 T0 = datetime(2024, 1, 10)
 
@@ -465,3 +466,126 @@ def test_shipped_sepsis_mappings_run_through_the_concept_pipeline(tmp_path: Path
     ]
     assert result["code"].to_list() == ["sepsis3"] * 2
     assert result.schema["numeric_value"] == pl.Float32
+
+
+# --- Rise on the SOFA components ---------------------------------------------------------------
+
+
+def scored(**components: tuple[tuple[int, float, float], ...]) -> dict[str, pl.LazyFrame]:
+    """Component score events by component name, each row (subject, hour, score)."""
+    return {name: events(*rows) for name, rows in components.items()}
+
+
+def sofa_total(components: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+    concept = ConceptConfig(name="sofa", version="1.0.0")
+    config = ComplexDatasetConceptConfig(name="sofa", version="1.0", dataset="synthetic", concept_transformer="unused")
+    return SofaTransformer(concept, config, cast(ConceptStep, None)).transform(components)
+
+
+def rises(
+    components: dict[str, pl.LazyFrame], infection: pl.LazyFrame | None = None, **kwargs: Any
+) -> dict[str, list[tuple[int, datetime, float]]]:
+    """Onsets with the rise measured on the SOFA total of ``components`` and on the components themselves."""
+    infection = infection if infection is not None else events((1, 0, 1))
+    total = make(Sepsis3Transformer).transform({"sofa": sofa_total(components), "suspected_infection": infection})
+    by_component = make(Sepsis3Transformer, rise="components", **kwargs).transform(
+        {**components, "suspected_infection": infection}
+    )
+    return {"total": onsets(total), "components": onsets(by_component)}
+
+
+def test_a_component_scored_after_the_others_raises_only_the_total() -> None:
+    """Cardiovascular SOFA 0 at minute 5 and respiratory SOFA 2 at minute 10: the total goes 0 -> 2.
+
+    On the components, respiratory SOFA takes its first score in the window at minute 5 too, so
+    nothing changes. A component first scored late at a high value raises nothing either.
+    """
+    components = scored(sofa_cardiovascular=((1, 5 / 60, 0),), sofa_respiratory=((1, 10 / 60, 2),))
+    assert rises(components) == {"total": [(1, at(10 / 60), 1.0)], "components": []}
+
+
+def test_a_component_scored_again_after_its_score_expired_raises_only_the_total() -> None:
+    """Liver SOFA 2 at -40 h drops out of its 24 h window, so the total falls to 0, and returns at +10 h."""
+    components = scored(
+        sofa_liver=((1, -40, 2), (1, 10, 2)),
+        sofa_cardiovascular=((1, -40, 0), (1, -10, 0), (1, 0, 0)),
+    )
+    assert rises(components) == {"total": [(1, at(10), 1.0)], "components": []}
+
+
+def test_a_component_score_that_expires_does_not_hide_a_rise_in_another() -> None:
+    """Liver SOFA 2 at -40 h has expired when coagulation SOFA goes 0 -> 3 at +10 h.
+
+    The total goes 2 -> 3, a rise of 1. On the components, liver SOFA keeps its last score.
+    """
+    components = scored(sofa_liver=((1, -40, 2),), sofa_coagulation=((1, -40, 0), (1, 10, 3)))
+    assert rises(components) == {"total": [], "components": [(1, at(10), 1.0)]}
+
+
+def test_a_scored_component_that_worsens_raises_both() -> None:
+    components = scored(sofa_coagulation=((1, -1, 0), (1, 5, 3)), sofa_cardiovascular=((1, -1, 0), (1, 5, 0)))
+    assert rises(components) == {"total": [(1, at(5), 1.0)], "components": [(1, at(5), 1.0)]}
+
+
+def test_component_scores_are_filled_within_their_infection_window_only() -> None:
+    """Liver SOFA 0 at -1 h belongs to the window of the infection at 0 h, not to the one at 200 h.
+
+    In the later window liver SOFA is first scored at 170 h, at 3, so it is 3 at 160 h too.
+    """
+    components = scored(
+        sofa_liver=((1, -1, 0), (1, 170, 3)),
+        sofa_cardiovascular=((1, -1, 0), (1, 160, 0), (1, 170, 0)),
+    )
+    result = rises(components, events((1, 0, 1), (1, 200, 1)))
+    assert result == {"total": [(1, at(170), 1.0)], "components": []}
+
+
+def test_component_scores_are_filled_per_subject() -> None:
+    """Subject 2's respiratory SOFA is first scored at 1 h; subject 1's score at 0 h is not its own."""
+    components = scored(sofa_respiratory=((1, 0, 0), (2, 1, 2)), sofa_cardiovascular=((2, 0, 0),))
+    result = rises(components, events((1, 0, 1), (2, 0, 1)))
+    assert result == {"total": [(2, at(1), 1.0)], "components": []}
+
+
+def test_terms_select_the_components_and_an_absent_one_counts_zero() -> None:
+    """Only respiratory SOFA rises; ``terms`` leaves it out and names liver SOFA, which has no input."""
+    components = scored(sofa_coagulation=((1, -1, 0), (1, 5, 0)), sofa_respiratory=((1, -1, 0), (1, 5, 3)))
+    inputs = {**components, "suspected_infection": events((1, 0, 1))}
+    selected = make(Sepsis3Transformer, rise="components", terms=["sofa_coagulation", "sofa_liver"])
+    assert onsets(selected.transform(inputs)) == []
+    assert onsets(make(Sepsis3Transformer, rise="components").transform(inputs)) == [(1, at(5), 1.0)]
+
+
+def test_sofa_window_sets_how_long_a_component_score_stays_the_worst() -> None:
+    """Coagulation SOFA 3 at -20 h, 0 at -5 h and 3 at +2 h: the worst within 24 h never drops."""
+    components = scored(sofa_coagulation=((1, -20, 3), (1, -5, 0), (1, 2, 3)))
+    assert rises(components)["components"] == []
+    assert rises(components, sofa_window="1h")["components"] == [(1, at(2), 1.0)]
+
+
+@pytest.mark.parametrize("missing", ["suspected_infection", "components"])
+def test_component_rise_without_its_inputs_returns_typed_empty_events(missing: str) -> None:
+    inputs: dict[str, pl.LazyFrame] = {"suspected_infection": events((1, 0, 1))}
+    if missing == "suspected_infection":
+        inputs = scored(sofa_coagulation=((1, -1, 0), (1, 5, 3)))
+    result = make(Sepsis3Transformer, rise="components").transform(inputs).collect()
+    assert result.is_empty()
+    assert result.schema == {"subject_id": pl.Int64, "time": pl.Datetime("us"), "numeric_value": pl.Float32}
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"rise": "component"}, "rise"),
+        ({"rise": None}, "rise"),
+        ({"terms": ["sofa_liver"]}, "terms"),
+        ({"sofa_window": "24h"}, "sofa_window"),
+        ({"rise": "components", "terms": "sofa_liver"}, "terms"),
+        ({"rise": "components", "terms": []}, "terms"),
+        ({"rise": "components", "sofa_window": "0h"}, "sofa_window"),
+        ({"rise": "components", "sofa_window": "24 h"}, "sofa_window"),
+    ],
+)
+def test_invalid_rise_options_fail_at_construction(kwargs: dict[str, Any], message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        make(Sepsis3Transformer, **kwargs)
