@@ -99,26 +99,28 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             else self._config.config.settings.include_event_name_in_code
         )
 
+        # Ensure output directory exists
+        assert self._workspace_dir is not None
+        output_data_path = Path(self._workspace_dir.path, *table.identifier_tuple[1:])
+        output_data_path.mkdir(parents=True, exist_ok=True)
+
+        # Events with the same name (e.g. one source column split by unit) share one output file
+        event_frames: dict[str, list[LazyFrame]] = {}
         for event in table.events:
             logger.debug(
                 "Processing event %s for table %s",
                 event.name,
                 table.name,
             )
+            event_frames.setdefault(event.name, []).append(self.build_event_frame(lf, event, include_event_name))
 
-            event_identifier: tuple[str, ...] = table.identifier_tuple[1:] + (event.name,)
-            event_lf = self.build_event_frame(lf, event, include_event_name)
-
-            # Ensure output directory exists
-            assert self._workspace_dir is not None
-            output_data_path = Path(self._workspace_dir.path, *event_identifier[:-1])
-            output_data_path.mkdir(parents=True, exist_ok=True)
-
-            # Write to parquet with streaming
-            output_file = output_data_path / f"{event.name}.parquet"
+        sinks = []
+        replacements = []
+        for event_name, frames in event_frames.items():
+            output_file = output_data_path / f"{event_name}.parquet"
             logger.info(
                 "Writing event %s for table %s to %s",
-                event.name,
+                event_name,
                 table.name,
                 output_file,
             )
@@ -126,25 +128,32 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             if output_file.exists():
                 logger.info(
                     "Existing output found for event %s, appending to it",
-                    event.name,
+                    event_name,
                 )
 
-                existing_lf = pl.scan_parquet(output_file)
-
-                event_lf = pl.concat(
-                    [existing_lf, event_lf],
-                    how="vertical",
-                )
-                tmp_output_file = output_data_path / f"{event.name}.tmp.parquet"
-
-                event_lf.sink_parquet(tmp_output_file)
-                tmp_output_file.replace(output_file)
+                frames = [pl.scan_parquet(output_file), *frames]
+                sink_file = output_data_path / f"{event_name}.tmp.parquet"
+                replacements.append((sink_file, output_file))
             else:
-                event_lf.sink_parquet(output_file)
+                sink_file = output_file
 
-            del event_lf
+            sinks.append(pl.concat(frames, how="vertical").sink_parquet(sink_file, lazy=True))
 
-        del lf
+        if table.type == TableType.PARQUET:
+            # Parquet sources are cheap to re-read for each event (only the needed columns
+            # and row groups). Writing all events at once would run their scans side by side,
+            # which costs memory without being faster.
+            for sink in sinks:
+                sink.collect()
+        else:
+            # Writing all events in one query lets Polars parse and join the CSV once and
+            # share it between the events, instead of repeating that work for every event.
+            pl.collect_all(sinks)
+
+        for sink_file, output_file in replacements:
+            sink_file.replace(output_file)
+
+        del lf, sinks
         gc.collect()
 
     @classmethod

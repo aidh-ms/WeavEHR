@@ -15,9 +15,9 @@ of a reference version:
 - Files that exist only in the base are inherited unchanged.
 - Files that exist in both are deep-merged: mappings are merged recursively
   with the extending file taking precedence, while lists and scalar values
-  are replaced wholesale. A file whose top level is a list (e.g. a concept
-  mapping file holding several mappings) likewise replaces the inherited
-  file wholesale, as does a mapping file overriding an inherited list.
+  are replaced wholesale. A file containing several YAML documents (e.g.
+  a concept mapping file) likewise replaces the inherited file wholesale,
+  as does a single document overriding an inherited document stream.
 - A file in the extending version containing ``deleted: true`` removes the
   inherited configuration entirely (e.g. for tables excluded from a demo
   dataset).
@@ -43,7 +43,24 @@ EXTENDS_FILE = "extends.yml"
 CONFIG_SUFFIXES = {".yml", ".yaml"}
 
 ConfigData = dict[str, Any] | list[Any]
-"""The data of one configuration file: a mapping, or a list (e.g. several concept mappings)."""
+"""The data of one configuration file: a mapping, or a list of YAML documents."""
+
+
+def load_config_file(file_path: Path) -> ConfigData:
+    """Read a mapping or a stream of mappings separated by YAML ``---`` markers.
+
+    A single mapping stays a dict so existing recursive inheritance still works.
+    Multiple documents remain a list, including empty or invalid documents, so
+    concept validation can reject the entire stream rather than lose mappings.
+    Empty files retain the existing empty-mapping inheritance behaviour. A YAML
+    sequence is a document itself, not a substitute for a stream of mappings.
+    """
+    documents = list(yaml.safe_load_all(file_path.read_text()))
+    if not documents or documents == [None]:
+        return {}
+    if len(documents) == 1 and isinstance(documents[0], dict):
+        return documents[0]
+    return documents
 
 
 def has_extends(subdir: Path) -> bool:
@@ -176,10 +193,7 @@ def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, ConfigData]:
                 continue
 
             name = file_path.relative_to(directory).with_suffix("").as_posix()
-            data = yaml.safe_load(file_path.read_text())
-            # An empty file is an empty mapping; an empty list (`[]`) stays a list and replaces what it overrides.
-            if data is None:
-                data = {}
+            data = load_config_file(file_path)
 
             if isinstance(data, dict) and data.get("deleted") is True:
                 logger.debug("Config %s deleted by %s", name, file_path)
@@ -187,7 +201,7 @@ def _overlay_version_chain(subdir: Path, pattern: str) -> dict[str, ConfigData]:
                 continue
 
             inherited = effective.get(name)
-            # A list on either side is replaced wholesale, like a list inside a mapping.
+            # A document stream on either side is replaced wholesale.
             if isinstance(inherited, dict) and isinstance(data, dict):
                 logger.debug("Merging %s onto inherited config %s", file_path, name)
                 data = deep_merge(inherited, data)

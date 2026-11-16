@@ -5,7 +5,7 @@ The extraction step turns raw source tables into MEDS event streams. It is drive
 1. a **step config** that selects which table configs to load and where the raw data lives, and
 2. one **table config** per source table that describes columns, joins, and the events to emit.
 
-WeavEHR ships table configs for MIMIC-IV 3.1, eICU-CRD 2.0, and NWICU 0.1.0 under `configs/datasets/<dataset>/<version>/tables/`. This page explains how they work, so you can adapt them or add your own datasets.
+WeavEHR ships table configs for MIMIC-IV 3.1, MIMIC-IV-ED 2.2, eICU-CRD 2.0, and NWICU 0.1.0 under `configs/datasets/<dataset>/<version>/tables/`. This page explains how they work, so you can adapt them or add your own datasets.
 
 ## Step configuration
 
@@ -121,6 +121,8 @@ Processing order:
 2. *After each join:* the join's `post_join_callbacks` → `post_join_filters`
 3. *After all joins:* the table's `post_join_callbacks` → `post_join_filters` → `transformations`
 4. *Per event:* `pre_callbacks` → column mapping and code construction → `callbacks` → `filters` → `transformations` → cast to MEDS schema → `output_filters`
+
+All events of a table are written in one Polars query, so Polars can usually run steps 1–3 once and share the result between the events, rather than parsing and joining the source again for every event. Whether a read is shared is up to Polars' query optimiser. Events that filter a source column by value range, like eICU's two `CENTRAL_VENOUS_PRESSURE` events, can end up reading the source on their own.
 
 A practical example from eICU, where timestamps are stored as minute offsets from ICU admission and have to be reconstructed:
 

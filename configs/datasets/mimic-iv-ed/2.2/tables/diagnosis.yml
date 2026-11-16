@@ -1,0 +1,63 @@
+# Billed diagnoses of an ED stay (up to 9 per stay). The table carries its own
+# icd_title, so no ICD dictionary is joined. It has no time column: diagnoses are
+# determined after the patient left the ED (MIMIC-IV-ED documentation, diagnosis).
+path: ed/diagnosis.csv.gz
+
+columns:
+  # subject_id and extensions
+  - name: subject_id
+    type: int64
+  - name: stay_id
+    type: int64
+  # db fields - times
+  # db fields - values
+  # seq_num is a pseudo-priority (1 is usually the primary diagnosis).
+  - name: seq_num
+    type: int64
+  # string: ICD codes are alphanumeric and ICD-9 codes may have leading zeros.
+  - name: icd_code
+    type: string
+  - name: icd_version
+    type: int64
+  - name: icd_title
+    type: string
+
+join:
+  # The diagnoses of a stay are dated at the stay's ED departure (outtime): the
+  # documentation states that diagnoses are determined after the patient left the ED,
+  # so they are not known at arrival. Joined on stay_id from the ED release's own
+  # edstays, never from MIMIC-IV.
+  - name: edstays
+    path: ed/edstays.csv.gz
+    columns:
+      # subject_id and extensions
+      - name: stay_id
+        type: int64
+      # db fields - times
+      - name: outtime
+        type: datetime
+        params:
+          format: "%Y-%m-%d %H:%M:%S"
+    both_on:
+      - stay_id
+
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    stay_id: col(stay_id)
+
+events:
+  # Same code layout as mimic-iv diagnoses_icd: ICD//<version>//<code>//<title>.
+  - name: DIAGNOSIS
+    columns:
+      # time and available_time are the joined edstays.outtime (see the join above), as
+      # mimic-iv diagnoses_icd uses the admission's dischtime.
+      time: col(outtime)
+      code:
+        - const(ICD)
+        - col(icd_version)
+        - col(icd_code)
+        - col(icd_title)
+      extension:
+        available_time: col(outtime)
+        seq_num: col(seq_num)

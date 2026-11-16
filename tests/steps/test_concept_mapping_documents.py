@@ -1,4 +1,4 @@
-"""Concepts whose dataset mapping file lists several mappings, whose outputs are combined."""
+"""Concepts whose dataset mapping file holds several YAML documents, whose outputs are combined."""
 
 import logging
 from datetime import datetime
@@ -36,24 +36,26 @@ def output(project: WeavEHRProject, name: str) -> pl.DataFrame:
 def simple(code: str) -> str:
     """A simple mapping of the fixture's vitals chart events matching ``code``."""
     return f"""\
-- type: simple
-  mappings:
-    - pattern: {{table: vitals, event: CHART, code: "{code}"}}
-      columns:
-        numeric_value: col(numeric_value)
-        text_value: col(text_value)
+---
+type: simple
+mappings:
+  - pattern: {{table: vitals, event: CHART, code: "{code}"}}
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
 """
 
 
 def derived(source: str, numeric_value: str = "col(numeric_value)") -> str:
     """A derived mapping of one table, given as ``concept: ...`` or ``pattern: ...``."""
     return f"""\
-- type: derived
-  table:
-    {source}
-    columns: [subject_id, time, numeric_value]
-  event:
-    numeric_value: {numeric_value}
+---
+type: derived
+table:
+  {source}
+  columns: [subject_id, time, numeric_value]
+event:
+  numeric_value: {numeric_value}
 """
 
 
@@ -65,10 +67,11 @@ class DoubledWeight(BaseConceptTransformer):
 
 
 COMPLEX = """\
-- type: complex
-  concept_transformer: tests.steps.test_concept_mapping_lists.DoubledWeight
-  events:
-    weight: {table: measurements, event: WEIGHT, code: kg}
+---
+type: complex
+concept_transformer: tests.steps.test_concept_mapping_documents.DoubledWeight
+events:
+  weight: {table: measurements, event: WEIGHT, code: kg}
 """
 
 
@@ -93,7 +96,7 @@ def test_simple_and_derived_mappings_are_combined(
     assert not [path for path in (tmp_path / "project").rglob("*") if path.suffix in {".parts", ".tmp"}]
 
 
-def test_listed_mappings_wait_for_their_dependencies_and_feed_dependents(
+def test_document_mappings_wait_for_their_dependencies_and_feed_dependents(
     tmp_path: Path, extraction_config: Path, concept_config: Path
 ) -> None:
     """Several derived mappings, a combination simple mappings could not express before."""
@@ -135,7 +138,7 @@ def test_mapping_without_output_contributes_no_rows(
     assert "skipping derived concept weavehr.config.concept.vital.1.0.0" in caplog.text
 
 
-def test_listed_simple_mappings_share_routed_sources(
+def test_document_simple_mappings_share_routed_sources(
     tmp_path: Path, extraction_config: Path, concept_config: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """With the fixture's heart_rate reading the same events, they are routed once to both concepts."""

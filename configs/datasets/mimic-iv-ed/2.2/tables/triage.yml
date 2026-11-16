@@ -1,0 +1,131 @@
+# Information collected at triage, one row per ED stay, one column per measurement.
+# Each non-null measurement becomes one event; the code prefix TRIAGE keeps triage
+# measurements apart from the routine ones in vitalsign, as eicu-crd prefixes its
+# periodic and aperiodic vitals.
+path: ed/triage.csv.gz
+
+columns:
+  # subject_id and extensions
+  - name: subject_id
+    type: int64
+  - name: stay_id
+    type: int64
+  # db fields - times
+  # db fields - values
+  # Units are those of the documentation. temperature is in °F, though the
+  # documentation warns that some temperatures were charted in Celsius; values are kept
+  # as charted.
+  - name: temperature
+    type: float32
+  - name: heartrate
+    type: float32
+  - name: resprate
+    type: float32
+  - name: o2sat
+    type: float32
+  - name: sbp
+    type: float32
+  - name: dbp
+    type: float32
+  # pain is free text (a 0-10 score, but also entries like "unable"), so it is read as
+  # a string: a float column would fail on those entries.
+  - name: pain
+    type: string
+  # Emergency Severity Index, 1 (highest priority) to 5.
+  - name: acuity
+    type: float32
+  - name: chiefcomplaint
+    type: string
+
+join:
+  # Triage has no time of its own. The documentation names the stay's intime as the
+  # closest approximation, so it is joined from the ED release's edstays on stay_id.
+  - name: edstays
+    path: ed/edstays.csv.gz
+    columns:
+      # subject_id and extensions
+      - name: stay_id
+        type: int64
+      # db fields - times
+      - name: intime
+        type: datetime
+        params:
+          format: "%Y-%m-%d %H:%M:%S"
+    both_on:
+      - stay_id
+
+event_defaults:
+  subject_id: col(subject_id)
+  time: col(intime)
+  code_prefix:
+    - const(TRIAGE)
+  extension:
+    available_time: col(intime)
+    stay_id: col(stay_id)
+
+# A null measurement in this wide table means it was not taken at that time, so it is not
+# an event: every event drops the rows where its own value is null.
+events:
+  - name: TEMPERATURE
+    columns:
+      code:
+        - const("°F")
+      numeric_value: col(temperature)
+    filters:
+      - drop_na(temperature)
+  - name: HEART_RATE
+    columns:
+      code:
+        - const(bpm)
+      numeric_value: col(heartrate)
+    filters:
+      - drop_na(heartrate)
+  # insp/min: the unit MIMIC-IV charts and the respiratory_rate concept uses.
+  - name: RESPIRATORY_RATE
+    columns:
+      code:
+        - const("insp/min")
+      numeric_value: col(resprate)
+    filters:
+      - drop_na(resprate)
+  # Peripheral oxygen saturation, i.e. pulse oximetry.
+  - name: O2_SATURATION_PULSE_OXIMETRY
+    columns:
+      code:
+        - const("%")
+      numeric_value: col(o2sat)
+    filters:
+      - drop_na(o2sat)
+  - name: SYSTOLIC_BLOOD_PRESSURE
+    columns:
+      code:
+        - const(mmHg)
+      numeric_value: col(sbp)
+    filters:
+      - drop_na(sbp)
+  - name: DIASTOLIC_BLOOD_PRESSURE
+    columns:
+      code:
+        - const(mmHg)
+      numeric_value: col(dbp)
+    filters:
+      - drop_na(dbp)
+  # The raw text is kept in text_value; numeric_value holds the number when the text is
+  # one and is null otherwise (as eicu-crd infusiondrug casts its text drugrate).
+  - name: PAIN
+    columns:
+      numeric_value: cast(col(pain), "float32")
+      text_value: col(pain)
+    filters:
+      - drop_na(pain)
+  - name: ACUITY
+    columns:
+      numeric_value: col(acuity)
+    filters:
+      - drop_na(acuity)
+  # Free text with many distinct values, so it is a text value, not a code part.
+  - name: CHIEF_COMPLAINT
+    columns:
+      text_value: col(chiefcomplaint)
+    filters:
+      - drop_na(chiefcomplaint)

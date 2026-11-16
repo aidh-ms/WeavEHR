@@ -23,7 +23,14 @@ self-documenting and harmonisation can key on the leading numeric id.
 | --------------- | ------------------------------- | ----------------------------------------------- |
 | `observations`  | `observation_tables/` (`variableid`) | `OBSERVATION`                              |
 | `pharma`        | `pharma_records/` (`pharmaid`)  | `PHARMA`                                         |
-| `general`       | `general_table.csv`             | `SEX`, `AGE`, `MORTALITY`, `ICU_ADMISSION`, `MEDS_BIRTH` |
+| `general`       | `general_table.csv`             | `SEX`, `AGE`, `ICU_ADMISSION`, `MEDS_BIRTH`, `MEDS_DEATH` |
+
+HiRID records whether a patient died (`general_table.discharge_status`) but not
+when. For patients whose status is `dead`, `general` places `MEDS_DEATH` at the
+end of monitoring: the patient's last heart rate (`variableid` 200) or invasive
+mean arterial pressure (110) observation, joined in from the observation tables.
+This follows ricu's `hirid_death`. Patients without either observation get no
+`MEDS_DEATH`.
 
 ## Concept mappings
 

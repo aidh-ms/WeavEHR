@@ -19,9 +19,10 @@ The language is a restricted subset of Python expression syntax:
 - **Literals**: numbers, quoted strings, booleans, `None`, lists, and tuples.
 - **Operators**: arithmetic (`+`, `-`, `*`, `/`), comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), and boolean logic (`&`/`and`, `|`/`or`, `~`/`not`). Example: `col(weight) / (col(height) * col(height))`.
 - **Callback calls**: `name(arg, ..., key=value)` invokes a registered callback. Calls nest arbitrarily: `replace(col(temp_unit) == "F", (col(temp) - 32) / 1.8, col(temp), output=temp_c)`.
+- **Polars string and datetime methods**: `value.str.method(...)` and `value.dt.method(...)` call the Polars expression method of that name, e.g. `text_value.str.to_lowercase()` or `admittime.dt.year()`; see [Polars string and datetime methods](#polars-string-and-datetime-methods).
 - Most callbacks accept an `output=<column>` keyword that names the resulting column; without it, the expression result replaces/feeds whatever context it is used in.
 
-Arbitrary Python (attribute access, imports, comprehensions, chained comparisons) is intentionally **not** supported — configurations stay declarative and auditable.
+Arbitrary Python (other attribute access, imports, comprehensions, chained comparisons) is intentionally **not** supported — configurations stay declarative and auditable.
 
 ## Column references and literals
 
@@ -51,6 +52,26 @@ Configs use expressions in three contexts with different expectations:
 | `callbacks` (and `pre_`/`post_join_` variants), column mappings | `with_columns` | a column expression |
 | `filters` (and variants) | `filter` | a boolean expression |
 | `transformations` | replaces the frame | a new frame (e.g. `split_explode`) |
+
+## Polars string and datetime methods
+
+Every method of Polars' [`str`](https://docs.pola.rs/api/python/stable/reference/expressions/string.html) and [`dt`](https://docs.pola.rs/api/python/stable/reference/expressions/temporal.html) expression namespaces is available as `<value>.str.<method>(...)` or `<value>.dt.<method>(...)`, so a string or datetime operation needs no callback of its own:
+
+```yaml
+callbacks:
+  - admittime.dt.year(output=admit_year)
+  - cast(sig.str.extract("@ ([0-9.]+) ", 1), "float64", output=dose)
+filters:
+  - text_value.str.strip_chars().str.contains("^(Tracheostomy tube|Trach mask)$")
+```
+
+- The value before `.str`/`.dt` follows the usual rules: a bare name is a column, a quoted string a literal, and it can be a nested call. Methods chain from left to right, as in the filter above.
+- In the arguments, bare names and nested calls become column expressions (`sig.str.starts_with(prefix)` compares with the column `prefix`), while quoted strings, numbers, booleans, `None` and lists of them reach Polars unchanged. Polars treats a quoted pattern, prefix or format as text, even if a column has that name.
+- `output=` names the result as for every callback; it is not passed to Polars. Without it, Polars names the result after the column it starts from, so in a `callbacks` list `sig.str.strip_chars()` replaces `sig`.
+- Method calls nest in callbacks and operators, e.g. `cast(...)`, `replace(...)` or `== "x"`.
+- Only the `str` and `dt` namespaces are available; other methods (e.g. `col(a).alias("b")`) are rejected. A misspelled method or an argument the method does not take fails when the expression is parsed, so the shipped-config tests catch it.
+
+The methods are those of the installed Polars version, so their names and behaviour follow its API reference. The built-in string callbacks below (`str_contains`, `strip_str`, `slice_str`, …) remain available; new configurations can use either form.
 
 ## Built-in callbacks
 

@@ -5,7 +5,7 @@ import yaml
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, field_validator, model_validator
 
 from weavehr.config.base import BaseConfig
-from weavehr.config.inheritance import has_extends, resolve_effective_config
+from weavehr.config.inheritance import has_extends, load_config_file, resolve_effective_config
 from weavehr.logging import logger
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
@@ -33,7 +33,7 @@ def _validate_dataset_concepts(
     """Validate the contents of a dataset's mapping file for one concept.
 
     Args:
-        data: The file's data: one mapping, or a list of mappings that each follow the same syntax
+        data: One mapping, or a list of YAML documents that each hold a mapping
         identity: ``dataset``, ``version`` and ``name``, set on every mapping
         levels: The concept's declared levels
 
@@ -41,8 +41,8 @@ def _validate_dataset_concepts(
         The dataset concepts, in file order
 
     Raises:
-        ValueError: The data is neither a mapping nor a non-empty list of mappings, or a mapping is
-            invalid or uses an undeclared level (the message names the mapping's position in a list)
+        ValueError: A document is not a mapping, is invalid or uses an undeclared level
+            (the message names its position in the document stream)
     """
     entries = data if isinstance(data, list) else [data]
     if not entries:
@@ -51,7 +51,7 @@ def _validate_dataset_concepts(
     adapter = TypeAdapter(DatasetConceptConfigUnion)
     dataset_concepts = []
     for index, entry in enumerate(entries, start=1):
-        where = f"mapping {index}: " if isinstance(data, list) else ""
+        where = f"document {index}: " if isinstance(data, list) else ""
         if not isinstance(entry, dict):
             raise ValueError(f"{where}expected a mapping, got {type(entry).__name__}")
         try:
@@ -164,8 +164,7 @@ class ConceptConfig(BaseConfig):
                 sub_file_path = path / f"{name}.yml"
                 if not sub_file_path.exists():
                     continue
-                with open(sub_file_path, "r") as f:
-                    sub_data = yaml.safe_load(f)
+                sub_data = load_config_file(sub_file_path)
 
             # Identity always comes from the dataset directory itself,
             # never from where an inherited file physically lives.

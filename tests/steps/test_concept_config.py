@@ -282,36 +282,46 @@ mappings:
     columns: {numeric_value: col(numeric_value)}
 """
 SIMPLE_MAPPING = """\
-- type: simple
-  mappings:
-    - pattern: {table: chartevents, code: "220045"}
-      columns: {numeric_value: col(numeric_value)}
+---
+type: simple
+mappings:
+  - pattern: {table: chartevents, code: "220045"}
+    columns: {numeric_value: col(numeric_value)}
 """
 DERIVED_MAPPING = """\
-- type: derived
-  table: {concept: other.1.0.0}
-  event: {numeric_value: numeric_value}
+---
+type: derived
+table: {concept: other.1.0.0}
+event: {numeric_value: numeric_value}
 """
 
 
-class TestMappingLists:
-    """A dataset's mapping file may hold a list of mappings, each in the usual syntax."""
+class TestMappingDocuments:
+    """A dataset's mapping file may hold several YAML documents, each in the usual syntax."""
 
     @staticmethod
-    def load(tmp_path: Path, mapping: str, concept: str = "") -> ConceptConfig:
+    def load(tmp_path: Path, mapping: str, concept: str = "", *, inherited: bool = False) -> ConceptConfig:
         mapping_dir = tmp_path / "mimic-iv" / "3.1" / "mappings"
         mapping_dir.mkdir(parents=True)
         (mapping_dir / "heart_rate.yml").write_text(mapping)
         concept_file = tmp_path / "concept.yml"
         concept_file.write_text(f"name: heart_rate\nversion: 1.0.0\n{concept}")
+        if inherited:
+            mapping_dir = tmp_path / "mimic-iv-demo" / "3.1" / "mappings"
+            mapping_dir.parent.mkdir(parents=True)
+            (mapping_dir.parent / "extends.yml").write_text("dataset: mimic-iv\nversion: '3.1'\n")
         return ConceptConfig.load(concept_file, dataset_paths=[mapping_dir])
 
     @pytest.mark.parametrize(
         ("mapping", "types"),
         [
             pytest.param(SINGLE_MAPPING, ["simple"], id="mapping"),
-            pytest.param(SIMPLE_MAPPING, ["simple"], id="one-entry-list"),
-            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, ["simple", "derived"], id="list"),
+            pytest.param(SIMPLE_MAPPING, ["simple"], id="explicit-document"),
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, ["simple", "derived"], id="multiple-documents"),
+            pytest.param(SINGLE_MAPPING + DERIVED_MAPPING, ["simple", "derived"], id="implicit-first-document"),
+            pytest.param(
+                SIMPLE_MAPPING + "...\n" + DERIVED_MAPPING + "...\n", ["simple", "derived"], id="document-ends"
+            ),
         ],
     )
     def test_mappings_load_in_order(self, tmp_path: Path, mapping: str, types: list[str]) -> None:
@@ -319,31 +329,42 @@ class TestMappingLists:
         dataset_concepts = self.load(tmp_path / "loaded", mapping).get_dataset_concepts("mimic-iv", "3.1")
 
         assert [dc.type for dc in dataset_concepts] == types
-        # A list entry loads exactly like the same mapping on its own.
+        # A document loads exactly like the same mapping on its own.
         assert dataset_concepts[0] == reference
-        # Identity comes from the dataset directory for every mapping of the list.
+        # Identity comes from the dataset directory for every document.
         assert {(dc.name, dc.dataset, dc.version) for dc in dataset_concepts} == {("heart_rate", "mimic-iv", "3.1")}
 
     @pytest.mark.parametrize(
         ("mapping", "concept", "error"),
         [
-            pytest.param(SIMPLE_MAPPING + "- type: nonsense\n", "", "mapping 2: ", id="invalid"),
-            pytest.param(SIMPLE_MAPPING + "- just a string\n", "", "mapping 2: expected a mapping, got str", id="str"),
+            pytest.param(SIMPLE_MAPPING + "---\ntype: nonsense\n", "", "document 2: ", id="invalid"),
             pytest.param(
-                SIMPLE_MAPPING + DERIVED_MAPPING + "  level: invasiv\n",
+                SIMPLE_MAPPING + "---\njust a string\n", "", "document 2: expected a mapping, got str", id="str"
+            ),
+            pytest.param(
+                SIMPLE_MAPPING + DERIVED_MAPPING + "level: invasiv\n",
                 "levels: [invasive]\n",
-                "mapping 2: undeclared levels ['invasiv']",
+                "document 2: undeclared levels ['invasiv']",
                 id="undeclared-level",
             ),
-            pytest.param("[]\n", "", "the list of mappings is empty", id="empty"),
+            pytest.param("[]\n", "", "document 1: expected a mapping, got list", id="sequence-document"),
+            pytest.param("", "", "Unable to extract tag", id="empty-file"),
+            pytest.param("---\n", "", "Unable to extract tag", id="empty-document"),
+            pytest.param(SIMPLE_MAPPING + "---\n", "", "document 2: expected a mapping, got NoneType", id="empty-last"),
+            pytest.param(
+                "---\n" + SIMPLE_MAPPING, "", "document 1: expected a mapping, got NoneType", id="empty-first"
+            ),
+            pytest.param(SIMPLE_MAPPING + "---\n[]\n", "", "document 2: expected a mapping, got list", id="list-last"),
+            pytest.param(SIMPLE_MAPPING + "---\ndeleted: true\n", "", "document 2:", id="embedded-tombstone"),
         ],
     )
+    @pytest.mark.parametrize("inherited", [False, True])
     def test_one_bad_mapping_skips_the_whole_dataset(
-        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, mapping: str, concept: str, error: str
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture, mapping: str, concept: str, error: str, inherited: bool
     ) -> None:
-        """Keeping the valid mappings of a list would silently drop the rows of the invalid one."""
+        """Keeping the valid documents of a stream would silently drop the rows of the invalid one."""
         with caplog.at_level(logging.WARNING, logger="weavehr"):
-            loaded = self.load(tmp_path, mapping, concept)
+            loaded = self.load(tmp_path, mapping, concept, inherited=inherited)
 
         assert loaded.dataset_concepts == []
         assert error in caplog.text
@@ -351,12 +372,17 @@ class TestMappingLists:
     @pytest.mark.parametrize(
         ("base", "override", "types"),
         [
-            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, None, ["simple", "derived"], id="list-inherited"),
-            pytest.param(SINGLE_MAPPING, "[]\n", [], id="empty-list-replaces-mapping"),
-            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, "[]\n", [], id="empty-list-replaces-list"),
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, None, ["simple", "derived"], id="stream-inherited"),
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, SIMPLE_MAPPING, ["simple"], id="single-replaces-stream"),
+            pytest.param(
+                SINGLE_MAPPING, SIMPLE_MAPPING + DERIVED_MAPPING, ["simple", "derived"], id="stream-replaces-single"
+            ),
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, "deleted: true\n", [], id="delete-stream"),
+            pytest.param(SINGLE_MAPPING, "---\nmappings: []\n", ["simple"], id="single-deep-merges"),
+            pytest.param(SIMPLE_MAPPING + DERIVED_MAPPING, SIMPLE_MAPPING + "---\n", [], id="invalid-override"),
         ],
     )
-    def test_lists_through_extends(
+    def test_documents_through_extends(
         self,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -375,5 +401,8 @@ class TestMappingLists:
             concept = ConceptConfig.load(tmp_path / "concept.yml", dataset_paths=[demo_mappings])
 
         assert [dc.type for dc in concept.get_dataset_concepts("mimic-iv-demo", "3.1")] == types
-        # An emptied mapping is rejected like any empty list, not merged into the inherited one.
-        assert ("the list of mappings is empty" in caplog.text) == (override is not None)
+        if override == "---\nmappings: []\n":
+            [mapping] = concept.get_dataset_concepts("mimic-iv-demo", "3.1")
+            assert isinstance(mapping, SimpleDatasetConceptConfig)
+            assert mapping.mappings == []
+        assert ("document 2: expected a mapping, got NoneType" in caplog.text) == (override == SIMPLE_MAPPING + "---\n")

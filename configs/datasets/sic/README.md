@@ -24,7 +24,7 @@ leading numeric id.
 | --------------- | -------------------------------- | ---------------------------------------------------- |
 | `laboratory`    | `laboratory.csv` (`LaboratoryID`)| `LAB`                                                |
 | `data_float_h`  | `data_float_h.csv` (`DataID`)    | `OBSERVATION`                                        |
-| `cases`         | `cases.csv`                      | `SEX`, `AGE`, `HEIGHT`, `WEIGHT`, `ICU_ADMISSION`, `MEDS_BIRTH` |
+| `cases`         | `cases.csv`                      | `SEX`, `AGE`, `HEIGHT`, `WEIGHT`, `ICU_ADMISSION`, `MEDS_BIRTH`, `MEDS_DEATH` |
 | `medication`    | `medication.csv` (`DrugID`)      | `MEDICATION`                                         |
 
 ## Concept mappings

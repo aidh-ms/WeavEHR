@@ -359,6 +359,26 @@ def test_mimic_versions_inherit_reference_configs() -> None:
     assert demo_labevents.version == "2.2"
 
 
+def test_mimic_ed_demo_inherits_reference_configs() -> None:
+    """The MIMIC-IV-ED demo must inherit the mimic-iv-ed 2.2 reference configs unchanged.
+
+    The demo ships all six ED tables with the same schema and the same ``ed/`` file
+    names as the full v2.2 release, so it has no table overrides: any override would
+    make demo and full-release extraction differ. Identity still comes from the demo's
+    own version dir.
+    """
+    reference = resolve_effective_configs(CONFIG_ROOT / "datasets" / "mimic-iv-ed" / "2.2" / "tables")
+    demo = resolve_effective_configs(CONFIG_ROOT / "datasets" / "mimic-iv-ed-demo" / "2.2" / "tables")
+    assert set(reference) == {"edstays", "diagnosis", "medrecon", "pyxis", "triage", "vitalsign"}
+
+    assert demo == reference
+
+    triage = load_effective_table(CONFIG_ROOT / "datasets" / "mimic-iv-ed-demo" / "2.2" / "tables", "triage")
+    assert triage.dataset == "mimic-iv-ed-demo"
+    assert triage.version == "2.2"
+    assert triage.identifier == "weavehr.config.table.mimic-iv-ed-demo.2.2.triage"
+
+
 def test_mimic_demo_inherits_concept_mappings() -> None:
     """Concept mappings must resolve for the demo through the marker-only mappings dir."""
     concept = ConceptConfig.load(
@@ -636,7 +656,7 @@ def invariant_cases(invariant: Invariant) -> list[Any]:
 def simple_dataset_concepts(mapping_dir: Path) -> list[SimpleDatasetConceptConfig]:
     """The effective simple dataset concepts of a dataset version, validated as `ConceptConfig.load` does.
 
-    A concept whose mapping file lists several simple mappings is returned as one, holding all
+    A concept whose mapping file contains several simple mapping documents is returned as one, holding all
     their mappings, so the invariants hold across them.
     """
     adapter = TypeAdapter(DatasetConceptConfigUnion)
