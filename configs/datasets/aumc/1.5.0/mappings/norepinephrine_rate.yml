@@ -4,11 +4,11 @@
 # Each drugitems row is one rate segment, which AMSTEL writes to drug_exposure with
 # its start and stop. OMOP has no rate field, so AMSTEL writes the rate into sig:
 #   <amount> <unit> @ <dose> <doseunit>[/kg]/<min|uur> [= <pump rate> <unit>]
-# e.g. "4 mg @ 0.1 µg/kg/min = 3 ml/uur". As in ricu (aumc_rate_kg) and
-# AmsterdamUMCdb's SOFA code, the dose rate becomes mcg/kg/min: mg x 1000, per
-# hour (uur) / 60, and a rate not per kg is divided by the admission weight
-# (patient_weight). A segment without a dose rate, with another unit or, if not
-# per kg, without a weight is dropped, its end included.
+# on AUMCdb 1.5.0 always a dose in mg per hour, e.g. "4 mg @ 0.5 mg/uur = 6 ml/uur".
+# As in ricu (aumc_rate_kg) and AmsterdamUMCdb's SOFA code, the dose rate becomes
+# mcg/kg/min: mg x 1000, per hour (uur) / 60, and a rate not per kg is divided by the
+# admission weight (patient_weight). A segment without a dose rate, with another unit
+# or, if not per kg, without a weight is dropped, its end included.
 #
 # A segment's start carries its rate and its end a rate of 0, linked by
 # drug_exposure_id (AMSTEL drops the source orderid). A rate change ends one

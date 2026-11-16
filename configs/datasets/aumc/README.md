@@ -148,8 +148,10 @@ not read. OMOP has no rate field, so AMSTEL writes the dose rate into
 
 ```text
 <amount> <unit> @ <dose> <doseunit>[/kg]/<min|uur> [= <pump rate> <unit>]
-e.g. 4 mg @ 0.1 µg/kg/min = 3 ml/uur
 ```
+
+On AUMCdb 1.5.0 every syringe-pump segment of these four drugs gives a dose in
+mg per hour, not per kg, e.g. `4 mg @ 0.5 mg/uur = 6 ml/uur`.
 
 The OMOP `drug_exposure` table config therefore keeps `sig` as an extension,
 and the rate mappings are `derived`: they read the dose with `sig.str.extract(...)`,
@@ -158,7 +160,8 @@ kg by the admission weight, as ricu (`aumc_rate_kg`) and AmsterdamUMCdb's own
 SOFA code do. `patient_weight` is that admission weight: AMSTEL's midpoint of
 the weight group (55 to 115 kg; ricu uses 50 and 120 kg for the open-ended
 groups), joined on the admission (`stay_id`). A segment without a dose rate,
-with another unit or, if not per kg, without a weight is dropped.
+with another unit or, if not per kg, without a weight is dropped. On AUMCdb
+1.5.0 the admission weight is missing for 3 to 7% of the segments of each drug.
 
 Each drugitems row is one rate segment with its own start and stop. AMSTEL
 drops the source `orderid`, so `drug_exposure_id` identifies the segment: its
