@@ -179,11 +179,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             )
             join_lf = cls._prepare_table(scan(join_table), join_table)
 
-            lf = lf.join(
-                join_lf,
-                coalesce=True,  # Reduces memory by coalescing join keys
-                **join_table.join_params,
-            )
+            lf = join_table.apply(lf, join_lf)
 
             lf = cls._apply_callbacks(
                 lf,

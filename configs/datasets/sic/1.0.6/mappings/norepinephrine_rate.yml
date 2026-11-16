@@ -1,0 +1,23 @@
+# Draft: explicit segment-average rate, timestamped at the segment end.
+# No persistent infusion identifier or documentation timestamp is supplied by this table.
+type: simple
+mappings:
+- pattern:
+    table: medication
+    event: MEDICATION_RATE
+    code: ^(?:1562)(?:$|//)
+  columns:
+    numeric_value: normalize_rate(numeric_value, concat_str(doseunit, "/min"), weight_kg=patientweight)
+    extension:
+      stay_id: col(stay_id)
+      source_row_id: col(source_row_id)
+      segment_id: col(segment_id)
+      event_kind: const("RATE_OBSERVATION")
+      rate_basis: const("interval_average")
+      interval_start: col(interval_start)
+      interval_end: col(interval_end)
+      source_value: col(numeric_value)
+      source_unit: concat_str(doseunit, "/min")
+      normalisation_weight_kg: col(patientweight)
+  filters:
+  - drop_na(numeric_value)

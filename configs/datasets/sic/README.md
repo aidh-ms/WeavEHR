@@ -25,7 +25,7 @@ leading numeric id.
 | `laboratory`    | `laboratory.csv` (`LaboratoryID`)| `LAB`                                                |
 | `data_float_h`  | `data_float_h.csv` (`DataID`)    | `OBSERVATION`                                        |
 | `cases`         | `cases.csv`                      | `SEX`, `AGE`, `HEIGHT`, `WEIGHT`, `ICU_ADMISSION`, `MEDS_BIRTH`, `MEDS_DEATH` |
-| `medication`    | `medication.csv` (`DrugID`)      | `MEDICATION`                                         |
+| `medication`    | `medication.csv` (`DrugID`)      | `MEDICATION`, draft `MEDICATION_RATE` at segment ends |
 
 ## Concept mappings
 
@@ -62,9 +62,16 @@ haematology) from `laboratory`, the continuous vital signs from `data_float_h`
 and the demographics from `cases` (`patient_sex`, `patient_age`, `patient_height`,
 `patient_weight`).
 
+Draft norepinephrine, epinephrine, dopamine and dobutamine mappings use
+`AmountPerMinute` for non-bolus administration segments. Each segment end
+can also mark a dose change, so it is not labelled an infusion stop. Row IDs
+are segment IDs, not persistent infusion IDs. These mappings have synthetic
+tests only; native validation is outstanding. See the
+[event contract and limitations](../../../docs/user_guide/vasopressor_events.md).
+
 Not yet mapped / not cleanly mappable as `simple`:
-- **Drug rates / durations** (vasopressors, antibiotics): live in `medication` and need
-  `derived`/`complex` handling of SICdb's per-record dosing.
+- **Remaining drug rates / durations**: episode reconstruction and drugs without
+  explicit source mappings remain deferred.
 - Concepts with **no SICdb source** in ricu are simply absent (e.g. `tri`/triglycerides
   has a SICdb id but no WeavEHR concept, so it is skipped).
 

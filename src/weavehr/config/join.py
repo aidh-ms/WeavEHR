@@ -8,6 +8,7 @@ dictionaries it produces, so both steps validate joins identically.
 
 from typing import ClassVar, Literal, TypedDict
 
+import polars as pl
 from pydantic import BaseModel, Field, computed_field, model_validator
 
 # Cross joins are deliberately excluded: configured joins attach data to each row and must be keyed.
@@ -82,6 +83,10 @@ class JoinConfig(BaseModel):
             "'none' is faster but makes order-dependent filters such as first_distinct non-deterministic."
         ),
     )
+    asof: bool = Field(False, description="Use a backward temporal lookup instead of an equality join.")
+    by: list[str] = Field(default_factory=list, description="Subject/stay keys for a backward temporal lookup.")
+    tolerance: str | None = Field(None, description="Maximum age of a backward temporal match, e.g. '24h'.")
+    suffix: str = Field("_right", description="Suffix for overlapping lookup column names.")
 
     @model_validator(mode="after")
     def _validate_join_keys(self) -> "JoinConfig":
@@ -93,7 +98,44 @@ class JoinConfig(BaseModel):
                 raise ValueError("Use either both_on or left_on/right_on, not both.")
         elif not (self.left_on and self.right_on):
             raise ValueError("A join needs both_on, or both left_on and right_on.")
+        if self.asof:
+            if self.how != "left" or len(self.both_on or self.left_on) != 1 or len(self.both_on or self.right_on) != 1:
+                raise ValueError("An asof join requires how='left' and exactly one time key on each side")
+            if not self.by:
+                raise ValueError("An asof join requires subject/stay grouping keys in by")
+        elif self.by or self.tolerance is not None:
+            raise ValueError("by and tolerance require asof=True")
         return self
+
+    def apply(self, left: pl.LazyFrame, right: pl.LazyFrame, suffix: str | None = None) -> pl.LazyFrame:
+        """Apply a configured equality join or a backward-only temporal lookup."""
+        suffix = self.suffix if suffix is None else suffix
+        if not self.asof:
+            return left.join(right, suffix=suffix, coalesce=True, **self.join_params)
+        left_key = (self.both_on or self.left_on)[0]
+        right_key = (self.both_on or self.right_on)[0]
+        # Drop missing lookup keys, not missing main-table rows. Equal-time
+        # duplicates must be resolved explicitly in the lookup's configuration.
+        right = right.filter(pl.col(right_key).is_not_null())
+        row_order = "__weavehr_asof_order"
+        names = set(left.collect_schema().names()) | set(right.collect_schema().names())
+        while row_order in names:
+            row_order += "_"
+        joined = (
+            left.with_row_index(row_order)
+            .sort(left_key)
+            .join_asof(
+                right.sort(right_key),
+                left_on=left_key,
+                right_on=right_key,
+                by=self.by,
+                strategy="backward",
+                tolerance=self.tolerance,
+                suffix=suffix,
+                check_sortedness=False,
+            )
+        )
+        return joined.sort(row_order).drop(row_order)
 
     @computed_field
     @property

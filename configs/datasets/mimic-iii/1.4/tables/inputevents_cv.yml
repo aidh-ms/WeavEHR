@@ -59,6 +59,47 @@ join:
     type: string
   both_on:
   - ITEMID
+- path: CHARTEVENTS.csv.gz
+  columns:
+  - name: SUBJECT_ID
+    type: int64
+  - name: ICUSTAY_ID
+    type: int64
+  - name: CHARTTIME
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  - name: STORETIME
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  - name: ITEMID
+    type: int64
+  - name: VALUENUM
+    type: float32
+  - name: ERROR
+    type: int64
+  callbacks:
+  - col(CHARTTIME, output=weight_time)
+  - col(STORETIME, output=weight_available_time)
+  - col(VALUENUM, output=weight_kg)
+  filters:
+  - ITEMID == 762 or ITEMID == 763 or ITEMID == 224639
+  - ERROR == None or ERROR != 1
+  - weight_kg > 0
+  - first_distinct(SUBJECT_ID, ICUSTAY_ID, weight_time, order_by=[weight_available_time])
+  suffix: _weight
+  asof: true
+  how: left
+  left_on:
+  - CHARTTIME
+  right_on:
+  - weight_time
+  by:
+  - SUBJECT_ID
+  - ICUSTAY_ID
 event_defaults:
   subject_id: col(SUBJECT_ID)
   extension:
@@ -76,11 +117,14 @@ events:
     numeric_value: col(RATE)
     text_value: col(STOPPED)
     extension:
-      available_time: col(STORETIME)
+      available_time: max(STORETIME, CHARTTIME, output=available_time)
       rateuom: col(RATEUOM)
       amount: col(AMOUNT)
       amountuom: col(AMOUNTUOM)
       orderid: col(ORDERID)
       linkorderid: col(LINKORDERID)
+      patientweight: col(weight_kg)
+      weight_time: col(weight_time)
+      weight_available_time: col(weight_available_time)
   filters:
   - drop_na(time)

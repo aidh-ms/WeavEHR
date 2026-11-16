@@ -21,6 +21,7 @@ from weavehr.callbacks._callbacks.comparison import (
 from weavehr.callbacks._callbacks.conditional import Replace
 from weavehr.callbacks._callbacks.filter import DropIf, DropNa, FirstDistinct
 from weavehr.callbacks._callbacks.logical import And, Not, Or
+from weavehr.callbacks._callbacks.rate import DoseToRate, NormalizeRate, PreviousRecord
 from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max, Min
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
@@ -32,6 +33,9 @@ from weavehr.callbacks.proto import CallbackProtocol, ColumnRef, OutputCallbackP
 from weavehr.callbacks.registry import register_callback_cls, registry
 
 __all__ = [
+    "DoseToRate",
+    "NormalizeRate",
+    "PreviousRecord",
     "registry",
     "register_callback_cls",
     "CallbackProtocol",

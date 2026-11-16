@@ -200,6 +200,6 @@ class DatetimeDiff(OutputCallbackProtocol):
 
     def __call__(self, lf: LazyFrame) -> CallbackResult:
         duration_expr = to_expr(lf, self.end) - to_expr(lf, self.start)
-        expr = duration_expr.dt.total_seconds() / self.SECONDS_PER_UNIT[self.unit]
+        expr = duration_expr.dt.total_microseconds() / (1e6 * self.SECONDS_PER_UNIT[self.unit])
 
         return with_output(expr, self.output)

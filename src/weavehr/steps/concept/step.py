@@ -699,14 +699,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 join_table.source,
                 join_table.how,
             )
-            lf = lf.join(
-                _read_table(join_table),
-                suffix=join_table.suffix,
-                # Full joins don't coalesce keys by default, which would leave
-                # subject_id/time null for rows present only on the right side.
-                coalesce=True,
-                **join_table.join_params,
-            )
+            lf = join_table.apply(lf, _read_table(join_table), suffix=join_table.suffix)
             post_callbacks.extend(join_table.post_callbacks)
 
         for expr in post_callbacks:

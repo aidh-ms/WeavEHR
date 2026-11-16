@@ -1,0 +1,87 @@
+# Changed/ChangeDose/Rate closes a segment, not an infusion. Unknown endings are not stops.
+type: simple
+mappings:
+- pattern:
+    table: inputevents_mv
+    event: INFUSION_START
+    code: ^221906(?:$|//)
+  columns:
+    numeric_value: normalize_rate(originalrate, rateuom, "mcg/kg/min", weight_kg=patientweight)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+      linkorderid: col(linkorderid)
+      infusion_id: concat_str("inputevents_mv:", linkorderid)
+      segment_id: cast(orderid, "str")
+      available_time: col(available_time)
+      source_unit: col(rateuom)
+      source_value: col(originalrate)
+      normalisation_weight_kg: replace(rateuom.str.contains("(?i)kg"), None, patientweight)
+      source_row_id: col(row_id)
+      event_kind: const("RATE_UPDATE")
+      rate_basis: const("documented_setting")
+  filters:
+  - drop_na(numeric_value)
+- pattern:
+    table: inputevents_mv
+    event: INFUSION_END
+    code: ^221906(?:$|//)
+  columns:
+    numeric_value: const(0)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+      linkorderid: col(linkorderid)
+      infusion_id: concat_str("inputevents_mv:", linkorderid)
+      segment_id: cast(orderid, "str")
+      available_time: col(available_time)
+      source_unit: col(rateuom)
+      source_value: col(rate)
+      normalisation_weight_kg: const(None)
+      source_row_id: col(row_id)
+      event_kind: const("STOP")
+      rate_basis: const("documented_stop")
+  filters:
+  - text_value == "Stopped" or text_value == "Paused" or text_value == "FinishedRunning"
+  - continueinnextdept == None or cast(continueinnextdept, "int64") != 1
+- pattern: &id001
+    table: inputevents_cv
+    event: INFUSION_RATE
+    code: ^(?:30047|30120)(?:$|//)
+  columns:
+    numeric_value: normalize_rate(numeric_value, rateuom, "mcg/kg/min", weight_kg=patientweight)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+      linkorderid: col(linkorderid)
+      infusion_id: concat_str("inputevents_cv:", linkorderid)
+      segment_id: cast(orderid, "str")
+      source_row_id: col(row_id)
+      source_value: col(numeric_value)
+      source_unit: col(rateuom)
+      available_time: replace(rateuom.str.contains("(?i)kg"), available_time, max(available_time, weight_available_time))
+      event_kind: const("RATE_OBSERVATION")
+      rate_basis: const("documented_observation")
+      normalisation_weight_kg: replace(rateuom.str.contains("(?i)kg"), None, patientweight)
+      normalisation_weight_time: col(weight_time)
+      normalisation_weight_available_time: col(weight_available_time)
+  filters:
+  - text_value == None or not (text_value.str.contains("(?i)^(stopped|d/c.*)$"))
+  - drop_na(numeric_value)
+- pattern: *id001
+  columns:
+    numeric_value: const(0)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+      linkorderid: col(linkorderid)
+      infusion_id: concat_str("inputevents_cv:", linkorderid)
+      segment_id: cast(orderid, "str")
+      source_row_id: col(row_id)
+      source_value: col(numeric_value)
+      source_unit: col(rateuom)
+      available_time: col(available_time)
+      event_kind: const("STOP")
+      rate_basis: const("documented_stop")
+  filters:
+  - text_value.str.contains("(?i)^(stopped|d/c.*)$")

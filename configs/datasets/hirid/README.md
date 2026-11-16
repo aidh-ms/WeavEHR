@@ -22,7 +22,7 @@ self-documenting and harmonisation can key on the leading numeric id.
 | HiRID table     | Source                          | Events emitted                                  |
 | --------------- | ------------------------------- | ----------------------------------------------- |
 | `observations`  | `observation_tables/` (`variableid`) | `OBSERVATION`                              |
-| `pharma`        | `pharma_records/` (`pharmaid`)  | `PHARMA`                                         |
+| `pharma`        | `pharma_records/` (`pharmaid`)  | `PHARMA`, draft `PHARMA_RATE` interval amounts and `PHARMA_STOP` flags |
 | `general`       | `general_table.csv`             | `SEX`, `AGE`, `ICU_ADMISSION`, `MEDS_BIRTH`, `MEDS_DEATH` |
 
 HiRID records whether a patient died (`general_table.discharge_status`) but not
@@ -65,10 +65,16 @@ haematology) from `observations`, vital signs, GCS components (eye/motor/verbal)
 and RASS, height/weight, and the demographics from `general` (`patient_sex`,
 `patient_age`).
 
+Draft norepinephrine, epinephrine, dobutamine and vasopressin mappings use
+cumulative-dose differences over explicit intervals and recorded stop flags.
+The extraction now reads weight observations for a backward lookup. These
+mappings have synthetic tests only; native validation is outstanding. See the
+[event contract and limitations](../../../docs/user_guide/vasopressor_events.md).
+
 Not yet mapped / not cleanly mappable as `simple`:
-- **Drug rates / durations** (vasopressors, antibiotics, corticosteroids,
-  insulin, dextrose): live in `pharma` and need `derived`/`complex` handling of
-  HiRID's per-record dosing.
+- **Remaining drug rates / durations**: episode reconstruction and drugs without
+  explicit source mappings remain deferred. The four draft vasopressor mappings
+  below do not establish continuous infusion state.
 - **Urine output**: HiRID records a cumulative signal that ricu de-accumulates
   (`hirid_urine`) — needs a `complex` transform.
 - **GCS total** and **lymphocytes**: derived (sum of GCS components / blood-cell

@@ -85,6 +85,10 @@ event_defaults:
     caregiver_id: col(caregiver_id)
     orderid: col(orderid)
     linkorderid: col(linkorderid)
+    patientweight: col(patientweight)
+
+filters:
+  - not (statusdescription == "Rewritten") or statusdescription == None
 
 events:
   - name: INFUSION_START

@@ -188,19 +188,19 @@ def infusion_end(concept: str, item: int, *, expect: Sequence[Mapping[str, Any]]
 
 
 RATES = [
-    infusion_end(
+    case(
         "vasopressin_rate",
+        "INFUSION_START",
         222315,
-        rate=2.4,
-        rateuom="units/hour",
+        extra={"originalrate": 2.4, "rateuom": "units/hour"},
         expect=[{"numeric_value": 0.04}],
         note="units/hour are converted to the concept's units/min",
     ),
-    infusion_end(
+    case(
         "vasopressin_rate",
+        "INFUSION_START",
         222315,
-        rate=0.04,
-        rateuom="units/min",
+        extra={"originalrate": 0.04, "rateuom": "units/min"},
         expect=[{"numeric_value": 0.04}],
         note="units/min is the concept unit and is not converted",
     ),

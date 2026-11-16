@@ -1,37 +1,44 @@
+# Changed/ChangeDose/Rate closes a segment, not an infusion. Unknown endings are not stops.
 type: simple
 mappings:
-  # The ordered set-point, known as soon as the infusion is charted.
-  # `originalrate` is the rate a clinician set; `rate` is the realised average,
-  # back-computed from the amount delivered across the segment, and so is not
-  # knowable until the segment closes. Stamping the latter at `starttime` would
-  # import the whole segment's future, hence the set-point here.
-  - pattern:
-      table: inputevents
-      event: INFUSION_START
-      code: ^(?:INFUSION_START//)?(?:221906)(?:$|//)
-      extensions:
-        rateuom: mcg/kg/min
-    columns:
-      numeric_value: col(originalrate)
-      text_value: col(text_value)
-      extension:
-        stay_id: col(stay_id)
-        linkorderid: col(linkorderid)
-  # A genuine cessation is a rate of 0 — the components carry the last rate
-  # forward, so a stop has to be charted rather than merely implied. A dose
-  # change closes one segment and opens the next, so it is not a stop and must
-  # not be zeroed.
-  - pattern:
-      table: inputevents
-      event: INFUSION_END
-      code: ^(?:INFUSION_END//)?(?:221906)(?:$|//)
-      extensions:
-        rateuom: mcg/kg/min
-    columns:
-      numeric_value: const(0)
-      text_value: col(text_value)
-      extension:
-        stay_id: col(stay_id)
-        linkorderid: col(linkorderid)
-    filters:
-      - drop_if(text_value == "ChangeDose/Rate")
+- pattern:
+    table: inputevents
+    event: INFUSION_START
+    code: ^221906(?:$|//)
+  columns:
+    numeric_value: normalize_rate(originalrate, rateuom, "mcg/kg/min", weight_kg=patientweight)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+      linkorderid: col(linkorderid)
+      infusion_id: concat_str("inputevents:", linkorderid)
+      segment_id: cast(orderid, "str")
+      available_time: col(available_time)
+      source_unit: col(rateuom)
+      source_value: col(originalrate)
+      normalisation_weight_kg: replace(rateuom.str.contains("(?i)kg"), None, patientweight)
+      event_kind: const("RATE_UPDATE")
+      rate_basis: const("documented_setting")
+  filters:
+  - drop_na(numeric_value)
+- pattern:
+    table: inputevents
+    event: INFUSION_END
+    code: ^221906(?:$|//)
+  columns:
+    numeric_value: const(0)
+    text_value: col(text_value)
+    extension:
+      stay_id: col(stay_id)
+      linkorderid: col(linkorderid)
+      infusion_id: concat_str("inputevents:", linkorderid)
+      segment_id: cast(orderid, "str")
+      available_time: col(available_time)
+      source_unit: col(rateuom)
+      source_value: col(rate)
+      normalisation_weight_kg: const(None)
+      event_kind: const("STOP")
+      rate_basis: const("documented_stop")
+  filters:
+  - text_value == "Stopped" or text_value == "Paused" or text_value == "FinishedRunning"
+  - continueinnextdept == None or cast(continueinnextdept, "int64") != 1

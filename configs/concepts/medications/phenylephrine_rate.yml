@@ -1,6 +1,23 @@
+# Discrete infusion events; see docs/user_guide/vasopressor_events.md.
 name: phenylephrine_rate
 version: 1.0.0
 unit: mcg/kg/min
 extension_columns:
   dataset: col("dataset")
   table: col("table")
+  event_kind: const(None)
+  rate_basis: const(None)
+  infusion_id: const(None)
+  segment_id: const(None)
+  stay_id: const(None)
+  available_time: const(None)
+  interval_start: const(None)
+  interval_end: const(None)
+  normalisation_weight_kg: const(None)
+  normalisation_weight_time: const(None)
+  normalisation_weight_available_time: const(None)
+  source_value: const(None)
+  source_unit: const(None)
+  source_row_id: const(None)
+  source_code: col(code)
+  source_event: col(event)

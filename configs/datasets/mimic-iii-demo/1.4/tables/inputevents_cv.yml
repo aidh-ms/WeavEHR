@@ -85,3 +85,51 @@ join:
   - col(label, output=LABEL)
   both_on:
   - ITEMID
+- path: CHARTEVENTS.csv
+  columns:
+  - name: subject_id
+    type: int64
+  - name: icustay_id
+    type: int64
+  - name: charttime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  - name: storetime
+    type: datetime
+    params:
+      format: '%Y-%m-%d %H:%M:%S'
+      strict: false
+  - name: itemid
+    type: int64
+  - name: valuenum
+    type: float32
+  - name: error
+    type: int64
+  callbacks:
+  - col(subject_id, output=SUBJECT_ID)
+  - col(icustay_id, output=ICUSTAY_ID)
+  - col(charttime, output=CHARTTIME)
+  - col(storetime, output=STORETIME)
+  - col(itemid, output=ITEMID)
+  - col(valuenum, output=VALUENUM)
+  - col(error, output=ERROR)
+  - col(CHARTTIME, output=weight_time)
+  - col(STORETIME, output=weight_available_time)
+  - col(VALUENUM, output=weight_kg)
+  filters:
+  - ITEMID == 762 or ITEMID == 763 or ITEMID == 224639
+  - ERROR == None or ERROR != 1
+  - weight_kg > 0
+  - first_distinct(SUBJECT_ID, ICUSTAY_ID, weight_time, order_by=[weight_available_time])
+  suffix: _weight
+  asof: true
+  how: left
+  left_on:
+  - CHARTTIME
+  right_on:
+  - weight_time
+  by:
+  - SUBJECT_ID
+  - ICUSTAY_ID

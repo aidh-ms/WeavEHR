@@ -1,75 +1,135 @@
-# HiRID v1.1.1 (PhysioNet) -- raw pharma_records (medication administrations).
-#
-# Distributed as many partitioned parquet parts; the glob path reads them all.
-# Keyed on `pharmaid`; the drug name is joined in from hirid_variable_reference.csv
-# (the same reference table also covers pharma variables) and appended to the
-# code -> hirid//pharma//<pharmaid>//<Variable Name>//<doseunit>.
-#
-# NOTE: this table config is provided for completeness. The concept mappings for
-# drug rates/durations are deferred (they need `derived`/`complex` handling of
-# HiRID's per-record dosing), so no mappings key on this table yet.
+# PHARMA is retained. PHARMA_RATE is a retrospective cumulative-dose difference, never a pump update.
 path: raw_stage/pharma_records/parquet/*.parquet
-
 columns:
-  # subject_id and extensions
+- name: patientid
+  type: int64
+- name: infusionid
+  type: int64
+- name: typeid
+  type: int64
+- name: recordstatus
+  type: int64
+- name: givenat
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: enteredentryat
+  type: datetime
+  params:
+    format: '%Y-%m-%d %H:%M:%S'
+    strict: false
+- name: pharmaid
+  type: int64
+- name: givendose
+  type: float32
+- name: doseunit
+  type: str
+- name: cumulativedose
+  type: float64
+join:
+- name: hirid_variable_reference
+  path: reference_data/hirid_variable_reference.csv
+  columns:
+  - name: Source Table
+    type: str
+  - name: ID
+    type: int64
+  - name: Variable Name
+    type: str
+  filters:
+  - col("Source Table") == "Pharma"
+  left_on:
+  - pharmaid
+  right_on:
+  - ID
+- path: raw_stage/observation_tables/parquet/*.parquet
+  columns:
   - name: patientid
     type: int64
-  - name: infusionid
-    type: int64
-  - name: typeid
-    type: int64
-  - name: recordstatus
-    type: int64
-  # db fields - times
-  - name: givenat
+  - name: datetime
     type: datetime
     params:
-      format: "%Y-%m-%d %H:%M:%S"
+      format: '%Y-%m-%d %H:%M:%S'
       strict: false
-  - name: enteredentryat
+  - name: entertime
     type: datetime
     params:
-      format: "%Y-%m-%d %H:%M:%S"
+      format: '%Y-%m-%d %H:%M:%S'
       strict: false
-  # db fields - values
-  - name: pharmaid
+  - name: variableid
     type: int64
-  - name: givendose
+  - name: value
     type: float32
-  - name: doseunit
-    type: str
-
-join:
-  - name: hirid_variable_reference
-    path: reference_data/hirid_variable_reference.csv
-    columns:
-      - name: Source Table
-        type: str
-      - name: ID
-        type: int64
-      - name: Variable Name
-        type: str
-    filters:
-      - col("Source Table") == "Pharma"
-    left_on:
-      - pharmaid
-    right_on:
-      - ID
-
+  pre_filters:
+  - variableid == 10000400
+  callbacks:
+  - col(datetime, output=weight_time)
+  - col(entertime, output=weight_available_time)
+  - col(value, output=weight_kg)
+  filters:
+  - weight_kg > 0
+  - first_distinct(patientid, weight_time, order_by=[weight_available_time])
+  asof: true
+  how: left
+  left_on:
+  - givenat
+  right_on:
+  - weight_time
+  by:
+  - patientid
 event_defaults:
   subject_id: col(patientid)
   time: col(givenat)
   extension:
     available_time: col(enteredentryat)
     infusion_id: col(infusionid)
-
+    recordstatus: col(recordstatus)
+    doseunit: col(doseunit)
+    cumulativedose: col(cumulativedose)
+    stay_id: col(patientid)
 events:
-  - name: PHARMA
-    columns:
-      code:
-        - col(pharmaid)
-        - col("Variable Name")
-        - col(doseunit)
-      numeric_value: col(givendose)
-    filters:
-      - drop_na(time)
+- name: PHARMA
+  columns:
+    code: &id001
+    - col(pharmaid)
+    - col("Variable Name")
+    - col(doseunit)
+    numeric_value: col(givendose)
+  filters:
+  - drop_na(time)
+- name: PHARMA_RATE
+  columns:
+    code: *id001
+    numeric_value: col(valid_cumulative) - col(previous_cumulative)
+    extension:
+      available_time: max(enteredentryat, previous_available_time, givenat, output=available_time)
+      interval_start: col(interval_start)
+      interval_end: col(givenat)
+      duration_minutes: col(duration_minutes)
+      patientweight: col(weight_kg)
+      weight_time: col(weight_time)
+      weight_available_time: col(weight_available_time)
+  filters:
+  - drop_na(time)
+  - numeric_value >= 0
+  - cast(duration_minutes, "float64") > 0
+  - modulo(floor_divide(recordstatus, 4), 2) == 0
+- name: PHARMA_STOP
+  columns:
+    code: *id001
+    numeric_value: const(0)
+    extension:
+      available_time: max(enteredentryat, givenat, output=available_time)
+  filters:
+  - drop_na(time)
+  - modulo(floor_divide(recordstatus, 256), 2) == 1
+  - modulo(floor_divide(recordstatus, 2), 2) == 0
+  - modulo(floor_divide(recordstatus, 32), 2) == 0
+callbacks:
+- replace(cumulativedose < 0 or recordstatus == None or modulo(floor_divide(recordstatus, 2), 2) == 1 or modulo(floor_divide(recordstatus, 32), 2) == 1, None, cumulativedose,
+  output=valid_cumulative)
+- previous_record(valid_cumulative, givenat, by=[patientid, infusionid, pharmaid, doseunit], output=previous_cumulative)
+- previous_record(givenat, givenat, by=[patientid, infusionid, pharmaid, doseunit], output=interval_start)
+- previous_record(enteredentryat, givenat, by=[patientid, infusionid, pharmaid, doseunit], output=previous_available_time)
+- datetime_diff(interval_start, givenat, unit="minutes", output=duration_minutes)

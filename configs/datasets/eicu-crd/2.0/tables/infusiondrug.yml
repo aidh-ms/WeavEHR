@@ -1,6 +1,8 @@
 path: infusionDrug.csv.gz
 
 columns:
+  - name: infusiondrugid
+    type: int64
   # subject_id and extentions
   - name: patientunitstayid
     type: int64
@@ -71,3 +73,6 @@ events:
         infusionrate: col(infusionrate)
         drugamount: col(drugamount)
         volume: col(volumeoffluid)
+        patientweight: col(patientweight)
+        source_row_id: col(infusiondrugid)
+        rateuom: col(drugname).str.extract(r"\(([^()]*)\)$", 1)

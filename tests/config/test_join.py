@@ -1,7 +1,9 @@
 """Tests for the shared join configuration model."""
 
 from typing import ClassVar
+from datetime import datetime, timedelta
 
+import polars as pl
 import pytest
 from pydantic import ValidationError
 
@@ -13,6 +15,39 @@ class DefaultKeysJoinConfig(JoinConfig):
 
 
 class TestJoinConfig:
+    def test_asof_is_backward_within_subject_and_stay_and_preserves_missing_times(self):
+        t = datetime(2024, 1, 1)
+        left = pl.LazyFrame({"subject": [1, 1, 1, 2], "stay": [7, 8, 7, 7], "time": [t, t, None, t]})
+        right = pl.LazyFrame(
+            {
+                "subject": [1, 1, 1],
+                "stay": [7, 7, 8],
+                "weight_time": [t - timedelta(hours=1), t + timedelta(hours=1), t - timedelta(days=2)],
+                "weight": [80, 160, 40],
+            }
+        )
+        config = JoinConfig(
+            asof=True, left_on=["time"], right_on=["weight_time"], by=["subject", "stay"], tolerance="24h"
+        )
+        rows = config.apply(left, right).collect()
+        assert rows.height == 4
+        assert rows["time"].to_list() == left.collect()["time"].to_list()
+        assert rows["weight"].drop_nulls().to_list() == [80]
+
+    @pytest.mark.parametrize(
+        "options",
+        [
+            {"asof": True, "both_on": ["time"]},
+            {"asof": True, "both_on": ["time", "other"], "by": ["subject"]},
+            {"asof": True, "both_on": ["time"], "by": ["subject"], "how": "full"},
+            {"both_on": ["time"], "by": ["subject"]},
+            {"both_on": ["time"], "tolerance": "1h"},
+        ],
+    )
+    def test_unsafe_temporal_join_configuration_is_rejected(self, options):
+        with pytest.raises(ValidationError):
+            JoinConfig.model_validate(options)
+
     def test_join_params_both_on(self) -> None:
         join = JoinConfig(both_on=["itemid"])
         assert join.join_params == {

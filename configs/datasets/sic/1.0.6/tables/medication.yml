@@ -1,92 +1,102 @@
-# SICdb v1.0.6 (PhysioNet) -- medication (drug administrations, keyed on DrugID).
-#
-# Same patient-timeline reconstruction and d_references join as the other tables;
-# code reads sic//medication//<DrugID>//<ReferenceName>//<ReferenceUnit>.
-#
-# NOTE: provided for completeness. The concept mappings for drug rates/durations are
-# deferred (they need derived/complex handling of SICdb dosing), so nothing keys on
-# this table yet.
+# Segment endings also occur on dose changes. They are not infusion-level STOP events.
 path: medication.csv.gz
-
 columns:
-  # subject_id and extensions (medication already carries PatientID)
-  - name: PatientID
-    type: int64
+- name: PatientID
+  type: int64
+- name: CaseID
+  type: int64
+- name: Offset
+  type: int64
+- name: DrugID
+  type: int64
+- name: Amount
+  type: float32
+- name: id
+  type: int64
+- name: OffsetDrugEnd
+  type: int64
+- name: IsSingleDose
+  type: int64
+- name: AmountPerMinute
+  type: float32
+join:
+- name: cases
+  path: cases.csv.gz
+  columns:
   - name: CaseID
     type: int64
-  # db fields - times
-  - name: Offset
+  - name: OffsetAfterFirstAdmission
     type: int64
-  # db fields - values
-  - name: DrugID
-    type: int64
-  - name: Amount
+  - name: WeightOnAdmission
     type: float32
-
-join:
-  # (A) this case's OffsetAfterFirstAdmission.
-  - name: cases
-    path: cases.csv.gz
-    columns:
-      - name: CaseID
-        type: int64
-      - name: OffsetAfterFirstAdmission
-        type: int64
-    both_on:
-      - CaseID
-  # (B) the patient's anchor case -> first_admission_year and anchor_offset (one row per patient).
-  - name: cases
-    path: cases.csv.gz
-    columns:
-      - name: PatientID
-        type: int64
-      - name: AdmissionYear
-        type: int64
-      - name: OffsetAfterFirstAdmission
-        type: int64
-    callbacks:
-      - col(AdmissionYear, output=first_admission_year)
-      - col(OffsetAfterFirstAdmission, output=anchor_offset)
-    filters:
-      # One anchor per patient: the case at offset 0, or the earliest case if none is at 0.
-      - first_distinct(PatientID, order_by=[OffsetAfterFirstAdmission])
-    both_on:
-      - PatientID
-  # (C) human-readable drug name + unit.
-  - name: d_references
-    path: d_references.csv.gz
-    columns:
-      - name: ReferenceGlobalID
-        type: int64
-      - name: ReferenceValue
-        type: str
-      - name: ReferenceName
-        type: str
-      - name: ReferenceUnit
-        type: str
-    left_on:
-      - DrugID
-    right_on:
-      - ReferenceGlobalID
-
+  both_on:
+  - CaseID
+- name: cases
+  path: cases.csv.gz
+  columns:
+  - name: PatientID
+    type: int64
+  - name: AdmissionYear
+    type: int64
+  - name: OffsetAfterFirstAdmission
+    type: int64
+  callbacks:
+  - col(AdmissionYear, output=first_admission_year)
+  - col(OffsetAfterFirstAdmission, output=anchor_offset)
+  filters:
+  - first_distinct(PatientID, order_by=[OffsetAfterFirstAdmission])
+  both_on:
+  - PatientID
+- name: d_references
+  path: d_references.csv.gz
+  columns:
+  - name: ReferenceGlobalID
+    type: int64
+  - name: ReferenceValue
+    type: str
+  - name: ReferenceName
+    type: str
+  - name: ReferenceUnit
+    type: str
+  left_on:
+  - DrugID
+  right_on:
+  - ReferenceGlobalID
 post_join_callbacks:
-  - to_datetime(first_admission_year, 1, 1, "00:00:00", output=year_base)
-  - add_offset(year_base, OffsetAfterFirstAdmission - anchor_offset + Offset, offset_unit="seconds", output=event_time)
-
+- to_datetime(first_admission_year, 1, 1, "00:00:00", output=year_base)
+- add_offset(year_base, OffsetAfterFirstAdmission - anchor_offset + Offset, offset_unit="seconds", output=event_time)
+- add_offset(year_base, OffsetAfterFirstAdmission - anchor_offset + OffsetDrugEnd, offset_unit="seconds", output=end_time)
 event_defaults:
   subject_id: col(PatientID)
   time: col(event_time)
   extension:
     case_id: col(CaseID)
-
+    stay_id: col(CaseID)
+    source_row_id: col(id)
+    segment_id: col(id)
+    is_single_dose: col(IsSingleDose)
+    interval_start: col(event_time)
+    interval_end: col(end_time)
+    amount_per_minute: col(AmountPerMinute)
+    doseunit: col(ReferenceUnit)
+    patientweight: col(WeightOnAdmission) * 0.001
 events:
-  - name: MEDICATION
-    columns:
-      code:
-        - col(DrugID)
-        - col(ReferenceName)
-        - col(ReferenceValue)
-        - col(ReferenceUnit)
-      numeric_value: col(Amount)
-    filters:
-      - drop_na(time)
+- name: MEDICATION
+  columns:
+    code: &id001
+    - col(DrugID)
+    - col(ReferenceName)
+    - col(ReferenceValue)
+    - col(ReferenceUnit)
+    numeric_value: col(Amount)
+  filters:
+  - drop_na(time)
+- name: MEDICATION_RATE
+  columns:
+    time: col(end_time)
+    code: *id001
+    numeric_value: col(AmountPerMinute)
+  filters:
+  - IsSingleDose == 0
+  - OffsetDrugEnd > Offset
+  - drop_na(time)

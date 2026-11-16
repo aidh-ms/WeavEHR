@@ -1,13 +1,20 @@
+# No fixed drug concentration, forward fill, inferred stop, or default weight.
 type: simple
 mappings:
 - pattern:
     table: infusiondrug
     event: INFUSION
-    code: (?i)^epinephrine.*\(mcg/kg/min\)$
+    code: (?i)^epi(?:nephrine| |n).*\([^()]*\)$
   columns:
-    numeric_value: col(numeric_value)
+    numeric_value: normalize_rate(numeric_value, rateuom, "mcg/kg/min", weight_kg=patientweight)
     text_value: col(text_value)
     extension:
       stay_id: col(stay_id)
+      event_kind: const("RATE_OBSERVATION")
+      rate_basis: const("documented_observation")
+      source_row_id: col(source_row_id)
+      source_value: col(numeric_value)
+      source_unit: col(rateuom)
+      normalisation_weight_kg: replace(rateuom.str.contains("(?i)kg"), None, patientweight)
   filters:
   - drop_na(numeric_value)

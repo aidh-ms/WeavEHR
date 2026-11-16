@@ -373,16 +373,13 @@ def test_culture_results_do_not_claim_specimen_time_availability(tmp_path: Path)
             assert frame["available_time"].null_count() == 1
 
 
-# Infusions are deferred until CareVue and MetaVision infusions are harmonised without a
-# dataset-specific transformer; cardiovascular SOFA, and so SOFA and Sepsis-3, need them.
+# Rate events are mapped declaratively. Duration/state consumers remain separate work.
 DEFERRED_INFUSIONS = {
     *(
         f"{drug}_{kind}"
         for drug in ["norepinephrine", "epinephrine", "dopamine", "dobutamine"]
-        for kind in ["rate", "duration"]
+        for kind in ["duration"]
     ),
-    "phenylephrine_rate",
-    "vasopressin_rate",
     "sofa_cardiovascular",
     "sofa",
     "sepsis3",

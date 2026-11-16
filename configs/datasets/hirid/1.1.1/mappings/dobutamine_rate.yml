@@ -1,0 +1,38 @@
+# Draft: cumulative-dose differences; native-data validation is still required.
+type: simple
+mappings:
+- pattern:
+    table: pharma
+    event: PHARMA_RATE
+    code: ^(?:426)(?:$|//)
+  columns:
+    numeric_value: dose_to_rate(numeric_value, duration_minutes, doseunit, "mcg/kg/min", weight_kg=patientweight)
+    extension:
+      stay_id: col(stay_id)
+      infusion_id: concat_str("pharma:", infusion_id)
+      source_value: col(numeric_value)
+      source_unit: col(doseunit)
+      available_time: max(available_time, weight_available_time)
+      event_kind: const("RATE_OBSERVATION")
+      rate_basis: const("cumulative_difference")
+      interval_start: col(interval_start)
+      interval_end: col(interval_end)
+      normalisation_weight_kg: col(patientweight)
+      normalisation_weight_time: col(weight_time)
+      normalisation_weight_available_time: col(weight_available_time)
+  filters:
+  - drop_na(numeric_value)
+- pattern:
+    table: pharma
+    event: PHARMA_STOP
+    code: ^(?:426)(?:$|//)
+  columns:
+    numeric_value: const(0)
+    extension:
+      stay_id: col(stay_id)
+      infusion_id: concat_str("pharma:", infusion_id)
+      source_value: col(numeric_value)
+      source_unit: col(doseunit)
+      available_time: col(available_time)
+      event_kind: const("STOP")
+      rate_basis: const("documented_stop")

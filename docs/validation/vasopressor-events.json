@@ -1,0 +1,1053 @@
+{
+  "weavehr_baseline": "2ecccb760f611ca4a3fe937a7398a199580f9f76",
+  "ricu_commit": "c0efac720dbe72caaf63b361b6978a24383835bf",
+  "demo_inputs": {
+    "mimic-iv-demo": {
+      "version": "2.2",
+      "sha256": {
+        "icu/inputevents.csv.gz": "69597dca47e554e16645ca505167e9f39b07c1724e915ba54ccfb40f5fa0078a",
+        "icu/d_items.csv.gz": "1690467a822345226a041c1149237c418aa60098c6b699fb4cef64d73588a01f"
+      }
+    },
+    "mimiciii-demo": {
+      "version": "1.4",
+      "sha256": {
+        "INPUTEVENTS_CV.csv": "471558d62d85f6841032840c753311bed3dc8a554bf1e36003cfeceabee1928c",
+        "INPUTEVENTS_MV.csv": "5d66734bef2d8511009d43dd63a76948ac2490936ec86dfe64b966b37b2f1dab",
+        "D_ITEMS.csv": "b4642d6d278987b5fb96c790bca02058c5f070accfa58c249100bda38a608089",
+        "CHARTEVENTS.csv": "734387d583daa9c339f9744ce6e58ed7387b99672898139c910f9aa3e40c31ec",
+        "ICUSTAYS.csv": "455cd8fd014bd75d9d26ddf8cb116c77ecccee2fe35fea342801a631d94b387b"
+      }
+    },
+    "eicu-crd-demo": {
+      "version": "2.0",
+      "sha256": {
+        "infusiondrug.csv.gz": "3b9f024d28682884a820763ac516ae68b247ebf17903fee4f38240c04886d527",
+        "patient.csv.gz": "15e1eb52169828e3cfff3b67132a087298de4d0365bbb31bb294f6043bffd474"
+      }
+    }
+  },
+  "event_counts": {
+    "mimic-iv-demo": {
+      "norepinephrine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 1156,
+          "zero_rows": 209
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 1156,
+          "zero_rows": 209,
+          "event_kinds": {
+            "RATE_UPDATE": 947,
+            "STOP": 209
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "epinephrine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 46,
+          "zero_rows": 10
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 46,
+          "zero_rows": 10,
+          "event_kinds": {
+            "RATE_UPDATE": 36,
+            "STOP": 10
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "dopamine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 38,
+          "zero_rows": 10
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 38,
+          "zero_rows": 10,
+          "event_kinds": {
+            "STOP": 10,
+            "RATE_UPDATE": 28
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "dobutamine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 64,
+          "zero_rows": 20
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 64,
+          "zero_rows": 20,
+          "event_kinds": {
+            "STOP": 20,
+            "RATE_UPDATE": 44
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "phenylephrine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 786,
+          "zero_rows": 161
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 786,
+          "zero_rows": 161,
+          "event_kinds": {
+            "STOP": 161,
+            "RATE_UPDATE": 625
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "vasopressin": {
+        "baseline": {
+          "mapped": true,
+          "rows": 55,
+          "zero_rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 100,
+          "zero_rows": 45,
+          "event_kinds": {
+            "RATE_UPDATE": 55,
+            "STOP": 45
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      }
+    },
+    "mimic-iii-demo": {
+      "norepinephrine": {
+        "baseline": {
+          "mapped": false,
+          "rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 1536,
+          "zero_rows": 175,
+          "event_kinds": {
+            "RATE_OBSERVATION": 1138,
+            "STOP": 101,
+            "RATE_UPDATE": 297
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "epinephrine": {
+        "baseline": {
+          "mapped": false,
+          "rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 2,
+          "zero_rows": 1,
+          "event_kinds": {
+            "RATE_OBSERVATION": 1,
+            "STOP": 1
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "dopamine": {
+        "baseline": {
+          "mapped": false,
+          "rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 536,
+          "zero_rows": 40,
+          "event_kinds": {
+            "STOP": 30,
+            "RATE_UPDATE": 66,
+            "RATE_OBSERVATION": 440
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "dobutamine": {
+        "baseline": {
+          "mapped": false,
+          "rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 30,
+          "zero_rows": 8,
+          "event_kinds": {
+            "RATE_OBSERVATION": 9,
+            "RATE_UPDATE": 13,
+            "STOP": 8
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "phenylephrine": {
+        "baseline": {
+          "mapped": false,
+          "rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 886,
+          "zero_rows": 81,
+          "event_kinds": {
+            "STOP": 44,
+            "RATE_UPDATE": 56,
+            "RATE_OBSERVATION": 786
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      },
+      "vasopressin": {
+        "baseline": {
+          "mapped": false,
+          "rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 211,
+          "zero_rows": 15,
+          "event_kinds": {
+            "RATE_UPDATE": 11,
+            "STOP": 15,
+            "RATE_OBSERVATION": 185
+          },
+          "missing_infusion_id": 0,
+          "missing_available_time": 0
+        }
+      }
+    },
+    "eicu-demo": {
+      "norepinephrine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 190,
+          "zero_rows": 2
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 633,
+          "zero_rows": 445,
+          "event_kinds": {
+            "RATE_OBSERVATION": 633
+          },
+          "missing_infusion_id": 633,
+          "missing_available_time": 633
+        }
+      },
+      "epinephrine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 4,
+          "zero_rows": 0
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 79,
+          "zero_rows": 73,
+          "event_kinds": {
+            "RATE_OBSERVATION": 79
+          },
+          "missing_infusion_id": 79,
+          "missing_available_time": 79
+        }
+      },
+      "dopamine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 217,
+          "zero_rows": 15
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 217,
+          "zero_rows": 15,
+          "event_kinds": {
+            "RATE_OBSERVATION": 217
+          },
+          "missing_infusion_id": 217,
+          "missing_available_time": 217
+        }
+      },
+      "dobutamine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 325,
+          "zero_rows": 26
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 325,
+          "zero_rows": 26,
+          "event_kinds": {
+            "RATE_OBSERVATION": 325
+          },
+          "missing_infusion_id": 325,
+          "missing_available_time": 325
+        }
+      },
+      "phenylephrine": {
+        "baseline": {
+          "mapped": true,
+          "rows": 88,
+          "zero_rows": 76
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 105,
+          "zero_rows": 93,
+          "event_kinds": {
+            "RATE_OBSERVATION": 105
+          },
+          "missing_infusion_id": 105,
+          "missing_available_time": 105
+        }
+      },
+      "vasopressin": {
+        "baseline": {
+          "mapped": true,
+          "rows": 261,
+          "zero_rows": 34
+        },
+        "draft": {
+          "mapped": true,
+          "rows": 262,
+          "zero_rows": 34,
+          "event_kinds": {
+            "RATE_OBSERVATION": 262
+          },
+          "missing_infusion_id": 262,
+          "missing_available_time": 262
+        }
+      }
+    }
+  },
+  "native_mimic_checks": {
+    "mimic-iv-demo": {
+      "norepinephrine": {
+        "against_native_originalrate": {
+          "rows": 947,
+          "within_float_tolerance": 947,
+          "different": 0,
+          "max_absolute_difference": 0,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 947,
+          "within_float_tolerance": 54,
+          "different": 893,
+          "max_absolute_difference": 0.0215457058511674,
+          "median_absolute_difference": 0.00020556477829814
+        },
+        "documented_stops": 209,
+        "change_endings_not_zeroed": 738
+      },
+      "epinephrine": {
+        "against_native_originalrate": {
+          "rows": 36,
+          "within_float_tolerance": 36,
+          "different": 0,
+          "max_absolute_difference": 0,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 36,
+          "within_float_tolerance": 0,
+          "different": 36,
+          "max_absolute_difference": 0.000428176485002041,
+          "median_absolute_difference": 0.000225711508392124
+        },
+        "documented_stops": 10,
+        "change_endings_not_zeroed": 26
+      },
+      "dopamine": {
+        "against_native_originalrate": {
+          "rows": 28,
+          "within_float_tolerance": 28,
+          "different": 0,
+          "max_absolute_difference": 0,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 28,
+          "within_float_tolerance": 1,
+          "different": 27,
+          "max_absolute_difference": 0.00627934373915195,
+          "median_absolute_difference": 0.00085681676864624
+        },
+        "documented_stops": 10,
+        "change_endings_not_zeroed": 18
+      },
+      "dobutamine": {
+        "against_native_originalrate": {
+          "rows": 44,
+          "within_float_tolerance": 44,
+          "different": 0,
+          "max_absolute_difference": 0,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 44,
+          "within_float_tolerance": 2,
+          "different": 42,
+          "max_absolute_difference": 0.0185773149132729,
+          "median_absolute_difference": 0.00163219776004553
+        },
+        "documented_stops": 20,
+        "change_endings_not_zeroed": 24
+      },
+      "phenylephrine": {
+        "against_native_originalrate": {
+          "rows": 625,
+          "within_float_tolerance": 625,
+          "different": 0,
+          "max_absolute_difference": 0,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 625,
+          "within_float_tolerance": 18,
+          "different": 607,
+          "max_absolute_difference": 0.377837896347046,
+          "median_absolute_difference": 0.00141307525336742
+        },
+        "documented_stops": 161,
+        "change_endings_not_zeroed": 464
+      },
+      "vasopressin": {
+        "against_native_originalrate": {
+          "rows": 55,
+          "within_float_tolerance": 55,
+          "different": 0,
+          "max_absolute_difference": 1.73846880641149e-09,
+          "median_absolute_difference": 1.2417634351336e-09
+        },
+        "against_native_delivered_rate": {
+          "rows": 55,
+          "within_float_tolerance": 45,
+          "different": 10,
+          "max_absolute_difference": 0.000100251535574594,
+          "median_absolute_difference": 5.21540641923446e-09
+        },
+        "documented_stops": 45,
+        "change_endings_not_zeroed": 10
+      }
+    },
+    "mimic-iii-demo": {
+      "norepinephrine": {
+        "against_native_originalrate": {
+          "rows": 297,
+          "within_float_tolerance": 297,
+          "different": 0,
+          "max_absolute_difference": 4.97653962483469e-09,
+          "median_absolute_difference": 4.2372130804047e-10
+        },
+        "against_native_delivered_rate": {
+          "rows": 297,
+          "within_float_tolerance": 26,
+          "different": 271,
+          "max_absolute_difference": 0.0147483571,
+          "median_absolute_difference": 4.93884237213194e-05
+        },
+        "documented_stops": 75,
+        "change_endings_not_zeroed": 222
+      },
+      "epinephrine": {
+        "against_native_originalrate": {
+          "rows": 0,
+          "within_float_tolerance": 0,
+          "different": 0,
+          "max_absolute_difference": null,
+          "median_absolute_difference": null
+        },
+        "against_native_delivered_rate": {
+          "rows": 0,
+          "within_float_tolerance": 0,
+          "different": 0,
+          "max_absolute_difference": null,
+          "median_absolute_difference": null
+        },
+        "documented_stops": 0,
+        "change_endings_not_zeroed": 0
+      },
+      "dopamine": {
+        "against_native_originalrate": {
+          "rows": 66,
+          "within_float_tolerance": 66,
+          "different": 0,
+          "max_absolute_difference": 4.0704345671827e-08,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 66,
+          "within_float_tolerance": 0,
+          "different": 66,
+          "max_absolute_difference": 0.0225857692,
+          "median_absolute_difference": 0.00650663460000001
+        },
+        "documented_stops": 17,
+        "change_endings_not_zeroed": 49
+      },
+      "dobutamine": {
+        "against_native_originalrate": {
+          "rows": 13,
+          "within_float_tolerance": 13,
+          "different": 0,
+          "max_absolute_difference": 3.84185789847891e-08,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 13,
+          "within_float_tolerance": 0,
+          "different": 13,
+          "max_absolute_difference": 0.00329717758142101,
+          "median_absolute_difference": 0.000788076900000156
+        },
+        "documented_stops": 4,
+        "change_endings_not_zeroed": 9
+      },
+      "phenylephrine": {
+        "against_native_originalrate": {
+          "rows": 56,
+          "within_float_tolerance": 56,
+          "different": 0,
+          "max_absolute_difference": 4.76837158647214e-08,
+          "median_absolute_difference": 0
+        },
+        "against_native_delivered_rate": {
+          "rows": 56,
+          "within_float_tolerance": 2,
+          "different": 54,
+          "max_absolute_difference": 0.0288736820649413,
+          "median_absolute_difference": 0.00216259425000009
+        },
+        "documented_stops": 17,
+        "change_endings_not_zeroed": 39
+      },
+      "vasopressin": {
+        "against_native_originalrate": {
+          "rows": 11,
+          "within_float_tolerance": 11,
+          "different": 0,
+          "max_absolute_difference": 1.47849718579174e-09,
+          "median_absolute_difference": 1.16455396020898e-09
+        },
+        "against_native_delivered_rate": {
+          "rows": 11,
+          "within_float_tolerance": 10,
+          "different": 1,
+          "max_absolute_difference": 7.99958438968754e-06,
+          "median_absolute_difference": 3.83122063241093e-09
+        },
+        "documented_stops": 8,
+        "change_endings_not_zeroed": 3
+      }
+    }
+  },
+  "baseline_event_comparison": {
+    "mimic-iv-demo": {
+      "norepinephrine": {
+        "unchanged_events": 1156,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 0
+      },
+      "epinephrine": {
+        "unchanged_events": 46,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 0
+      },
+      "dopamine": {
+        "unchanged_events": 38,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 0
+      },
+      "dobutamine": {
+        "unchanged_events": 64,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 0
+      },
+      "phenylephrine": {
+        "unchanged_events": 786,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 0
+      },
+      "vasopressin": {
+        "unchanged_events": 5,
+        "removed_or_changed_events": 50,
+        "added_or_changed_events": 95
+      }
+    },
+    "mimic-iii-demo": {
+      "norepinephrine": {
+        "unchanged_events": 0,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 1536
+      },
+      "epinephrine": {
+        "unchanged_events": 0,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 2
+      },
+      "dopamine": {
+        "unchanged_events": 0,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 536
+      },
+      "dobutamine": {
+        "unchanged_events": 0,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 30
+      },
+      "phenylephrine": {
+        "unchanged_events": 0,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 886
+      },
+      "vasopressin": {
+        "unchanged_events": 0,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 211
+      }
+    },
+    "eicu-demo": {
+      "norepinephrine": {
+        "unchanged_events": 190,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 443
+      },
+      "epinephrine": {
+        "unchanged_events": 4,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 75
+      },
+      "dopamine": {
+        "unchanged_events": 217,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 0
+      },
+      "dobutamine": {
+        "unchanged_events": 325,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 0
+      },
+      "phenylephrine": {
+        "unchanged_events": 88,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 17
+      },
+      "vasopressin": {
+        "unchanged_events": 261,
+        "removed_or_changed_events": 0,
+        "added_or_changed_events": 1
+      }
+    }
+  },
+  "eicu_native_checks": {
+    "norepinephrine": {
+      "raw_drug_rows": 5076,
+      "comparison": {
+        "rows": 633,
+        "within_float_tolerance": 633,
+        "different": 0,
+        "max_absolute_difference": 1.19209289661804e-08,
+        "median_absolute_difference": 0
+      },
+      "excluded_rows_by_reason_or_unit": {
+        "missing_or_invalid_weight": 1917,
+        "ml/hr": 2053,
+        "unknown": 473
+      }
+    },
+    "epinephrine": {
+      "raw_drug_rows": 200,
+      "comparison": {
+        "rows": 79,
+        "within_float_tolerance": 79,
+        "different": 0,
+        "max_absolute_difference": 0,
+        "median_absolute_difference": 0
+      },
+      "excluded_rows_by_reason_or_unit": {
+        "ml/hr": 64,
+        "missing_or_invalid_weight": 39,
+        "unknown": 18
+      }
+    },
+    "dopamine": {
+      "raw_drug_rows": 545,
+      "comparison": {
+        "rows": 217,
+        "within_float_tolerance": 217,
+        "different": 0,
+        "max_absolute_difference": 8.3923339744274e-07,
+        "median_absolute_difference": 0
+      },
+      "excluded_rows_by_reason_or_unit": {
+        "unknown": 136,
+        "ml/hr": 192
+      }
+    },
+    "dobutamine": {
+      "raw_drug_rows": 645,
+      "comparison": {
+        "rows": 325,
+        "within_float_tolerance": 325,
+        "different": 0,
+        "max_absolute_difference": 1.54876708791107e-07,
+        "median_absolute_difference": 0
+      },
+      "excluded_rows_by_reason_or_unit": {
+        "unknown": 244,
+        "ml/hr": 76
+      }
+    },
+    "phenylephrine": {
+      "raw_drug_rows": 888,
+      "comparison": {
+        "rows": 105,
+        "within_float_tolerance": 105,
+        "different": 0,
+        "max_absolute_difference": 4.76837158647214e-08,
+        "median_absolute_difference": 0
+      },
+      "excluded_rows_by_reason_or_unit": {
+        "missing_or_invalid_weight": 235,
+        "ml/hr": 469,
+        "unknown": 79
+      }
+    },
+    "vasopressin": {
+      "raw_drug_rows": 717,
+      "comparison": {
+        "rows": 262,
+        "within_float_tolerance": 262,
+        "different": 0,
+        "max_absolute_difference": 5.9604644553346e-09,
+        "median_absolute_difference": 8.94069672463527e-10
+      },
+      "excluded_rows_by_reason_or_unit": {
+        "ml/hr": 342,
+        "unknown": 113
+      }
+    }
+  },
+  "mimic_code": {
+    "commit": "303d26c623dcc9c49cc0f204468d4acc2f063797",
+    "execution": "Unmodified DuckDB SQL",
+    "mimiciii_echo_weights": "No notes in demo; empty echo_data input",
+    "drugs": {
+      "norepinephrine": {
+        "mimic_iv_intervals": 947,
+        "mimic_iii_intervals": 652,
+        "mimic_iii_interval_minutes": 97209,
+        "iv_settings_vs_sql": {
+          "rows": 947,
+          "within_float_tolerance": 54,
+          "different": 893,
+          "max_absolute_difference": 0.0215457058511674,
+          "median_absolute_difference": 0.00020556477829814,
+          "comparison_unit": "mcg/kg/min"
+        },
+        "iii_mv_settings_vs_sql": {
+          "rows": 297,
+          "within_float_tolerance": 26,
+          "different": 271,
+          "max_absolute_difference": 0.0147483571,
+          "median_absolute_difference": 4.93880000000113e-05,
+          "comparison_unit": "mcg/kg/min"
+        }
+      },
+      "epinephrine": {
+        "mimic_iv_intervals": 36,
+        "mimic_iii_intervals": 1,
+        "mimic_iii_interval_minutes": 10,
+        "iv_settings_vs_sql": {
+          "rows": 36,
+          "within_float_tolerance": 0,
+          "different": 36,
+          "max_absolute_difference": 0.000428176485002041,
+          "median_absolute_difference": 0.000225711508392124,
+          "comparison_unit": "mcg/kg/min"
+        },
+        "iii_mv_settings_vs_sql": {
+          "rows": 0,
+          "within_float_tolerance": 0,
+          "different": 0,
+          "max_absolute_difference": null,
+          "median_absolute_difference": null,
+          "comparison_unit": "mcg/kg/min"
+        }
+      },
+      "dopamine": {
+        "mimic_iv_intervals": 28,
+        "mimic_iii_intervals": 144,
+        "mimic_iii_interval_minutes": 30209,
+        "iv_settings_vs_sql": {
+          "rows": 28,
+          "within_float_tolerance": 1,
+          "different": 27,
+          "max_absolute_difference": 0.00627934373915195,
+          "median_absolute_difference": 0.00085681676864624,
+          "comparison_unit": "mcg/kg/min"
+        },
+        "iii_mv_settings_vs_sql": {
+          "rows": 66,
+          "within_float_tolerance": 0,
+          "different": 66,
+          "max_absolute_difference": 0.0225857692,
+          "median_absolute_difference": 0.00650663460000001,
+          "comparison_unit": "mcg/kg/min"
+        }
+      },
+      "dobutamine": {
+        "mimic_iv_intervals": 44,
+        "mimic_iii_intervals": 17,
+        "mimic_iii_interval_minutes": 2270,
+        "iv_settings_vs_sql": {
+          "rows": 44,
+          "within_float_tolerance": 2,
+          "different": 42,
+          "max_absolute_difference": 0.0185773149132729,
+          "median_absolute_difference": 0.00163219776004553,
+          "comparison_unit": "mcg/kg/min"
+        },
+        "iii_mv_settings_vs_sql": {
+          "rows": 13,
+          "within_float_tolerance": 0,
+          "different": 13,
+          "max_absolute_difference": 0.00329721599999999,
+          "median_absolute_difference": 0.000788076900000156,
+          "comparison_unit": "mcg/kg/min"
+        }
+      },
+      "phenylephrine": {
+        "mimic_iv_intervals": 625,
+        "mimic_iii_intervals": 296,
+        "mimic_iii_interval_minutes": 35386,
+        "iv_settings_vs_sql": {
+          "rows": 625,
+          "within_float_tolerance": 18,
+          "different": 607,
+          "max_absolute_difference": 0.377837896347046,
+          "median_absolute_difference": 0.00141307525336742,
+          "comparison_unit": "mcg/kg/min"
+        },
+        "iii_mv_settings_vs_sql": {
+          "rows": 56,
+          "within_float_tolerance": 2,
+          "different": 54,
+          "max_absolute_difference": 0.0288736654999999,
+          "median_absolute_difference": 0.00216259425000009,
+          "comparison_unit": "mcg/kg/min"
+        }
+      },
+      "vasopressin": {
+        "mimic_iv_intervals": 55,
+        "mimic_iii_intervals": 24,
+        "mimic_iii_interval_minutes": 21519,
+        "iv_settings_vs_sql": {
+          "rows": 55,
+          "within_float_tolerance": 45,
+          "different": 10,
+          "max_absolute_difference": 0.000100251038869223,
+          "median_absolute_difference": 3.97364298410086e-09,
+          "comparison_unit": "units/min"
+        },
+        "iii_mv_settings_vs_sql": {
+          "rows": 11,
+          "within_float_tolerance": 10,
+          "different": 1,
+          "max_absolute_difference": 8.00100000000054e-06,
+          "median_absolute_difference": 2.66666667220194e-09,
+          "comparison_unit": "units/min"
+        }
+      }
+    }
+  },
+  "ricu": {
+    "commit": "c0efac720dbe72caaf63b361b6978a24383835bf",
+    "execution": "Unmodified mimic_rate_mv/mimic_rate_cv in R; one-minute interval",
+    "scope": "Interval callbacks only. Raw native units retained. Dictionary unit/range filtering, weight imputation and load_concepts aggregation are not run.",
+    "results": {
+      "mimic-iv-demo-norepinephrine-inputevents-0": {
+        "input_rows": 947,
+        "expanded_rows": 96860,
+        "represented_source_rows": 947,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iv-demo-epinephrine-inputevents-0": {
+        "input_rows": 36,
+        "expanded_rows": 3402,
+        "represented_source_rows": 36,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iv-demo-dopamine-inputevents-0": {
+        "input_rows": 28,
+        "expanded_rows": 9354,
+        "represented_source_rows": 28,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iv-demo-dobutamine-inputevents-0": {
+        "input_rows": 44,
+        "expanded_rows": 19398,
+        "represented_source_rows": 44,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iv-demo-phenylephrine-inputevents-0": {
+        "input_rows": 625,
+        "expanded_rows": 57588,
+        "represented_source_rows": 625,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iv-demo-vasopressin-inputevents-0": {
+        "input_rows": 55,
+        "expanded_rows": 37149,
+        "represented_source_rows": 55,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "combine_callbacks(\n               convert_unit(binary_op(`/`, 60), 'units/min', 'units/hour'),\n               mimic_rate_mv\n             )"
+      },
+      "mimic-iii-demo-norepinephrine-inputevents_cv-0": {
+        "input_rows": 1149,
+        "expanded_rows": 51222,
+        "represented_source_rows": 1149,
+        "callback": "mimic_rate_cv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_cv"
+      },
+      "mimic-iii-demo-epinephrine-inputevents_cv-0": {
+        "input_rows": 2,
+        "expanded_rows": 70,
+        "represented_source_rows": 2,
+        "callback": "mimic_rate_cv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_cv"
+      },
+      "mimic-iii-demo-dopamine-inputevents_cv-0": {
+        "input_rows": 575,
+        "expanded_rows": 23445,
+        "represented_source_rows": 575,
+        "callback": "mimic_rate_cv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_cv"
+      },
+      "mimic-iii-demo-dobutamine-inputevents_cv-0": {
+        "input_rows": 10,
+        "expanded_rows": 340,
+        "represented_source_rows": 10,
+        "callback": "mimic_rate_cv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_cv"
+      },
+      "mimic-iii-demo-phenylephrine-inputevents_cv-0": {
+        "input_rows": 0,
+        "expanded_rows": 0
+      },
+      "mimic-iii-demo-phenylephrine-inputevents_cv-1": {
+        "input_rows": 796,
+        "expanded_rows": 48230,
+        "represented_source_rows": 796,
+        "callback": "mimic_rate_cv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_cv"
+      },
+      "mimic-iii-demo-vasopressin-inputevents_cv-0": {
+        "input_rows": 187,
+        "expanded_rows": 8535,
+        "represented_source_rows": 187,
+        "callback": "mimic_rate_cv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "combine_callbacks(\n               convert_unit(binary_op(`/`, 60), 'units/min', 'Uhr'),\n               mimic_rate_cv\n             )"
+      },
+      "mimic-iii-demo-norepinephrine-inputevents_mv-0": {
+        "input_rows": 297,
+        "expanded_rows": 51589,
+        "represented_source_rows": 297,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iii-demo-epinephrine-inputevents_mv-0": {
+        "input_rows": 0,
+        "expanded_rows": 0
+      },
+      "mimic-iii-demo-dopamine-inputevents_mv-0": {
+        "input_rows": 66,
+        "expanded_rows": 12610,
+        "represented_source_rows": 66,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iii-demo-dobutamine-inputevents_mv-0": {
+        "input_rows": 13,
+        "expanded_rows": 2048,
+        "represented_source_rows": 13,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iii-demo-phenylephrine-inputevents_mv-0": {
+        "input_rows": 56,
+        "expanded_rows": 5397,
+        "represented_source_rows": 56,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "mimic_rate_mv"
+      },
+      "mimic-iii-demo-vasopressin-inputevents_mv-0": {
+        "input_rows": 11,
+        "expanded_rows": 13280,
+        "represented_source_rows": 11,
+        "callback": "mimic_rate_mv",
+        "all_expanded_values_equal_source": true,
+        "dictionary_callback": "combine_callbacks(\n               convert_unit(binary_op(`/`, 60), 'units/min', 'units/hour'),\n               mimic_rate_mv\n             )"
+      }
+    }
+  },
+  "not_demo_validated": [
+    "HiRID cumulative-dose differences and stop flags",
+    "SICdb administration rates and units",
+    "AUMCdb: no mapping; numeric administration fields unavailable in current OMOP extraction"
+  ]
+}
