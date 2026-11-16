@@ -847,3 +847,41 @@ def test_sofa_sums_the_aumcdb_components(tmp_path: Path) -> None:
     )
 
     assert_rows(outputs["sofa"], [{"time": TIME, "numeric_value": 11}], context="sofa")
+
+
+def test_sepsis3_needs_a_sofa_rise_of_two_around_a_suspected_infection(tmp_path: Path) -> None:
+    """Suspected infection and the SOFA total from AUMCdb inputs give Sepsis-3.
+
+    Both subjects get vancomycin at 0 h and a blood culture 2 h later: a suspected infection at
+    0 h (docs/user_guide/concepts.md). Platelets of 200 x 10^3/uL score 0 points 10 h before. At
+    5 h, subject 1's platelets of 40 score 3, a rise of 3 within the -48/+24 h window: Sepsis-3
+    at 5 h (Singer et al. 2016, a rise of at least 2). Subject 2's platelets of 120 score 1, a rise
+    of 1: no Sepsis-3.
+    """
+
+    def row(subject: int, hours: float, item: str, value: float | None = None) -> dict[str, Any]:
+        return {"subject_id": subject, "time": at(hours), "code": item, "numeric_value": value}
+
+    platelets = code("MEASUREMENT", 3007461)
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=[*SOFA, "antibiotics", "body_fluid_sampling", "suspected_infection", "sepsis3"],
+        sources={
+            "drug_exposure/DRUG_START": [row(subject, 0, code("DRUG_START", 43295826)) for subject in (1, 2)],
+            "measurement/MEASUREMENT": [
+                *[row(subject, 2, code("MEASUREMENT", 4107893, "Bloedkweken afnemen")) for subject in (1, 2)],
+                *[row(subject, -10, platelets, 200.0) for subject in (1, 2)],
+                row(1, 5, platelets, 40.0),
+                row(2, 5, platelets, 120.0),
+            ],
+        },
+    )
+
+    assert_rows(
+        outputs["suspected_infection"],
+        [{"subject_id": subject, "time": at(0)} for subject in (1, 2)],
+        context="suspected_infection",
+    )
+    assert_rows(outputs["sepsis3"], [{"subject_id": 1, "time": at(5)}], context="sepsis3")

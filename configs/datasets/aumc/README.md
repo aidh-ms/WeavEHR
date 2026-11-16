@@ -42,8 +42,8 @@ for that clinical concept.
 Currently mapped (`simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
 respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. The
-ventilation windows, GCS, suspected infection, the vasopressor rates and SOFA
-are described below.
+ventilation windows, GCS, suspected infection, the vasopressor rates, SOFA
+and Sepsis-3 are described below.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -178,6 +178,14 @@ FiO2 has no plausibility limits here or for the other datasets. On AUMCdb its
 values reach 2,393,872 (95th percentile 65). A value above 100 lowers
 PaO2/FiO2 and can raise the respiratory score; ricu drops FiO2 outside 21 to
 100 %.
+
+#### Sepsis-3
+
+`sepsis3` pairs `suspected_infection` with `sofa` as for MIMIC-IV: a SOFA rise
+of at least 2 points over the lowest score so far in the window from 48 hours
+before to 24 hours after a suspected infection. It inherits the open points of
+its inputs: the SDD cultures and cefotaxime in suspected infection, and the
+FiO2 limits in SOFA.
 
 ### Validation against ricu
 
