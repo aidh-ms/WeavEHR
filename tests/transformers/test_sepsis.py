@@ -118,6 +118,41 @@ def test_empty_infection_input_is_not_a_case(tmp_path: Path, empty: str) -> None
     assert onsets(make(AntibioticsWithCultureTransformer).transform(inputs)) == []
 
 
+def cultures(*rows: tuple[int, float, str]) -> pl.LazyFrame:
+    """body_fluid_sampling markers (subject, hour, code) with the level in their code."""
+    return pl.LazyFrame(
+        {
+            "subject_id": [row[0] for row in rows],
+            "time": [at(row[1]) for row in rows],
+            "code": [row[2] for row in rows],
+            "numeric_value": [1.0] * len(rows),
+        },
+        schema={"subject_id": pl.Int64, "time": pl.Datetime("us"), "code": pl.String, "numeric_value": pl.Float32},
+    )
+
+
+def test_sampling_levels_keep_only_the_named_culture_levels() -> None:
+    """Subject 1's screening culture and subject 3's unclassified one pair only without ``sampling_levels``."""
+    inputs = {
+        "antibiotics": events((1, 0, 1), (2, 0, 1), (3, 0, 1)),
+        "body_fluid_sampling": cultures(
+            (1, 1, "body_fluid_sampling//screening"),
+            (2, 1, "body_fluid_sampling//diagnostic"),
+            (3, 1, "body_fluid_sampling"),
+        ),
+    }
+    every = make(AntibioticsWithCultureTransformer).transform(inputs)
+    assert onsets(every) == [(1, at(0), 1.0), (2, at(0), 1.0), (3, at(0), 1.0)]
+    diagnostic = make(AntibioticsWithCultureTransformer, sampling_levels=["diagnostic"]).transform(inputs)
+    assert onsets(diagnostic) == [(2, at(0), 1.0)]
+
+
+@pytest.mark.parametrize("levels", [[], "diagnostic", [""], [1]])
+def test_invalid_sampling_levels_fail_at_construction(levels: Any) -> None:
+    with pytest.raises(ValueError, match="sampling_levels"):
+        make(AntibioticsWithCultureTransformer, sampling_levels=levels)
+
+
 def treatments(*rows: tuple[int, float, float | None]) -> pl.LazyFrame:
     """Treatment starts and harmonised coverage ends, as in concept output."""
     return events(*[(subject, start, 1) for subject, start, _ in rows]).with_columns(

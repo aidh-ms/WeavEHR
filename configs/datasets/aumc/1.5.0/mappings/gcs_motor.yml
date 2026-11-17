@@ -1,6 +1,15 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3008223 = Glasgow coma score motor
-#   3026549 = Glasgow coma score motor at First encounter
+#   3008223 = Glasgow coma score motor                     (item 6734)
+#   3026549 = Glasgow coma score motor at First encounter  (item 13072)
+# GCS items are list items: AMSTEL leaves value_as_number empty and stores the
+# answer as a LOINC value_as_concept_id (the Dutch label is in text_value). The
+# score follows ricu's mgcs labels; both items share these answer concepts:
+#   45880468 = Obeys commands (Volgt verbale commando's op, Voert opdrachten uit)   -> 6
+#   45880467 = Localizing pain (Localiseert pijn, Localiseren pijn)                 -> 5
+#   45882047 = Withdrawal from pain (Spastische reactie (terugtrekken), Terugtrekken bij pijn) -> 4
+#   45879885 = Flexion to pain (Decortatie reflex (abnormaal buigen), Abnormaal buigen bij pijn) -> 3
+#   45878993 = Extension to pain (Strekken, Strekken op pijn)                       -> 2
+#   45878992 = No motor response (Geen reactie)                                     -> 1
 type: simple
 mappings:
   - pattern:
@@ -8,5 +17,13 @@ mappings:
       event: MEASUREMENT
       code: "^(3008223|3026549)(//.*)?$"
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: >-
+        replace(value_as_concept_id == 45880468, 6,
+        replace(value_as_concept_id == 45880467, 5,
+        replace(value_as_concept_id == 45882047, 4,
+        replace(value_as_concept_id == 45879885, 3,
+        replace(value_as_concept_id == 45878993, 2,
+        replace(value_as_concept_id == 45878992, 1, None))))))
       text_value: col(text_value)
+    filters:
+      - drop_na(numeric_value)

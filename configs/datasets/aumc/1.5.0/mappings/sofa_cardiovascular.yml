@@ -1,0 +1,14 @@
+# The AUMCdb rate segments are linked by drug_exposure_id; every segment has a
+# recorded stop, so pressor_window only bounds a segment that lacks one.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaCardiovascularTransformer
+concepts:
+  - mean_arterial_pressure.1.0.0
+  - dopamine_rate.1.0.0
+  - dobutamine_rate.1.0.0
+  - epinephrine_rate.1.0.0
+  - norepinephrine_rate.1.0.0
+kwargs:
+  window: 1h
+  pressor_window: 48h
+  pressor_id_column: drug_exposure_id

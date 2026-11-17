@@ -97,6 +97,13 @@ The corresponding eICU mappings preserve only `stay_id`. Their
 records, so these mappings do not invent an infusion identifier. The cardiovascular
 SOFA consumer applies the alignment and expiry policy described below.
 
+The AUMCdb mappings are `derived`: the OMOP export has no rate field, so they read
+the dose rate from the text in `drug_exposure.sig` and divide a rate not per kg by
+the admission weight (`patient_weight`, joined on `stay_id`). Each `drug_exposure`
+row is one rate segment; its start maps to the rate and its end to zero, both
+keeping `stay_id` and `drug_exposure_id`, which identifies the segment because the
+export drops the source order ID. See the AUMCdb README.
+
 ### Derived concepts
 
 Derived concepts are computed **from other concepts** rather than from raw events. WeavEHR resolves the dependency graph automatically (topological ordering), so derived concepts can build on other derived concepts.
@@ -208,8 +215,12 @@ MIMIC-IV maps verbal item 223900 to 1 for `No Response-ETT`, including entries
 without a numeric verbal value, and to 0 for other numeric verbal assessments.
 Other null-valued entries produce no flag. `gcs_verbal` keeps the original
 numeric value and text, including verbal 1 or null. MIMIC-IV 3.1 and the 2.2
-demo inherit this mapping. No correction mapping is currently supplied for
-eICU; RASS and ventilation status are not interpreted by `GcsTransformer`.
+demo inherit this mapping. AUMCdb maps the verbal answer "Geïntubeerd" to 1
+and every verbal score to 0; there, `gcs_eye`, `gcs_motor` and `gcs_verbal`
+score the list answers from their OMOP answer concepts, because the OMOP
+export carries no numeric GCS value. No correction mapping is currently
+supplied for eICU; RASS and ventilation status are not interpreted by
+`GcsTransformer`.
 
 Only numeric GCS components or recorded totals generate assessments. Flags
 and expiry alone create no assessment; they take effect at the next numeric
@@ -333,6 +344,13 @@ markers within a stay is 1.0 hours, the 95th percentile is 4.9 hours, and 3.5% o
 20,240 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
 their procedure episodes are linked by `orderid`.
 
+The AUMCdb mappings select ricu's `mech_vent` process items: Beademen and
+Tracheostoma (invasive) and Beademen non-invasief (noninvasive), each record
+with its own start and stop. The markers carry `record_id`, the record's
+`procedure_occurrence_id` or `device_exposure_id`, and the AUMCdb mapping
+sets `ventilation_id_column: record_id` with no fallback expiry, as ricu
+uses these windows as they are. See the AUMCdb README.
+
 ### Cardiovascular SOFA
 
 `sofa_cardiovascular` reassesses at every MAP or pressor input event, including
@@ -341,7 +359,8 @@ worst MAP in that hour. The `window` mapping argument controls this lookback.
 
 Pressor rates have a separate `pressor_window` timeout. Within each dataset,
 patient, stay and drug, native `linkorderid` values identify independent
-infusions across rate changes. A zero stops only its matching infusion. A
+infusions across rate changes; `kwargs.pressor_id_column` names another
+identifier column (AUMCdb uses `drug_exposure_id`, one per rate segment). A zero stops only its matching infusion. A
 subsequent positive rate restarts it; a positive rate at the same timestamp as
 a zero takes precedence. Concurrent infusions contribute their **maximum rate**,
 not their sum, following the overlap aggregation in
@@ -374,6 +393,7 @@ distributions**, not validated as clinical cutoffs:
 | --- | --- | --- | --- |
 | MIMIC-IV 2.2 | `1h` | `48h` | Among 1,055 mapped rate segments, the longest was 31.9 h; the longest reconstructed linked start/stop episode was 40.57 h. The fallback rounds above both observed maxima. |
 | eICU-CRD 2.0 | `1h` | `6h` | Among 666 gaps after positive mapped rate observations, the median was 1 h and the 95th percentile was 5.99 h. Thirty-two gaps (4.8%) exceeded 6 h. |
+| AUMCdb 1.5.0 | `1h` | `48h` | Not measured (no AUMCdb data was available). Every rate segment carries its recorded stop, which ends it regardless of the timeout; the MIMIC-IV value only bounds a segment without one. |
 
 The MIMIC analysis used
 [`inputevents.csv.gz` from demo 2.2](https://physionet.org/files/mimic-iv-demo/2.2/icu/inputevents.csv.gz),
@@ -401,13 +421,22 @@ validation and assessment on representative data.
 
 `suspected_infection` is the shared output concept. Each dataset's
 `suspected_infection.yml` selects its evidence rule: antibiotic/culture pairing
-for MIMIC-IV, or sustained antibiotic treatment for eICU.
+for MIMIC-IV and AUMCdb, or sustained antibiotic treatment for eICU.
 
 `AntibioticsWithCultureTransformer` pairs antibiotic treatment with body-fluid sampling:
 sampling follows antibiotics within 24 hours, or antibiotics follow sampling
 within 72 hours. The earlier event dates the suspicion. Both boundaries are
 inclusive; neither positive culture results nor a sustained antibiotic course
 are required.
+
+`body_fluid_sampling` can tell cultures taken on suspicion of infection
+(`diagnostic`) from cultures taken by protocol (`screening`, e.g. surveillance
+or research cultures); a mapping that does not tell them apart sets no level.
+`kwargs.sampling_levels` keeps only the cultures with one of the listed levels;
+by default every culture counts, as in ricu. The AUMCdb mapping sets
+`sampling_levels: [diagnostic]`, leaving out its selective digestive
+decontamination (SDD) surveillance, MRSA screening and research cultures; see
+the AUMCdb README.
 
 `sepsis3` assesses **every** suspected-infection window independently. Within
 the inclusive interval from 48 hours before suspicion to 24 hours after it,
@@ -436,6 +465,14 @@ without a recorded route or drug type do not qualify. Drug-name exclusions inspe
 the original prescription code. Prescription markers use the prescribed treatment
 start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo 2.2 inherit
 these mappings.
+
+The AUMCdb antibiotic mapping selects ricu's aumc antibiotic items by their OMOP
+drug concepts, adds the antibacterials of the MIMIC-IV list that ricu lacks for
+AUMCdb (meropenem, imipenem, ceftazidime, clarithromycin, chloramphenicol,
+nitrofurantoin) and, like the MIMIC-IV mapping, excludes eye and skin products.
+Markers use the administration start. Body-fluid sampling is ricu's culture
+orders, dated at their registration. As in ricu, SDD surveillance cultures and the
+intravenous cefotaxime of the SDD regimen count; see the AUMCdb README.
 
 The eICU antibiotic inputs follow the drug selection and binary markers in
 [YAIB-cohorts at 74ac699](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/configs/medications/concept-dict.json).

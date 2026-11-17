@@ -1,0 +1,37 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- antibiotic drug_concept_ids. AMSTEL maps
+# each drugitems itemid/ordercategory to a product, so one antibiotic can have
+# several concept IDs; no other drug item shares one of them. Per drug:
+#   amikacin 36258242; amoxicillin 40009507, 41114247;
+#   amoxicillin/clavulanic acid 19133021, 21091196; azithromycin 40013069;
+#   aztreonam 40740535; benzylpenicillin 40072606; cefazolin 40736877;
+#   cefotaxime 44125812; ceftazidime 40730323; ceftriaxone 40731671;
+#   cefuroxime 40020952; chloramphenicol 40023477; ciprofloxacin 21088706, 40737711;
+#   clarithromycin 43260683; clindamycin 35154887, 41129017;
+#   co-trimoxazole 40902269, 40933447; daptomycin 40736859;
+#   doxycycline 43266337, 44125439; erythromycin 21071768, 36783613;
+#   flucloxacillin 40040317; gentamicin 44086327; imipenem 43023020;
+#   levofloxacin 21025604, 36886030; linezolid 36896811, 40058965;
+#   meropenem 36881808, 40928582; metronidazole 40062625, 42479695, 42620284;
+#   moxifloxacin 1716903; nitrofurantoin 920293; norfloxacin 1721543;
+#   piperacillin 40077149; rifampicin 21102895, 40754936; tetracycline 1836948;
+#   tobramycin 21023112, 36257100; vancomycin 43295826
+#
+# The drugs are ricu's aumc abx items (34 itemids; ricu's list also holds 34
+# numbers that are the items' record counts, not itemids), extended like the
+# MIMIC-IV mapping by the antibacterials of its drug list that ricu's aumc list
+# lacks: meropenem, imipenem, ceftazidime, clarithromycin, chloramphenicol and
+# nitrofurantoin. Like the MIMIC-IV mapping (after mimic-code), eye and skin
+# products are excluded, which ricu keeps: tobramycin and dexamethasone/gentamicin
+# eye ointment, ofloxacin eye drops and silver sulfadiazine cream. Selective
+# digestive decontamination (SDD) products are not listed, as in ricu; the
+# intravenous cefotaxime of the SDD regimen cannot be told apart and is kept.
+# The marker is dated at the administration start.
+type: simple
+mappings:
+  - pattern:
+      table: drug_exposure
+      event: DRUG_START
+      code: ^(920293|1716903|1721543|1836948|19133021|21023112|21025604|21071768|21088706|21091196|21102895|35154887|36257100|36258242|36783613|36881808|36886030|36896811|40009507|40013069|40020952|40023477|40040317|40058965|40062625|40072606|40077149|40730323|40731671|40736859|40736877|40737711|40740535|40754936|40902269|40928582|40933447|41114247|41129017|42479695|42620284|43023020|43260683|43266337|43295826|44086327|44125439|44125812)//
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
