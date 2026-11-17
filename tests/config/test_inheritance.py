@@ -129,6 +129,41 @@ class TestEffectiveConfigs:
         version_dir = make_version(tmp_path, "db", "1.0", {"t": "path: t.csv\n"})
         assert resolve_effective_configs(version_dir / "tables") == {"t": {"path": "t.csv"}}
 
+    @pytest.mark.parametrize(
+        ("base", "override", "expected"),
+        [
+            pytest.param("type: a\n---\ntype: b\n", None, [{"type": "a"}, {"type": "b"}], id="stream-inherited"),
+            pytest.param("type: a\n---\ntype: b\n", "type: c\n", {"type": "c"}, id="single-replaces-stream"),
+            pytest.param(
+                "type: a\nkeep: 1\n",
+                "type: b\n---\ntype: c\n",
+                [{"type": "b"}, {"type": "c"}],
+                id="stream-replaces-single",
+            ),
+            pytest.param(
+                "type: a\n---\ntype: b\n",
+                "type: c\n---\ntype: d\n",
+                [{"type": "c"}, {"type": "d"}],
+                id="stream-replaces-stream",
+            ),
+            pytest.param("type: a\n---\ntype: b\n", "deleted: true\n", None, id="tombstone-deletes-stream"),
+            pytest.param("type: a\nkeep: 1\n", "---\ntype: b\n", {"type": "b", "keep": 1}, id="single-deep-merges"),
+            pytest.param("type: a\nkeep: 1\n", "", {"type": "a", "keep": 1}, id="empty-file-keeps-base"),
+            pytest.param("type: a\n", "type: b\n---\n", [{"type": "b"}, None], id="invalid-document-retained"),
+        ],
+    )
+    def test_document_stream_inheritance(
+        self, tmp_path: Path, base: str, override: str | None, expected: object
+    ) -> None:
+        """Multiple documents replace the entire inherited file; single documents still deep-merge."""
+        make_version(tmp_path, "db", "1.0", {"m": base})
+        version_dir = make_version(
+            tmp_path, "db-demo", "1.0", {} if override is None else {"m": override}, extends=("db", "1.0")
+        )
+
+        assert resolve_effective_config(version_dir / "tables", "m") == expected
+        assert resolve_effective_configs(version_dir / "tables").get("m") == expected
+
 
 class TestEffectiveConfig:
     def test_matches_resolving_the_whole_directory(self, tmp_path: Path) -> None:
@@ -190,3 +225,13 @@ class TestLoadConfigsWithInheritance:
         # the warning names the config and the validation error
         assert "'bad'" in caplog.text
         assert "columns" in caplog.text and "valid list" in caplog.text
+
+    def test_inherited_list_table_config_is_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """A table config must be a mapping, not a YAML sequence."""
+        make_version(tmp_path, "db", "1.0", {"listed": "- path: a.csv\n", "good": "path: g.csv\n"})
+        version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
+
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            configs = load_configs(version_dir / "tables", TableConfig)
+        assert [c.name for c in configs] == ["good"]
+        assert "'listed'" in caplog.text and "not a mapping" in caplog.text

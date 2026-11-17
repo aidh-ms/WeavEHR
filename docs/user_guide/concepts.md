@@ -47,7 +47,7 @@ During processing, each row is annotated with `dataset`, `version`, `table`, and
 
 ## Concept mappings
 
-A mapping file declares its `type` — `simple`, `derived`, or `complex`.
+A mapping file declares its `type` — `simple`, `derived`, or `complex`. A file may also hold several YAML documents separated by `---`, whose mappings are [combined](#combining-mappings).
 
 ### Simple concepts
 
@@ -74,7 +74,7 @@ mappings:
 - `level` (optional) is one of the concept's `levels`, written as a literal, not an expression. It applies to every row of the mapping; source values with different levels need separate mappings, each selecting its rows with `pattern.code` or `filters`. A level that the concept doesn't declare skips that dataset's mapping with a warning; the other datasets keep the concept.
 - `filters` see the mapped timestamps, values and extensions while `code` still contains the source extraction code. After filtering, `code` is replaced with the harmonised concept code (`<name>//<unit>`, `<name>`, or `<name>//<level>`).
 
-A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions.
+A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions. To combine simple mappings with derived or complex ones, place each in its own YAML document in the mapping file (see [Combining mappings](#combining-mappings)).
 
 For example, the MIMIC-IV mappings for the four cardiovascular SOFA pressors
 preserve their source metadata on both infusion starts and retained ends:
@@ -180,6 +180,44 @@ class VentilationWindows(BaseConceptTransformer):
 `dependencies` holds each concept dependency's output under the concept name (`ventilation_start`) and each `events` input under its own name (`ventilator_mode`). An `events` input is selected by a pattern as in a simple mapping and holds the same columns as a `pattern` table of a derived concept, so a transformer can read source details that no concept carries, such as units or order identifiers. An `events` name must differ from the name of every concept in `concepts`, whether or not that concept has output (compared case-insensitively, like identifiers); otherwise the mapping is invalid and skipped with a warning when it is loaded. Without any selected event file, an `events` input is handled like a dependency without output: transformers with `strict_dependencies` fail, others receive it as absent.
 
 Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
+
+### Combining mappings
+
+When one mapping cannot express a concept in a dataset, for example because some values are recorded directly and others must be calculated, the mapping file contains several YAML documents separated by `---`. Each document follows the syntax above, including its `type`, and their outputs are combined (a union of rows):
+
+```yaml
+---
+type: simple                      # measured anion gap
+mappings:
+  - pattern:
+      table: labevents
+      event: LAB
+      code: ^(?:LAB//)?(?:50868)(?:$|//)
+    columns:
+      numeric_value: col(numeric_value)
+---
+type: derived                     # calculated from its components
+table:
+  concept: sodium.1.0.0
+  columns: [subject_id, time, numeric_value, dataset, table]
+join:
+  - concept: chloride.1.0.0
+    columns: [subject_id, time, numeric_value]
+    how: inner
+    suffix: _chloride
+  - concept: bicarbonate.1.0.0
+    columns: [subject_id, time, numeric_value]
+    how: inner
+    suffix: _bicarbonate
+event:
+  numeric_value: col(numeric_value) - col(numeric_value_chloride) - col(numeric_value_bicarbonate)
+```
+
+- Each document runs as if it were the dataset's only mapping; their rows are concatenated, without deduplication. A column that only some documents produce is null in the others' rows.
+- The concept waits for the dependencies of all its documents, and dependent concepts see the combined output.
+- Every document must contain a mapping. An empty document, a YAML list, an invalid mapping or an undeclared level skips the dataset's whole mapping, with a warning naming the document (`document 2: ...`).
+- The first `---` is optional. Existing single-document files continue to work unchanged.
+- With [inheritance](versioning.md), multiple documents replace the inherited file as a whole. A single document overriding another single document still deep-merges. Use a standalone `deleted: true` document to remove an inherited file.
 
 ### GCS
 
@@ -661,5 +699,5 @@ with the standard MEDS columns (`subject_id`, `time`, `code`, `numeric_value`, `
 ## Adding a new concept
 
 1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, and unit if it has one).
-2. For each dataset, find the relevant source codes — `datasets/extraction/metadata/codes.parquet` is your friend — and write a mapping in `configs/datasets/<dataset>/<version>/mappings/<your_concept>.yml`.
+2. For each dataset, find the relevant source codes — `datasets/extraction/metadata/codes.parquet` is your friend — and write a mapping (or several mapping documents separated by `---`) in `configs/datasets/<dataset>/<version>/mappings/<your_concept>.yml`.
 3. Re-run the concept step (with `overwrite: true`, or `includes` limited to your concept while iterating).

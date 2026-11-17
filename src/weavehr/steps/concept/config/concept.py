@@ -5,7 +5,7 @@ import yaml
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, field_validator, model_validator
 
 from weavehr.config.base import BaseConfig
-from weavehr.config.inheritance import has_extends, resolve_effective_config
+from weavehr.config.inheritance import has_extends, load_config_file, resolve_effective_config
 from weavehr.logging import logger
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
@@ -25,6 +25,43 @@ def _undeclared_levels(dataset_concept: DatasetConceptConfigUnion, levels: list[
     else:
         return []
     return [level for level in mapping_levels if level is not None and level not in levels]
+
+
+def _validate_dataset_concepts(
+    data: object, identity: dict[str, str], levels: list[str]
+) -> list[DatasetConceptConfigUnion]:
+    """Validate the contents of a dataset's mapping file for one concept.
+
+    Args:
+        data: One mapping, or a list of YAML documents that each hold a mapping
+        identity: ``dataset``, ``version`` and ``name``, set on every mapping
+        levels: The concept's declared levels
+
+    Returns:
+        The dataset concepts, in file order
+
+    Raises:
+        ValueError: A document is not a mapping, is invalid or uses an undeclared level
+            (the message names its position in the document stream)
+    """
+    entries = data if isinstance(data, list) else [data]
+    if not entries:
+        raise ValueError("the list of mappings is empty")
+
+    adapter = TypeAdapter(DatasetConceptConfigUnion)
+    dataset_concepts = []
+    for index, entry in enumerate(entries, start=1):
+        where = f"document {index}: " if isinstance(data, list) else ""
+        if not isinstance(entry, dict):
+            raise ValueError(f"{where}expected a mapping, got {type(entry).__name__}")
+        try:
+            dataset_concept = adapter.validate_python({**entry, **identity})
+        except ValidationError as e:
+            raise ValueError(f"{where}{e}") from e
+        if undeclared := _undeclared_levels(dataset_concept, levels):
+            raise ValueError(f"{where}undeclared levels {undeclared}")
+        dataset_concepts.append(dataset_concept)
+    return dataset_concepts
 
 
 class ConceptLimits(BaseModel):
@@ -53,7 +90,7 @@ class ConceptConfig(BaseConfig):
             metadata only for complex concepts
         extension_columns: Dictionary of extension columns to include in the concept table
         limits: Configuration for concept limits
-        dataset_concepts: List of DatasetConceptConfig objects defining how to extract concept data per dataset
+        dataset_concepts: Dataset-specific mappings; a dataset version may have several
     """
 
     __weavehr_config_type__ = "concept"
@@ -68,7 +105,7 @@ class ConceptConfig(BaseConfig):
 
     dataset_concepts: list[DatasetConceptConfigUnion] = Field(
         default_factory=list,
-        description="List of dataset-specific concepts that this concept depends on (for dependent concepts).",
+        description="Dataset-specific mappings; a dataset version may have several.",
     )
 
     @field_validator("unit")
@@ -114,7 +151,8 @@ class ConceptConfig(BaseConfig):
 
         name = data.get("name")
         paths = dataset_paths or []
-        adapter = TypeAdapter(DatasetConceptConfigUnion)
+        # `kwargs` fill keys missing from the file only after this loop, so look up their levels here too.
+        levels = data.get("levels", kwargs.get("levels")) or []
         for path in paths:
             if has_extends(path):
                 # Resolve the dataset's inheritance chain; the mapping may be
@@ -126,32 +164,18 @@ class ConceptConfig(BaseConfig):
                 sub_file_path = path / f"{name}.yml"
                 if not sub_file_path.exists():
                     continue
-                with open(sub_file_path, "r") as f:
-                    sub_data = yaml.safe_load(f)
+                sub_data = load_config_file(sub_file_path)
 
+            # Identity always comes from the dataset directory itself,
+            # never from where an inherited file physically lives.
+            identity = {"dataset": path.parent.parent.name, "version": path.parent.name, "name": name}
             try:
-                # Identity always comes from the dataset directory itself,
-                # never from where an inherited file physically lives.
-                sub_data.update(
-                    {
-                        "dataset": path.parent.parent.name,
-                        "version": path.parent.name,
-                        "name": name,
-                    }
-                )
-
-                dataset_concept = adapter.validate_python(sub_data)
-            except ValidationError as e:
+                dataset_concepts = _validate_dataset_concepts(sub_data, identity, levels)
+            except ValueError as e:
+                # All or nothing: a dataset with one invalid mapping out of several would otherwise lose data silently.
                 logger.warning("failed to load dataset concept config for %s from %s: %s", name, path, e)
                 continue
-
-            # `kwargs` fill keys missing from the file only after this loop, so look up their levels here too.
-            if undeclared := _undeclared_levels(dataset_concept, data.get("levels", kwargs.get("levels")) or []):
-                logger.warning(
-                    "failed to load dataset concept config for %s from %s: undeclared levels %s", name, path, undeclared
-                )
-                continue
-            data.setdefault("dataset_concepts", []).append(dataset_concept)
+            data.setdefault("dataset_concepts", []).extend(dataset_concepts)
 
         for k, v in kwargs.items():
             if k not in data:
@@ -159,19 +183,16 @@ class ConceptConfig(BaseConfig):
 
         return cls(**data)
 
-    def get_dataset_concept(self, dataset_name: str, version: str) -> DatasetConceptConfigUnion | None:
-        """Get the dataset-specific concept configuration for a given dataset name.
+    def get_dataset_concepts(self, dataset_name: str, version: str) -> list[DatasetConceptConfigUnion]:
+        """Get the mappings of this concept for one dataset version.
 
         Args:
-            dataset_name: Name of the dataset to retrieve the concept configuration for
+            dataset_name: Name of the dataset to retrieve the mappings for
             version: Version of the dataset
         Returns:
-            The DatasetConceptConfig instance for the specified dataset, or None if not found
+            The dataset's mappings in file order; empty if the dataset version has none
         """
-        for dataset_concept in self.dataset_concepts:
-            if dataset_concept.dataset == dataset_name and dataset_concept.version == version:
-                return dataset_concept
-        return None
+        return [dc for dc in self.dataset_concepts if dc.dataset == dataset_name and dc.version == version]
 
     @model_validator(mode="after")
     def _validate_levels(self) -> "ConceptConfig":
