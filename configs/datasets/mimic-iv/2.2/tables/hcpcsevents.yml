@@ -67,3 +67,7 @@ events:
       extension:
         available_time: col(dischtime)
         seq_num: col(seq_num)
+        # Each hcpcsevents row has its own short description, while the long
+        # description from d_hcpcs is missing for many codes (then the code has
+        # no description part); keep the row's text as an extension column.
+        short_description: col(short_description)

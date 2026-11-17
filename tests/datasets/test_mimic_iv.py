@@ -14,7 +14,7 @@ that an item ID is in a mapping's pattern would only restate the YAML, so there 
 - Native extraction: synthetic rows written as the release ships them (gzip CSV, lower-case
   headers) and run through the shipped table configs: code assembly, death and age, optional
   admission events, culture times and results, order times, infusion durations and weights,
-  HCPCS dates, open ICU stays and ICD titles.
+  HCPCS, procedure and OMR dates, open ICU stays and their care units, and ICD titles.
 - Concept pipeline: a real concept step from prescription, infusion and culture rows to
   suspected infection and Sepsis-3.
 
@@ -503,6 +503,26 @@ def test_death_is_the_in_hospital_death_time_else_the_end_of_the_date_of_death(t
     )
 
 
+def test_the_earliest_of_several_in_hospital_death_times_is_the_death(tmp_path: Path) -> None:
+    """A subject can have a deathtime on more than one admission; the earliest counts, whatever the file's row order."""
+    patients = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="patients",
+        rows=[{"subject_id": 1, "gender": "F", "anchor_age": 50, "anchor_year": 2150, "dod": "2152-05-01"}],
+        joins={
+            "hosp/admissions.csv.gz": [
+                # The later deathtime comes first in the file.
+                {"subject_id": 1, "deathtime": "2152-05-01 08:00:00"},
+                {"subject_id": 1, "deathtime": "2152-03-04 15:30:00"},
+            ]
+        },
+    )
+
+    assert_rows(patients["MEDS_DEATH"], [{"subject_id": 1, "time": datetime(2152, 3, 4, 15, 30)}])
+
+
 def test_birth_is_anchor_age_years_before_the_anchor_year(tmp_path: Path) -> None:
     """``anchor_age`` is the patient's age in ``anchor_year``, so the birth year is their difference."""
     patients = extract_native(
@@ -822,6 +842,95 @@ def test_hcpcs_codes_are_dated_at_the_end_of_their_date_and_known_at_discharge(t
 
     assert_rows(hcpcs, [{"code": "HCPCS//93454//Coronary angiography", "available_time": at(4 * 24 + 12)}])
     assert_end_of_day(hcpcs["time"][0], date(2150, 1, 2), context="HCPCS chart date")
+    # The row's own short description is kept, as d_hcpcs lacks the long description of many codes.
+    assert hcpcs["short_description"].to_list() == ["Cardiovascular"]
+
+
+def test_procedures_are_dated_at_the_end_of_their_chart_date_and_known_at_discharge(tmp_path: Path) -> None:
+    """ICD procedures have a chart date only and are coded for the admission, so a discharge-day one is known earlier."""
+    title = "Extracorporeal circulation auxiliary to open heart surgery"
+    procedures = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="procedures_icd",
+        rows=[
+            {
+                "subject_id": 1,
+                "hadm_id": 100,
+                "seq_num": 1,
+                "chartdate": "2150-01-02",
+                "icd_code": "3961",
+                "icd_version": 9,
+            },
+            # Charted on the day of discharge, so its end-of-day time falls after the discharge time.
+            {
+                "subject_id": 1,
+                "hadm_id": 200,
+                "seq_num": 1,
+                "chartdate": "2151-03-01",
+                "icd_code": "3961",
+                "icd_version": 9,
+            },
+        ],
+        joins={
+            "hosp/d_icd_procedures.csv.gz": [{"icd_code": "3961", "icd_version": 9, "long_title": title}],
+            "hosp/admissions.csv.gz": [
+                {"hadm_id": 100, "dischtime": "2150-01-05 12:00:00"},
+                {"hadm_id": 200, "dischtime": "2151-03-01 09:30:00"},
+            ],
+        },
+    )["PROCEDURE"]
+
+    assert_rows(
+        procedures,
+        [
+            {"hadm_id": 100, "code": f"PROCEDURE//ICD//9//3961//{title}", "available_time": datetime(2150, 1, 5, 12)},
+            {
+                "hadm_id": 200,
+                "code": f"PROCEDURE//ICD//9//3961//{title}",
+                "available_time": datetime(2151, 3, 1, 9, 30),
+            },
+        ],
+    )
+    times = dict(zip(procedures["hadm_id"], procedures["time"], strict=True))
+    assert_end_of_day(times[100], date(2150, 1, 2), context="procedure chart date")
+    assert_end_of_day(times[200], date(2151, 3, 1), context="procedure on the discharge date")
+    assert times[200] > datetime(2151, 3, 1, 9, 30), "a discharge-day procedure is dated after its available_time"
+
+
+def test_omr_records_are_dated_and_known_at_the_end_of_their_chart_date(tmp_path: Path) -> None:
+    """OMR records carry a chart date only, so both their time and their availability are the end of that day."""
+    omr = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="omr",
+        rows=[
+            {
+                "subject_id": 1,
+                "chartdate": "2150-01-02",
+                "seq_num": 1,
+                "result_name": "Weight (Lbs)",
+                "result_value": "135",
+            },
+            {
+                "subject_id": 1,
+                "chartdate": "2150-01-02",
+                "seq_num": 1,
+                "result_name": "Blood Pressure",
+                "result_value": "120/80",
+            },
+        ],
+    )["OMR"]
+
+    assert_rows(
+        omr,
+        [{"code": "OMR//Weight (Lbs)", "text_value": "135"}, {"code": "OMR//Blood Pressure", "text_value": "120/80"}],
+    )
+    for row in omr.to_dicts():
+        assert_end_of_day(row["time"], date(2150, 1, 2), context=f"OMR {row['code']} time")
+        assert_end_of_day(row["available_time"], date(2150, 1, 2), context=f"OMR {row['code']} available_time")
 
 
 def test_an_open_icu_stay_has_an_admission_but_no_discharge_or_length_of_stay(tmp_path: Path) -> None:
@@ -846,6 +955,51 @@ def test_an_open_icu_stay_has_an_admission_but_no_discharge_or_length_of_stay(tm
     assert_rows(stays["icu_admission"], [{"stay_id": 10, "time": at(10)}, {"stay_id": 20, "time": at(10)}])
     assert_rows(stays["icu_discharge"], [{"stay_id": 10, "time": at(58)}])
     assert_rows(stays["icu_length_of_stay"], [{"stay_id": 10, "time": at(58), "numeric_value": 2.0}])
+
+
+def test_every_icu_stay_event_carries_the_first_and_last_care_unit_of_the_stay(tmp_path: Path) -> None:
+    """The care units describe the whole ICU stay; a stay can move between units, and a missing unit stays missing."""
+    micu, sicu, cvicu = (
+        "Medical Intensive Care Unit (MICU)",
+        "Surgical Intensive Care Unit (SICU)",
+        "Cardiac Vascular Intensive Care Unit (CVICU)",
+    )
+    stays = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="icustay",
+        rows=[
+            {
+                "subject_id": 1,
+                "stay_id": 10,
+                "intime": "2150-01-01 10:00:00",
+                "outtime": "2150-01-03 10:00:00",
+                "first_careunit": micu,
+                "last_careunit": sicu,
+                "los": 2.0,
+            },
+            {
+                "subject_id": 2,
+                "stay_id": 20,
+                "intime": "2150-01-01 10:00:00",
+                "outtime": "2150-01-02 10:00:00",
+                "first_careunit": cvicu,
+                "last_careunit": None,
+                "los": 1.0,
+            },
+        ],
+    )
+
+    for event in ("icu_admission", "icu_discharge", "icu_length_of_stay"):
+        assert_rows(
+            stays[event],
+            [
+                {"stay_id": 10, "first_careunit": micu, "last_careunit": sicu},
+                {"stay_id": 20, "first_careunit": cvicu, "last_careunit": None},
+            ],
+            context=event,
+        )
 
 
 def test_diagnoses_are_dated_at_discharge_and_titled_by_their_icd_version(tmp_path: Path) -> None:

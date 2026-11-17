@@ -19,6 +19,11 @@ columns:
   - name: icd_version
     type: int64
 
+# chartdate has no time of day. The procedure has happened by the end of that
+# day, and placing it at midnight would put it before same-day events that
+# preceded it. Same convention as hcpcsevents and the date of death (patients).
+post_join_callbacks:
+  - set_time(chartdate, 23, 59, 59, output=chartdate_24)
 
 join:
   - name: d_icd_procedures
@@ -59,13 +64,15 @@ event_defaults:
 events:
   - name: PROCEDURE
     columns:
-      # TODO: move to end of the day with callback
-      time: col(chartdate)
+      time: col(chartdate_24)
       code:
         - const("ICD")
         - col(icd_version)
         - col(icd_code)
         - col(long_title)
       extension:
+        # ICD procedure codes are billing codes of the admission, so they are
+        # treated as available at discharge. For a procedure charted on the
+        # discharge day this is earlier than its end-of-day time.
         available_time: col(dischtime)
         seq_num: col(seq_num)
