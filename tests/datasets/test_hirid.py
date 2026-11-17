@@ -15,9 +15,11 @@ variable ID and copy its value, so a test of them would only restate the YAML.
   by the configured glob; ``general_table.csv`` and ``hirid_variable_reference.csv`` with
   the header names ricu reads, including "Source Table" and "Variable Name") and run
   through the shipped table configs; for creatinine and sex, on through the shipped mapping.
+- Concept pipelines: the lymphocyte percentage (derived, ricu's ``blood_cell_ratio``) and
+  urine output from the charted running total (complex, ricu's ``hirid_urine``), each run
+  through a real concept step (`run_concepts`).
 
-HiRID has no derived or complex mappings, so there is no concept pipeline here. No HiRID
-data or variable reference is available to check codes against: variable names are a
+No HiRID data or variable reference is available to check codes against: variable names are a
 placeholder, and the units in codes are the SI units that ricu's conversions to the
 concept units imply, spelled in ASCII; neither claims the reference table's spelling.
 """
@@ -28,7 +30,16 @@ from typing import Any, Final
 
 import pytest
 
-from tests.datasets.support import NOTHING, Case, assert_rows, case_id, check_case, extract_native, map_rows
+from tests.datasets.support import (
+    NOTHING,
+    Case,
+    assert_rows,
+    case_id,
+    check_case,
+    extract_native,
+    map_rows,
+    run_concepts,
+)
 
 DATASET: Final = "hirid"
 VERSION: Final = "1.1.1"
@@ -303,3 +314,97 @@ def test_birth_is_admission_minus_age_years_once_per_subject(tmp_path: Path) -> 
 
     # 60 years before the admission; over 2130-2190, 60 Julian and 60 calendar years are both 21,915 days
     assert_rows(births, [{"subject_id": 1, "time": datetime(2130, 1, 1, 8), "code": "MEDS_BIRTH"}])
+
+
+# --- Concept pipeline ------------------------------------------------------------------------------
+
+
+def test_lymphocyte_percentage_is_the_count_over_the_white_cell_count_at_the_same_time(tmp_path: Path) -> None:
+    """HiRID records lymphocytes only as a count; ricu's blood_cell_ratio makes it 100 * count / white cell count.
+
+    A count without a white cell count at its time, or with a white cell count of 0, gives no
+    percentage; the counts themselves are kept in lymphocytes_absolute.
+    """
+    observations = [
+        {
+            "subject_id": subject,
+            "time": ADMISSION + timedelta(hours=hour),
+            "code": observation_code(variableid, "G/l"),
+            "numeric_value": value,
+        }
+        for subject, hour, variableid, value in [
+            (1, 0, 24000480, 1.5),
+            (1, 0, 20000700, 7.5),
+            (1, 1, 24000480, 2.0),  # no white cell count at this time
+            (1, 2, 20000700, 8.0),
+            (2, 0, 24000480, 0.0),
+            (2, 0, 20000700, 0.0),  # a white cell count of 0 gives no percentage
+        ]
+    ]
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["lymphocytes_absolute", "white_blood_cell_count", "lymphocytes"],
+        sources={"observations/OBSERVATION": observations},
+    )
+
+    assert_rows(
+        outputs["lymphocytes"],
+        [{"subject_id": 1, "time": ADMISSION, "code": "lymphocytes//%", "numeric_value": 20.0, "dataset": "hirid"}],
+        context="lymphocytes",
+    )
+    assert_rows(
+        outputs["lymphocytes_absolute"],
+        [{"numeric_value": 1.5}, {"numeric_value": 2.0}, {"numeric_value": 0.0}],
+        context="lymphocytes_absolute",
+    )
+
+
+def test_urine_output_is_the_increase_of_the_charted_running_total_per_patient(tmp_path: Path) -> None:
+    """HiRID charts urine as a running total; ricu's hirid_urine takes its increases per stay.
+
+    The first reading counts in full and a decrease (a reset of the total) gives 0. The
+    running total itself stays available as urine_output_cumulative.
+    """
+    totals = [(1, 0, 100.0), (1, 1, 250.0), (1, 2, 50.0), (1, 3, 120.0), (2, 0, 40.0)]
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["urine_output_cumulative", "urine_output"],
+        sources={
+            "observations/OBSERVATION": [
+                {
+                    "subject_id": subject,
+                    "time": ADMISSION + timedelta(hours=hour),
+                    "code": observation_code(30005110, "ml"),
+                    "numeric_value": total,
+                }
+                for subject, hour, total in totals
+            ]
+        },
+    )
+
+    assert_rows(
+        outputs["urine_output"],
+        [
+            {
+                "subject_id": subject,
+                "time": ADMISSION + timedelta(hours=hour),
+                "code": "urine_output//mL",
+                "numeric_value": amount,
+                "dataset": "hirid",
+                "table": "observations",
+            }
+            for subject, hour, amount in [(1, 0, 100.0), (1, 1, 150.0), (1, 2, 0.0), (1, 3, 70.0), (2, 0, 40.0)]
+        ],
+        context="urine_output",
+    )
+    assert_rows(
+        outputs["urine_output_cumulative"],
+        [{"numeric_value": total} for _, _, total in totals],
+        context="urine_output_cumulative",
+    )

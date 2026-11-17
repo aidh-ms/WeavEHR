@@ -1,0 +1,5 @@
+# The eICU-CRD demo as ricu 0.6.3 with YAIB's ricu-extensions reads it: eicu-crd-ricu 2.0
+# plus the demo's file layout (tables/, restated from eicu-demo 2.0, as a version extends
+# one version only) and the demo's own ricu mapping (mappings/); see ../README.md.
+dataset: eicu-crd-ricu
+version: "2.0"

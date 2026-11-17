@@ -1,0 +1,8 @@
+# Running total of an output volume as charted. In HiRID: variableid 30005110, which ricu
+# uses as urine output; urine_output holds its increases (ricu: hirid_urine).
+name: urine_output_cumulative
+version: 1.0.0
+unit: mL
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

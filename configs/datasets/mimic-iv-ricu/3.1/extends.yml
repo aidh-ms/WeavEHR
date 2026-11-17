@@ -1,0 +1,4 @@
+# MIMIC-IV 3.1 as ricu 0.6.3 reads it: v3.1 has the schema of v2.2 (see mimic-iv 3.1),
+# so it inherits mimic-iv-ricu 2.2 unchanged.
+dataset: mimic-iv-ricu
+version: "2.2"

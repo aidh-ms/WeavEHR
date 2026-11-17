@@ -1,12 +1,16 @@
 # mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
 # mimic-iv/concepts/measurement/enzyme.sql
 # Item selection and unit conversion only; preserve all source observations and values.
+# 53086 is a second "Alkaline Phosphatase" item with the same fluid (Blood) and category
+# (Chemistry) in d_labitems; mimic-code uses only 50863, YAIB's ricu-extensions
+# (chemistry) adds it. Its valueuom is IU/L, the concept unit (MIMIC-IV 3.1); its value
+# scale was not checked.
 type: simple
 mappings:
   - pattern:
       table: labevents
       event: LAB
-      code: ^(?:LAB//)?(?:50863)(?:$|//)
+      code: ^(?:LAB//)?(?:50863|53086)(?:$|//)
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)

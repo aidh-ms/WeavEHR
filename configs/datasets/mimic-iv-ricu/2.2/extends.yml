@@ -1,0 +1,5 @@
+# MIMIC-IV 2.2 as ricu 0.6.3 with YAIB's ricu-extensions reads it, for comparisons with
+# ricu-based cohorts (YAIB). Everything is inherited from mimic-iv 2.2 except mappings/,
+# where mimic-iv intentionally differs from ricu; see ../README.md.
+dataset: mimic-iv
+version: "2.2"

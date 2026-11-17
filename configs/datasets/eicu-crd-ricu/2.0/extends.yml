@@ -1,0 +1,5 @@
+# eICU-CRD 2.0 as ricu 0.6.3 with YAIB's ricu-extensions reads it, for comparisons with
+# ricu-based cohorts (YAIB). Everything is inherited from eicu-crd 2.0 except mappings/,
+# where eicu-crd intentionally differs from ricu; see ../README.md.
+dataset: eicu-crd
+version: "2.0"

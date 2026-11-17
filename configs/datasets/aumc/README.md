@@ -39,9 +39,12 @@ for that clinical concept.
 
 ### Coverage
 
-Currently mapped (all `simple`, all from the OMOP `measurement` table): the
+Currently mapped (all `simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
-respiratory numerics (SpO2, respiratory rate, FiO2) and urine output.
+respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. Sex
+(`patient_sex`) comes from the `person` table's OMOP gender concept (8507 Male,
+8532 Female), which AMSTEL derives from `admissions.gender`; where that is
+missing, AMSTEL sets female if a female-specific procedure is recorded.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -122,7 +125,7 @@ Not yet mapped / not cleanly mappable from OMOP:
   from the OMOP export.
 - **Outcomes / length-of-stay** and **ventilation windows**: derived from
   `visit_occurrence`/`death`; need `derived`/`complex` mappings.
-- **GCS / RASS**, demographics, drug *presence*, and microbiology: mappable from
+- **GCS / RASS**, demographics other than sex, drug *presence*, and microbiology: mappable from
   `listitems`/`person`/`drug_exposure`/`specimen`, pending.
 - **troponin_I**, **erythrocyte_distribution_width**, **totcal_CO2**: no
   approved AMSTEL target in AUMCdb.

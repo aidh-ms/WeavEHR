@@ -1,0 +1,19 @@
+# As ricu 0.6.3 (checked on the eICU demo): magnesium whose reported unit is mEq/L is
+# divided by 1.215. ricu matches "mEq/L" anywhere in the unit, this mapping the whole unit
+# (the same rows on the eICU demo). Converting mEq/L to mg/dL multiplies by 1.215
+# (Mg2+ is divalent, 24.305 g/mol), as eicu-crd does. Independently identified error;
+# not reported upstream.
+type: simple
+mappings:
+  - pattern:
+      table: lab
+      event: LAB
+      code: ^(magnesium)(//.*)?$
+    columns:
+      numeric_value: >-
+        replace(
+          str_contains(labmeasurenameinterface, "(?i)^meq/l$"),
+          numeric_value / 1.215,
+          numeric_value
+        )
+      text_value: col(text_value)

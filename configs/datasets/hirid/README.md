@@ -53,19 +53,27 @@ concept's declared `unit` before being applied.
 
 ### Coverage
 
-Currently mapped (all `simple`): the laboratory panels (blood gas, chemistry,
-haematology) from `observations`, vital signs, GCS components (eye/motor/verbal)
-and RASS, height/weight, and the demographics from `general` (`patient_sex`,
-`patient_age`).
+Currently mapped (`simple` unless noted): the laboratory panels (blood gas,
+chemistry, haematology) from `observations`, vital signs, GCS components
+(eye/motor/verbal) and RASS, height/weight, and the demographics from `general`
+(`patient_sex`, `patient_age`). The HiRID-ICU-Benchmark variable reference
+lists lymphocytes only as a count ("Lymphocytes [#/volume] in Blood",
+`lymphocytes_absolute`); `lymphocytes` (%) is `derived` from it as ricu's
+`blood_cell_ratio`: 100 × count / white-cell count recorded at the same time
+(ricu: the median white-cell count of the same hour).
+Variableid 30005110, a running total that ricu uses as urine output, is mapped
+unchanged as `urine_output_cumulative`. `urine_output` is `complex`: the increase
+since the patient's previous reading, as ricu's `hirid_urine`. The first reading
+counts in full, and a decrease gives 0. Unverified: the benchmark's variable
+reference names 30005110 "OUT/c" ("Fluid balance"), not urine, and its paper
+describes such outputs as cumulative over 12-hour periods, so a decrease may be
+a periodic reset, after which the first reading's amount is not counted.
 
 Not yet mapped / not cleanly mappable as `simple`:
 - **Drug rates / durations** (vasopressors, antibiotics, corticosteroids,
   insulin, dextrose): live in `pharma` and need `derived`/`complex` handling of
   HiRID's per-record dosing.
-- **Urine output**: HiRID records a cumulative signal that ricu de-accumulates
-  (`hirid_urine`) — needs a `complex` transform.
-- **GCS total** and **lymphocytes**: derived (sum of GCS components / blood-cell
-  ratio against the white-cell count).
+- **GCS total**: derived (sum of GCS components).
 - **Ventilation** windows / start / end, airway markers and **length-of-stay**
   outcomes: `derived`/`complex`.
 - Concepts with **no HiRID source** in ricu (not invented here): `troponin_I`,

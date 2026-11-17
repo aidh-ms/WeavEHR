@@ -24,3 +24,7 @@ table configs reconstruct absolute timestamps by joining the `patient` table
 
 The freely available demo subset is configured in `../eicu-demo/` as a diff
 of this dataset via `extends.yml`.
+
+[`../eicu-crd-ricu/`](../eicu-crd-ricu/) extends this dataset with ricu 0.6.3's
+mappings where this dataset intentionally differs from ricu, for comparisons
+with ricu-based cohorts.

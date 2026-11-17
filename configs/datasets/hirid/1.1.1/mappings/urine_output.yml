@@ -1,0 +1,11 @@
+# HiRID v1.1.1 -- urine output [ricu urine, hirid_urine]: the increase of the running
+# total urine_output_cumulative (variableid 30005110) since the previous reading of the
+# same patientid, which ricu also uses as the ICU stay ID. As in ricu, the first reading
+# counts in full and a decrease gives 0.
+# Unverified: such outputs are cumulative over 12-hour periods (HiRID-ICU-Benchmark,
+# arXiv:2111.08536, appendix A), so a decrease may be a periodic reset; the amount of the
+# first reading after a reset is then not counted. The benchmark adds it instead.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.cumulative.CumulativeIncrementsTransformer
+concepts:
+  - urine_output_cumulative.1.0.0

@@ -1,0 +1,20 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP gender_concept_id:
+#   8507 = MALE, 8532 = FEMALE
+# AMSTEL (insert_person.sql) maps admissions.gender Man to 8507, Vrouw to 8532 and
+# anything else to 0, as ricu maps Man/Vrouw; AMSTEL's apply_corrections.sql then sets 0
+# to 8532 when a female-specific procedure is recorded (ricu: missing).
+# Female or Male; no event for any other gender concept.
+type: simple
+mappings:
+  - pattern:
+      table: person
+      event: GENDER
+      code: "^8507(//.*)?$"
+    columns:
+      text_value: const("Male")
+  - pattern:
+      table: person
+      event: GENDER
+      code: "^8532(//.*)?$"
+    columns:
+      text_value: const("Female")

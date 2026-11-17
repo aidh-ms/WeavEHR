@@ -1,0 +1,27 @@
+# As ricu 0.6.3 with YAIB's ricu-extensions (temp; checked on the eICU demo): monitor
+# values are not converted (ricu's 32-42 C limits drop Fahrenheit values), and both
+# nurse-charted rows, "Temperature (C)" and "Temperature (F)" converted to Celsius, are
+# mapped. The two rows hold the same reading (eICU demo: 61,878 of 61,880 pairs), so it
+# counts twice. eicu-crd converts monitor values above 50 and maps the (C) rows only.
+# Independently identified; not reported upstream.
+type: simple
+mappings:
+- pattern:
+    table: vitalperiodic
+    event: TEMPERATURE
+    code: ^VITALS_PERIODIC//C$
+  columns: &columns
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)
+- pattern:
+    table: nursecharting
+    event: NURSE_CHART
+    code: ^Vital Signs//Temperature//Temperature \(C\)$
+  columns: *columns
+- pattern:
+    table: nursecharting
+    event: NURSE_CHART
+    code: ^Vital Signs//Temperature//Temperature \(F\)$
+  columns:
+    numeric_value: (col(numeric_value) - 32) * 5 / 9
+    text_value: col(text_value)

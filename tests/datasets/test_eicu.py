@@ -98,7 +98,33 @@ ANTIBIOTICS_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", ANTIBIOTICS_CASES, ids=lambda case: f"{case.concept} {case.table}: {case.note}")
+# The unit a site reports a lab result in (labmeasurenameinterface, the column ricu reads the
+# unit from) decides whether it converts to the concept unit; labmeasurenamesystem in the code
+# does not.
+CALCIUM_CASES = [
+    Case(
+        concept="calcium",
+        table="lab",
+        event="LAB",
+        code="LAB//calcium//mg/dL",
+        value=value,
+        extra={"labmeasurenameinterface": interface},
+        expect=[{"numeric_value": expected}],
+        rel=1e-3,
+        note=note,
+    )
+    for interface, value, expected, note in [
+        ("mmol/L", 2.5, 10.02, "calcium 40.078 g/mol: 2.5 mmol/L is 10.0 mg/dL"),
+        ("MMOL/l", 2.5, 10.02, "the reported unit is matched in any case"),
+        ("mg/dL", 9.0, 9.0, "a value reported in mg/dL is kept"),
+        (None, 9.0, 9.0, "a value without a reported unit is kept"),
+    ]
+]
+
+
+@pytest.mark.parametrize(
+    "case", [*ANTIBIOTICS_CASES, *CALCIUM_CASES], ids=lambda case: f"{case.concept} {case.table}: {case.note}"
+)
 def test_mapping_case(case: Case) -> None:
     check_case(case, dataset=DATASET, version=VERSION)
 

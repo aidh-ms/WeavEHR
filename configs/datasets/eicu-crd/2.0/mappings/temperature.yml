@@ -3,9 +3,14 @@
 # and are converted from Fahrenheit; the source text is kept.
 # vitalperiodic: monitor values, only where a continuous probe was attached.
 # nursecharting: nurse-charted values. Each reading is stored as a "Temperature (C)"
-# row and a "Temperature (F)" row calculated from it; only the (C) rows are mapped.
+# row and a "Temperature (F)" row with the same value in Fahrenheit (eICU demo: 61,878 of
+# 61,880 pairs at the same time); only the (C) rows are mapped.
 # Nurse-charted rows at the same time as a monitor value (often the confirmed monitor
 # value) are kept.
+# YAIB's ricu-extensions (temp) map the (F) rows as well, so each nurse-charted reading
+# counts twice, and ricu 0.6.3 does not convert Fahrenheit monitor values (its 32-42 C
+# limits drop them; eICU demo: 2,912 of 112,820 monitor values above 50). eicu-crd-ricu
+# reproduces both. Independently identified; not reported upstream.
 type: simple
 mappings:
 - pattern:

@@ -6,14 +6,15 @@ IDs AMSTEL assigned to AUMCdb items. Each test pins a rule from
 ``configs/datasets/aumc/README.md`` or from a mapping's header comment that the YAML does not
 show by itself: unit conversions (and the rows of the same analyte that must not convert),
 scale rules that depend on the value, the dropped device maxima, the choice between source
-items that share one OMOP concept, and the classification of ventilator modes and devices. A
-check that a concept ID is in a pattern would only restate the YAML, so there is none.
+items that share one OMOP concept, the classification of ventilator modes and devices, and
+the sex labels of the OMOP gender concepts. A check that a concept ID is in a pattern would
+only restate the YAML, so there is none.
 
 - Behaviour cases: one extracted source row per :class:`Case`, grouped by rule and run through
   the shipped simple mapping by one parametrised test.
-- Native extraction: the rules that select by source value or unit read those parts of the code
-  that the inherited OMOP tables assemble, so one case per such rule starts from native OMOP
-  rows and runs through the AUMCdb table config and the mapping.
+- Native extraction: the rules that select by source value, unit or gender concept read those
+  parts of the code that the inherited OMOP tables assemble, so one case per such rule starts
+  from native OMOP rows and runs through the AUMCdb table config and the mapping.
 
 AUMCdb has no complex or derived mappings, so no concept pipeline runs here. The OMOP table
 configs themselves (time fallbacks, CDM 5.3.1/5.4 differences) are tested in
@@ -317,6 +318,22 @@ NATIVE_RULES = [
         ],
         [{"code": "airway_end//tracheostomy", "time": END_TIME, "stay_id": str(VISIT_ID), "device_exposure_id": "1"}],
         id="device_source_value decides a recorded tracheostomy end",
+    ),
+    pytest.param(
+        "person",
+        "GENDER",
+        "patient_sex",
+        [
+            {
+                "person_id": person_id,
+                "year_of_birth": 1960,
+                "gender_concept_id": concept_id,
+                "gender_source_value": source,
+            }
+            for person_id, concept_id, source in [(1, 8507, "Man"), (2, 8532, "Vrouw"), (3, 0, SOURCE)]
+        ],
+        [{"subject_id": 1, "text_value": "Male"}, {"subject_id": 2, "text_value": "Female"}],
+        id="gender_concept_id decides the sex; other concepts give none",
     ),
 ]
 

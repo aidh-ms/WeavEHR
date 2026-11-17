@@ -1,0 +1,14 @@
+# As YAIB's ricu-extensions (resp) for eicu_demo (checked in ricu 0.6.3's merged
+# dictionary): monitor values only. They add the nurse-charted rates for eICU-CRD but not
+# for the demo, while their temperature and blood pressure add the extra rows for both.
+# eicu-demo maps the nurse-charted rates too. Not reported upstream; whether it is
+# intended is unknown.
+type: simple
+mappings:
+- pattern:
+    table: vitalperiodic
+    event: RESPIRATORY_RATE
+    code: ^VITALS_PERIODIC//bpm$
+  columns:
+    numeric_value: col(numeric_value)
+    text_value: col(text_value)

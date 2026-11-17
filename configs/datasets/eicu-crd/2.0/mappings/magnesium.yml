@@ -1,7 +1,11 @@
-# labmeasurenamesystem is always mg/dL, but some sites report values in mEq/L
-# (labmeasurenameinterface "mEq/L" in any case) without converting them.
-# Mg2+ is divalent (24.305 g/mol): 1 mEq/L = 0.5 mmol/L = 1.215 mg/dL.
-# ricu 0.6.3 divides by 1.215 instead, which reads normal values as low.
+# labmeasurenamesystem is mg/dL (all magnesium rows of the eICU demo). Rows whose
+# reported unit (labmeasurenameinterface, the column ricu reads the unit from) is mEq/L,
+# in any case, are converted to mg/dL: Mg2+ is divalent (24.305 g/mol), so
+# 1 mEq/L = 0.5 mmol/L = 1.215 mg/dL. Their values are lower than those reported in mg/dL
+# (eICU demo: median 1.51 vs 2.00), which fits unconverted mEq/L values but is unverified.
+# ricu 0.6.3 divides by 1.215 instead (eicu-crd-ricu), e.g. 1.51 becomes 1.24 rather than
+# 1.83 mg/dL (normal range 1.7-2.2 mg/dL; MedlinePlus). Independently identified error;
+# not reported upstream (no eth-mds/ricu issue as of 2026-11-16).
 type: simple
 mappings:
   - pattern:
