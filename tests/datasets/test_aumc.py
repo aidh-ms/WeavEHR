@@ -923,3 +923,51 @@ def test_sepsis3_needs_a_sofa_rise_of_two_around_a_suspected_infection(tmp_path:
         context="suspected_infection",
     )
     assert_rows(outputs["sepsis3"], [{"subject_id": 1, "time": at(5)}], context="sepsis3")
+
+
+SEPSIS3_ON_TOTAL: Final = (
+    "type: complex\n"
+    "concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer\n"
+    "concepts:\n"
+    "  - suspected_infection.1.0.0\n"
+    "  - sofa.1.0.0\n"
+    "kwargs:\n  rise: total\n"
+)
+"""A sepsis3 mapping with the rise measured on the SOFA total, as in ricu."""
+
+
+def test_sepsis3_ignores_a_blood_gas_scored_after_the_blood_pressure(tmp_path: Path) -> None:
+    """The shipped rise, on the SOFA components, ignores components as they arrive; the rise on the total does not.
+
+    Both subjects get vancomycin at 0 h and a blood culture 1 h later: a suspected infection at 0 h.
+    Subject 1, ventilated, has a MAP of 65 mmHg at 0 h (cardiovascular 1) and its first blood gas
+    at 1 h (PaO2/FiO2 160 on a ventilator: respiratory 3). The total goes 1 -> 4, although
+    nothing changed in the patient. Subject 2's platelets fall from 200 to 40 x 10^3/uL at 5 h
+    (coagulation 0 -> 3), a real rise of 3 (Vincent et al. 1996).
+    """
+
+    def row(subject: int, hours: float, item: str, value: float | None = None) -> dict[str, Any]:
+        return {"subject_id": subject, "time": at(hours), "code": item, "numeric_value": value}
+
+    platelets, mean_pressure = code("MEASUREMENT", 3007461), code("MEASUREMENT", 21490852)
+    sources = {
+        "procedure_occurrence/PROCEDURE": [beademen(1, -1, None)],
+        "drug_exposure/DRUG_START": [row(subject, 0, code("DRUG_START", 43295826)) for subject in (1, 2)],
+        "measurement/MEASUREMENT": [
+            *[row(subject, 1, code("MEASUREMENT", 4107893, "Bloedkweken afnemen")) for subject in (1, 2)],
+            *[row(subject, 0, mean_pressure, 65.0) for subject in (1, 2)],
+            *blood_gas(1),
+            row(2, 0, platelets, 200.0),
+            row(2, 5, platelets, 40.0),
+        ],
+    }
+    concepts = [*SOFA, "antibiotics", "body_fluid_sampling", "suspected_infection", "sepsis3"]
+
+    def onsets(overrides: dict[str, str]) -> list[tuple[int, datetime]]:
+        outputs = run_concepts(
+            tmp_path, dataset=DATASET, version=VERSION, concepts=concepts, sources=sources, mapping_overrides=overrides
+        )
+        return outputs["sepsis3"].select("subject_id", "time").sort("subject_id").rows()
+
+    assert onsets({}) == [(2, at(5))]
+    assert onsets({"sepsis3": SEPSIS3_ON_TOTAL}) == [(1, at(1)), (2, at(5))]

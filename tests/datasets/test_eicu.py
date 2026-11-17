@@ -28,7 +28,9 @@ from tests.datasets.support import (
     check_case,
     extract_native,
     map_rows,
+    SOFA_COMPONENTS,
     run_concepts,
+    sofa_component_stubs,
 )
 
 DATASET = "eicu-crd"
@@ -318,18 +320,6 @@ def test_offsets_count_minutes_from_icu_admission(
 
 # --- Concept pipeline -----------------------------------------------------------------------------------------
 
-# Stands in for the expensive shipped sofa chain: SOFA scores straight from synthetic rows.
-SOFA_STUB = """\
-type: simple
-mappings:
-  - pattern:
-      table: assessments
-      event: SOFA
-      code: SOFA
-    columns:
-      numeric_value: col(numeric_value)
-"""
-
 
 @pytest.mark.parametrize("deaths", [True, False], ids=["deaths", "all-alive"])
 def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, deaths: bool) -> None:
@@ -355,8 +345,8 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["antibiotics", "dextrose_as_D10", "death", "suspected_infection", "sepsis3", "sofa"],
-        mapping_overrides={"sofa": SOFA_STUB},
+        concepts=["antibiotics", "dextrose_as_D10", "death", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
+        mapping_overrides=sofa_component_stubs(),
         sources={
             "medication/MEDICATION_ORDER": medication_orders,
             "infusiondrug/INFUSION": [

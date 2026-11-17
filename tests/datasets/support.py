@@ -597,6 +597,34 @@ def extract_files(root: Path, *, dataset: str, version: str, table: str) -> dict
 
 # --- Concept step runs ---------------------------------------------------------------------------------
 
+SOFA_COMPONENTS: Final = (
+    "sofa_respiratory",
+    "sofa_coagulation",
+    "sofa_liver",
+    "sofa_cardiovascular",
+    "sofa_cns",
+    "sofa_renal",
+)
+
+
+def sofa_component_stubs(table: str = "assessments", event: str = "SOFA") -> dict[str, str]:
+    """Mapping overrides standing in for the expensive shipped SOFA chain under the sepsis3 mapping.
+
+    ``sofa_coagulation`` takes its scores straight from synthetic ``<table>/<event>`` rows with the
+    code ``SOFA``; the other components read nothing. With one component the Sepsis-3 rise on the
+    components equals the rise on the total, so a test can set the score trajectory directly.
+    """
+
+    def stub(code: str) -> str:
+        return (
+            "type: simple\nmappings:\n  - pattern:\n"
+            f"      table: {table}\n      event: {event}\n      code: {code}\n"
+            "    columns:\n      numeric_value: col(numeric_value)\n"
+        )
+
+    return {name: stub("^SOFA$" if name == "sofa_coagulation" else "^$") for name in SOFA_COMPONENTS}
+
+
 EXTRACTION_STEP: Final = "Extraction"
 CONCEPT_STEP: Final = "Concept"
 

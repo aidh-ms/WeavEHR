@@ -39,7 +39,9 @@ from tests.datasets.support import (
     check_case,
     extract_native,
     map_rows,
+    SOFA_COMPONENTS,
     run_concepts,
+    sofa_component_stubs,
 )
 
 DATASET: Final = "mimic-iv"
@@ -885,18 +887,6 @@ def test_diagnoses_are_dated_at_discharge_and_titled_by_their_icd_version(tmp_pa
 
 # --- Concept pipeline -----------------------------------------------------------------------------
 
-# Stands in for the expensive shipped sofa chain: SOFA scores straight from synthetic rows.
-SOFA_STUB: Final = """\
-type: simple
-mappings:
-  - pattern:
-      table: assessments
-      event: SOFA
-      code: SOFA
-    columns:
-      numeric_value: col(numeric_value)
-"""
-
 
 def test_suspected_infection_pairs_prescription_starts_and_infusions_with_cultures(tmp_path: Path) -> None:
     """Shipped mappings carry prescriptions, infusions and specimens into suspected infection and Sepsis-3.
@@ -913,8 +903,8 @@ def test_suspected_infection_pairs_prescription_starts_and_infusions_with_cultur
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["antibiotics", "body_fluid_sampling", "suspected_infection", "sofa", "sepsis3"],
-        mapping_overrides={"sofa": SOFA_STUB},
+        concepts=["antibiotics", "body_fluid_sampling", "suspected_infection", *SOFA_COMPONENTS, "sepsis3"],
+        mapping_overrides=sofa_component_stubs(),
         sources={
             "prescriptions/MEDICATION_ORDER": [
                 {"subject_id": 1, "time": at(0), "prescribed_start": at(40), "route": "IV", **order},

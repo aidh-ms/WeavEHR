@@ -308,7 +308,22 @@ class SofaTransformer(WindowedSumTransformer):
     """
 
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        self._declare_terms(dependencies)
+        return super().transform(_finite_inputs(dependencies))
+
+    def component_scores(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        """The component scores the total sums, at the times it is evaluated.
+
+        ``subject_id``, ``time`` and a column per component holding its worst
+        score in ``[t - window, t]``, null where it has none (the total counts
+        that as 0). One row per subject and component event timestamp, sorted.
+        """
+        self._declare_terms(dependencies)
+        return self.align(_finite_inputs(dependencies)).select(
+            pl.col("subject_id"), pl.col("time"), *[pl.col(name) for name in self.inputs]
+        )
+
+    def _declare_terms(self, dependencies: dict[str, pl.LazyFrame]) -> None:
         if not self.inputs:
             terms = self._kwargs.get("terms") or list(dependencies)
             self.inputs = {name: RollingMax(self.window, closed="both") for name in terms}
-        return super().transform(_finite_inputs(dependencies))

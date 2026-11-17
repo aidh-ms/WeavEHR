@@ -2,8 +2,16 @@ type: complex
 concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer
 concepts:
   - suspected_infection.1.0.0
-  - sofa.1.0.0
-# Assess every infection window using ricu's cumulative-minimum baseline
-# and >=2 SOFA rise within the inclusive -48h/+24h window.
+  - sofa_respiratory.1.0.0
+  - sofa_coagulation.1.0.0
+  - sofa_liver.1.0.0
+  - sofa_cardiovascular.1.0.0
+  - sofa_cns.1.0.0
+  - sofa_renal.1.0.0
+# Assess every infection window using ricu's cumulative-minimum baseline and a
+# >=2 point rise within the inclusive -48h/+24h window, measured on the SOFA
+# components rather than the total: a component scored for the first time, or
+# again after its score expired, raises nothing (docs/user_guide/concepts.md).
 kwargs:
   sofa_increase: 2
+  rise: components

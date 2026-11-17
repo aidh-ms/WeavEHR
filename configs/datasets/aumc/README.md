@@ -195,14 +195,21 @@ respiratory score, but on AUMCdb 1.5.0 only 21 rows (20 patients) exceed 100.
 
 #### Sepsis-3
 
-`sepsis3` pairs `suspected_infection` with `sofa` as for MIMIC-IV: a SOFA rise
-of at least 2 points over the lowest score so far in the window from 48 hours
-before to 24 hours after a suspected infection.
+`sepsis3` pairs `suspected_infection` with the SOFA components as for
+MIMIC-IV: a SOFA rise of at least 2 points over the lowest score so far in the
+window from 48 hours before to 24 hours after a suspected infection.
 
 AUMCdb has many Sepsis-3 onsets at the start of the ICU stay, also in ricu: YAIB
 (van de Water et al., ICLR 2024, Fig. 7 and Table 14) finds an onset before the
 6th ICU hour in 19.7% of AUMCdb stays, against 11.4% in MIMIC-IV, and 72% of
 AUMCdb admissions are surgical. Prediction tasks exclude such onsets.
+
+The rise is measured on the SOFA components (`rise: components`), not on the
+total as in ricu. In AUMCdb blood pressure arrives every minute, well before
+blood gases, ventilation and laboratory values, so the first totals of a stay
+often hold the cardiovascular score alone and the total rises as the other
+components arrive. On the components, a component's first score does not
+count as a rise (see the Sepsis-3 section of the user guide).
 
 ### Validation against ricu
 

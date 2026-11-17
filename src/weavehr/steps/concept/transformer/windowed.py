@@ -542,6 +542,28 @@ class WindowedConceptTransformer(BaseConceptTransformer):
         frame (``subject_id``, ``time``, ``numeric_value``). Returns
         ``subject_id``, ``time``, ``numeric_value`` at the trigger timestamps.
         """
+        aligned = self.align(dependencies)
+        triggers = self.triggers if self.triggers is not None else set(self.inputs)
+        return (
+            aligned.with_columns(numeric_value=self.compute(), __out_time=self.event_time())
+            .filter(pl.any_horizontal(*[pl.col(_present(name)) for name in triggers]))
+            .filter(pl.col("numeric_value").is_not_null())
+            .select(pl.col(_SUBJECT), pl.col("__out_time").alias(_TIME), pl.col("numeric_value"))
+            # collapse rows that resolve to the same output timestamp (only
+            # reachable via an event_time override)
+            .unique(subset=[_SUBJECT, _TIME], keep="first")
+            .sort(_SUBJECT, _TIME)
+        )
+
+    def align(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        """The declared inputs on one grid, before ``compute``.
+
+        One row per subject and timestamp at which any input has an event,
+        sorted, with a column per input holding its aggregation at that time
+        (null where nothing is current) and the presence flags
+        :meth:`measured` reads. ``transform`` evaluates ``compute`` on it;
+        another transformer can use it to read the aligned inputs themselves.
+        """
         names = list(self.inputs)
         if not names:
             raise ValueError(f"{type(self).__name__} declares no inputs")
@@ -602,18 +624,7 @@ class WindowedConceptTransformer(BaseConceptTransformer):
         aligned = grid
         for name in names:
             aligned = self.inputs[name].align_events(aligned, name, dependencies.get(sources[name]))
-
-        triggers = self.triggers if self.triggers is not None else set(names)
-        return (
-            aligned.with_columns(numeric_value=self.compute(), __out_time=self.event_time())
-            .filter(pl.any_horizontal(*[pl.col(_present(name)) for name in triggers]))
-            .filter(pl.col("numeric_value").is_not_null())
-            .select(pl.col(_SUBJECT), pl.col("__out_time").alias(_TIME), pl.col("numeric_value"))
-            # collapse rows that resolve to the same output timestamp (only
-            # reachable via an event_time override)
-            .unique(subset=[_SUBJECT, _TIME], keep="first")
-            .sort(_SUBJECT, _TIME)
-        )
+        return aligned
 
 
 class GradedConceptTransformer(WindowedConceptTransformer):
