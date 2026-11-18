@@ -25,9 +25,12 @@ day: the date of death when there is no in-hospital `deathtime` (`patients`),
 HCPCS codes (`hcpcsevents`), ICD procedures (`procedures_icd`) and outpatient
 measurements (`omr`).
 
+- An ICD procedure was done during its admission, so its time is capped at the
+  admission's `dischtime`: one charted on the discharge day or later is dated
+  at the discharge. Without a matching admission it stays at 23:59:59.
 - ICD procedure and HCPCS codes are billing codes of the admission, so their
-  `available_time` is the admission's `dischtime`. For a code charted on the
-  discharge day this is earlier than the event's time.
+  `available_time` is the admission's `dischtime`. For an HCPCS code charted
+  on the discharge day this is earlier than the event's time.
 - An OMR record carries only its date, so its `available_time` is the end of
   that day as well.
 - If a subject has a `deathtime` on more than one admission, the earliest one
