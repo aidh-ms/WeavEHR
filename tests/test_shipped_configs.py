@@ -76,11 +76,12 @@ def concept_output_schema(concept_reference: str, dataset: str, version: str) ->
     name = concept_reference.split(".", 1)[0]
     (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")
     extension_columns = list(yaml.safe_load(concept_file.read_text()).get("extension_columns") or {})
-    dataset_concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS).get_dataset_concept(
+    dataset_concepts = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS).get_dataset_concepts(
         dataset, version
     )
-    if isinstance(dataset_concept, SimpleDatasetConceptConfig):
-        extension_columns += [column for m in dataset_concept.mappings for column in m.columns.extension]
+    for dataset_concept in dataset_concepts:
+        if isinstance(dataset_concept, SimpleDatasetConceptConfig):
+            extension_columns += [column for m in dataset_concept.mappings for column in m.columns.extension]
     return pl.Schema(MEDS_SCHEMA | {column: pl.String() for column in extension_columns})
 
 
