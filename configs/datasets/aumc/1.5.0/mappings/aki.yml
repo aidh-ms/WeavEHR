@@ -1,6 +1,5 @@
-# Creatinine-based AKI staging only.
-# Urine-output staging requires further dataset-specific validation.
 type: complex
 concept_transformer: weavehr.steps.concept.transformer.aki.AkiTransformer
 concepts:
   - aki_creatinine.1.0.0
+  - aki_urine_output.1.0.0

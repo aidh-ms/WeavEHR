@@ -1,0 +1,15 @@
+# AUMC v1.5.0 -- body weight in kg.
+# The source values appear to represent discretized body weights.
+# Preserve the recorded values rather than approximating them again.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: "^(3023166|3026600|3025315|3013762)//weight//kg$"
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+    filters:
+      - drop_na(numeric_value)
+      - drop_if(col(numeric_value) < 1 or col(numeric_value) > 500)
