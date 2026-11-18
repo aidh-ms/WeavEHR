@@ -76,7 +76,7 @@ def concept_output_schema(concept_reference: str, dataset: str, version: str) ->
     name = concept_reference.split(".", 1)[0]
     (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")
     extension_columns = list(yaml.safe_load(concept_file.read_text()).get("extension_columns") or {})
-    dataset_concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS).get_dataset_concept(
+    dataset_concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS).get_dataset_concepts(
         dataset, version
     )
     if isinstance(dataset_concept, SimpleDatasetConceptConfig):
