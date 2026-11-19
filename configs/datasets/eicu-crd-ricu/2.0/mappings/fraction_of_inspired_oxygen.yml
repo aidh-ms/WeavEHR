@@ -1,3 +1,4 @@
+# Apply ricu 0.6.3 concept limits before aggregation.
 # Approximates ricu 0.6.3, which reads the charted text with percent_as_numeric
 # (as.numeric() after removing "%"). This mapping takes the extracted number, else the
 # first of the leading 4, 3, 2 and 1 characters of the text that is a number. Both agree on
@@ -19,6 +20,8 @@ mappings:
               replace(cast(slice_str(text_value, 0, 2), "float64") > -1, cast(slice_str(text_value, 0, 2), "float64"),
                 cast(slice_str(text_value, 0, 1), "float64")))))
       text_value: col(text_value)
+    filters:
+      - drop_if(col(numeric_value) < 21 or col(numeric_value) > 100)
   - pattern:
       table: lab
       event: LAB
@@ -26,3 +29,5 @@ mappings:
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)
+    filters:
+      - drop_if(col(numeric_value) < 21 or col(numeric_value) > 100)
