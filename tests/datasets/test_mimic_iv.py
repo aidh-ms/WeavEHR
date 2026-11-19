@@ -9,8 +9,8 @@ that an item ID is in a mapping's pattern would only restate the YAML, so there 
 
 - Behaviour cases: one extracted source row per :class:`Case`, grouped by rule (unit
   conversions, rate units, saturations, infusion durations, antibiotic exclusions, the
-  respiratory support and airway levels, ventilation markers, sex) and run through the shipped
-  simple mapping by one parametrised test. Item labels are the real dictionary labels.
+  respiratory support and airway levels, ventilation markers, sex, the heart rhythm, ectopy
+  and race levels) and run through the shipped simple mapping by one parametrised test. Item labels are the real dictionary labels.
 - Native extraction: synthetic rows written as the release ships them (gzip CSV, lower-case
   headers) and run through the shipped table configs: code assembly, death and age, optional
   admission events, culture times and results, order times, infusion durations and weights,
@@ -51,6 +51,7 @@ ORDER_ID: Final = 20
 
 ITEMS: Final[Mapping[int, str]] = {
     # icu/d_items
+    220048: "Heart Rhythm",
     220227: "Arterial O2 Saturation",
     220277: "O2 saturation pulseoxymetry",
     220950: "Dextrose 10%",
@@ -63,10 +64,14 @@ ITEMS: Final[Mapping[int, str]] = {
     223835: "Inspired O2 Fraction",
     223849: "Ventilator Mode",
     224385: "Intubation",
+    224650: "Ectopy Type 1",
+    224651: "Ectopy Frequency 1",
     224829: "Trach Tube Type",
     225794: "Non-invasive Ventilation",
     225798: "Vancomycin",
     226237: "Open Tracheostomy",
+    226479: "Ectopy Type 2",
+    226480: "Ectopy Frequency 2",
     226707: "Height",
     226732: "O2 Delivery Device(s)",
     227130: "Trach Care",
@@ -377,6 +382,109 @@ SEX = [
     for gender, sex in [("F", "Female"), ("M", "Male")]
 ]
 
+PAIRED: Final = frozenset({"ectopy_type", "ectopy_frequency"})
+"""Concepts that keep the source code, so that a type and a frequency charted together can be paired."""
+
+
+def leveled(concept: str, item: int, text: str, level: str | None, *, note: str) -> Case:
+    """A behaviour case for a charted label that the concept classifies into ``level`` (None: no event)."""
+    if level is None:
+        return case(concept, "CHART", item, text=text, expect=NOTHING, note=note)
+    row = {"code": f"{concept}//{level}", "text_value": text}
+    if concept in PAIRED:
+        row["source_code"] = code("CHART", item)
+    return case(concept, "CHART", item, text=text, expect=[row], note=note)
+
+
+# Rhythm labels of the MIMIC-IV demo, and labels in the same "<abbreviation> (<name>)" format for
+# rhythms the demo does not chart. Each label must land in exactly one level of the concept.
+HEART_RHYTHM = [
+    leveled("heart_rhythm", 220048, text, level, note=note)
+    for text, level, note in [
+        ("SR (Sinus Rhythm)", "sinus_rhythm", "sinus rhythm"),
+        ("SA (Sinus Arrhythmia)", "sinus_rhythm", "sinus arrhythmia is a normal variant of sinus rhythm"),
+        ("ST (Sinus Tachycardia)", "sinus_tachycardia", "sinus tachycardia"),
+        ("SB (Sinus Bradycardia)", "sinus_bradycardia", "sinus bradycardia"),
+        ("AF (Atrial Fibrillation)", "atrial_fibrillation", "atrial fibrillation"),
+        ("A Flut (Atrial Flutter)", "atrial_flutter", "atrial flutter is not fibrillation"),
+        ("SVT (Supra Ventricular Tachycardia)", "supraventricular_tachycardia", "not a sinus tachycardia"),
+        ("PAT (Paroxysmal Atrial Tachycardia)", "supraventricular_tachycardia", "an atrial tachycardia"),
+        ("JR (Junctional Rhythm)", "junctional", "a junctional rhythm"),
+        ("1st AV (First degree AV Block)", "first_degree_av_block", "first-degree AV block"),
+        ("3rd AV (Complete Heart Block)", "third_degree_av_block", "complete heart block"),
+        ("A Paced", "paced", "atrial pacing is not atrial flutter or fibrillation"),
+        ("AV Paced", "paced", "dual-chamber pacing"),
+        ("VT (Ventricular Tachycardia)", "ventricular_tachycardia", "ventricular tachycardia"),
+        ("VF (Ventricular Fibrillation)", "ventricular_fibrillation", "ventricular fibrillation"),
+        ("Asystole", "asystole", "asystole has no abbreviation"),
+        ("LBBB (Left Bundle Branch Block)", "other", "a label outside the groups is kept as other"),
+    ]
+]
+
+# Ectopy labels of the MIMIC-IV demo; mimic-code's rhythm.sql charts a first and a second type and frequency.
+ECTOPY = [
+    leveled("ectopy_type", item, text, level, note=note)
+    for item, text, level, note in [
+        (224650, "None", "none", "an assessment that found no ectopy"),
+        (224650, "PVC's", "ventricular", "premature ventricular contractions"),
+        (224650, "Vent. Bigeminy", "ventricular", "ventricular bigeminy"),
+        (224650, "PAC's", "atrial", "premature atrial contractions"),
+        (224650, "Atrial Bigeminy", "atrial", "atrial bigeminy"),
+        (224650, "Nod/Junc Escape", "junctional", "junctional escape beats"),
+        (224650, "Nodal Bigeminy", "junctional", "nodal bigeminy is junctional, not atrial or ventricular"),
+        (224650, "Fusion Beats", "other", "a label outside the groups is kept as other"),
+        (226479, "PAC's", "atrial", "a second type keeps its own source code"),
+        (226479, "None", None, "no second type is no assessment of the first"),
+    ]
+] + [
+    leveled("ectopy_frequency", item, text, level, note=note)
+    for item, text, level, note in [
+        (224651, "None", "none", "no ectopy"),
+        (224651, "Rare", "rare", "rare ectopy"),
+        (224651, "Occasional", "occasional", "occasional ectopy"),
+        (224651, "Frequent", "frequent", "frequent ectopy"),
+        (224651, "Runs Vtach", "runs", "runs of ventricular tachycardia"),
+        (226480, "Occasional", "occasional", "a second frequency keeps its own source code"),
+        (226480, "None", None, "no second frequency belongs to no second type"),
+    ]
+]
+
+
+def admitted_as(race: str | None, level: str | None, *, note: str) -> Case:
+    """A behaviour case for an admission recording ``race`` (None: no race recorded)."""
+    return Case(
+        concept="patient_race",
+        table="admissions",
+        event="ETHNICITY",
+        code="ETHNICITY" if race is None else f"ETHNICITY//{race}",
+        expect=NOTHING if level is None else [{"code": f"patient_race//{level}", "text_value": race}],
+        note=note,
+    )
+
+
+# Values of admissions.race in MIMIC-IV, grouped as the mapping's header states.
+RACE = [
+    admitted_as(race, level, note=note)
+    for race, level, note in [
+        ("WHITE", "white", "white"),
+        ("WHITE - BRAZILIAN", "white", "a subgroup is grouped by its leading category"),
+        ("PORTUGUESE", "white", "Portuguese is white"),
+        ("BLACK/CAPE VERDEAN", "black", "black or African American"),
+        ("HISPANIC/LATINO - CUBAN", "hispanic", "Hispanic or Latino, whatever the origin"),
+        ("HISPANIC OR LATINO", "hispanic", "Hispanic or Latino"),
+        ("SOUTH AMERICAN", "hispanic", "South American is Hispanic or Latino"),
+        ("ASIAN - CHINESE", "asian", "Asian"),
+        ("AMERICAN INDIAN/ALASKA NATIVE", "american_indian", "American Indian or Alaska Native"),
+        ("NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER", "pacific_islander", "Native Hawaiian or Pacific Islander"),
+        ("MULTIPLE RACE/ETHNICITY", "multiple", "more than one race"),
+        ("OTHER", "other", "a race outside the groups"),
+        ("UNKNOWN", None, "an unknown race is no event"),
+        ("UNABLE TO OBTAIN", None, "a race that was not obtained is no event"),
+        ("PATIENT DECLINED TO ANSWER", None, "a declined answer is no event"),
+        (None, None, "an admission without a race is coded by the event name alone"),
+    ]
+]
+
 CASES = [
     *CONVERSIONS,
     *FIO2,
@@ -388,6 +496,9 @@ CASES = [
     *AIRWAYS,
     *VENTILATION,
     *SEX,
+    *HEART_RHYTHM,
+    *ECTOPY,
+    *RACE,
 ]
 
 
