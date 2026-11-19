@@ -19,6 +19,18 @@ columns:
   - name: icd_version
     type: int64
 
+# chartdate has no time of day. The procedure has happened by the end of that
+# day, and placing it at midnight would put it before same-day events that
+# preceded it, so it is placed at the end of the day (as hcpcsevents and the
+# date of death in patients are). The procedure was done during its admission,
+# so it cannot lie after the admission's dischtime, also when the patient died
+# in hospital: the time is capped at dischtime, which moves a procedure charted
+# on the discharge day, or on a later date, to the discharge. The admissions
+# join is a left join and min ignores nulls, so a row whose hadm_id has no
+# admission keeps the end of its day.
+post_join_callbacks:
+  - set_time(chartdate, 23, 59, 59, output=chartdate_24)
+  - min(chartdate_24, dischtime, output=procedure_time)
 
 join:
   - name: d_icd_procedures
@@ -59,13 +71,15 @@ event_defaults:
 events:
   - name: PROCEDURE
     columns:
-      # TODO: move to end of the day with callback
-      time: col(chartdate)
+      time: col(procedure_time)
       code:
         - const("ICD")
         - col(icd_version)
         - col(icd_code)
         - col(long_title)
       extension:
+        # ICD procedure codes are billing codes of the admission, so they are
+        # treated as available at discharge. As the time is capped at dischtime,
+        # it is never later than available_time.
         available_time: col(dischtime)
         seq_num: col(seq_num)
