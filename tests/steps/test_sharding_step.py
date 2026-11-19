@@ -1,11 +1,13 @@
 """Tests for the sharding step."""
 
+import itertools
 import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import polars as pl
+import pyarrow.parquet as pq
 import pytest
 import yaml
 from polars.testing import assert_frame_equal
@@ -315,7 +317,8 @@ def event_frame(
     subject_ids: list[int],
     code: str,
     times: list[datetime | None] | None = None,
-    numeric_values: list[float] | None = None,
+    numeric_values: list[float | None] | None = None,
+    text_values: list[str | None] | None = None,
     **extension: pl.Series,
 ) -> pl.DataFrame:
     """Build an event file with the dtypes the extraction step writes, plus optional extension columns."""
@@ -328,7 +331,7 @@ def event_frame(
             "numeric_value": pl.Series(
                 numeric_values if numeric_values is not None else [float(i) for i in subject_ids], dtype=pl.Float32
             ),
-            "text_value": pl.Series([None] * n, dtype=pl.String),
+            "text_value": pl.Series(text_values if text_values is not None else [None] * n, dtype=pl.String),
             **extension,
         }
     )
@@ -674,12 +677,16 @@ def test_sharding_extension_columns_with_concept_input(tmp_path: Path) -> None:
 
 
 UNGROUPED_FRAMES = {
-    ("db_a", "c1"): event_frame([1, 1, 2, 3], "X", times=[T0, T0, T1, T0], numeric_values=[1.0, 2.0, 3.0, 4.0]),
+    ("db_a", "c1"): event_frame([1, 1, 2, 3], "X", times=[T0, T0, T1, T0], numeric_values=[2.0, 1.0, 3.0, 4.0]),
     ("db_a", "c2"): event_frame([1, 2, 3], "W", times=[T0, T0, T2], numeric_values=[5.0, 6.0, 7.0]),
     ("db_b", "c1"): event_frame([1, 2], "X", times=[T0, T1], numeric_values=[8.0, 9.0]),
     ("db_b", "c2"): event_frame([2], "A", times=[T1], numeric_values=[10.0]),
 }
-"""Several datasets, subjects across shard boundaries, equal times, and two rows equal on the whole sort key."""
+"""Several datasets, subjects across shard boundaries, equal times, and two rows equal on the five key columns.
+
+The two rows of subject 1 in ``db_a``/``c1`` differ only in ``numeric_value`` and are stored in descending
+order, so the shard has them in ascending order only if ``numeric_value`` breaks the tie.
+"""
 
 
 @pytest.mark.parametrize("input_kind", ["concept", "extraction"])
@@ -693,7 +700,8 @@ def test_ungrouped_shards_equal_main_plus_namespace_column(tmp_path: Path, input
         config = {"extraction_step": "Extraction"}
     sharding_path = shard_input(tmp_path, files, {**config, "subjects_per_shard": 2}, input_dataset=input_kind)
 
-    # Shards as keyed by (dataset, subject_id), sorted by dataset, subject_id, time and code.
+    # Shards as keyed by (dataset, subject_id), sorted by dataset, subject_id, time and code, then by the
+    # tie-breakers numeric_value and text_value with nulls last.
     combined = pl.concat(
         [frame.with_columns(pl.lit(dataset).alias("dataset")) for (dataset, _), frame in UNGROUPED_FRAMES.items()]
     )
@@ -701,7 +709,10 @@ def test_ungrouped_shards_equal_main_plus_namespace_column(tmp_path: Path, input
     expected = [
         combined.filter(
             pl.struct("dataset", "subject_id").is_in([dict(zip(["dataset", "subject_id"], key)) for key in chunk])
-        ).sort("dataset", "subject_id", "time", "code")
+        ).sort(
+            ["dataset", "subject_id", "time", "code", "numeric_value", "text_value"],
+            nulls_last=[False] * 4 + [True] * 2,
+        )
         for chunk in (keys[start : start + 2] for start in range(0, len(keys), 2))
     ]
 
@@ -709,11 +720,165 @@ def test_ungrouped_shards_equal_main_plus_namespace_column(tmp_path: Path, input
     assert len(shards) == len(expected) == 3
     for shard, expected_shard in zip(shards, expected, strict=True):
         assert shard["subject_namespace"].to_list() == shard["dataset"].to_list()
-        # Rows equal on the whole sort key have no defined order: compare them as a multiset,
-        # and the order through the key columns only.
-        assert_frame_equal(shard.drop("subject_namespace").sort(pl.all()), expected_shard.sort(pl.all()))
-        key_columns = ["dataset", "subject_id", "time", "code"]
-        assert_frame_equal(shard.select(key_columns), expected_shard.select(key_columns))
+        assert_frame_equal(shard.drop("subject_namespace"), expected_shard)
+
+
+def test_sharding_breaks_ties_by_remaining_columns_nulls_last(tmp_path: Path) -> None:
+    """Rows equal on the five key columns are ordered by numeric_value, text_value, then extension columns.
+
+    The rows are split over two files and stored in reverse of the expected order, so neither the input
+    order nor the file order yields it; each tie-breaker puts its nulls last.
+    """
+    expected: list[tuple[float | None, str | None, int | None]] = [
+        (1.0, "a", 1),
+        (1.0, "a", 2),
+        (1.0, "a", None),
+        (1.0, "b", 1),
+        (1.0, None, 1),
+        (2.0, "a", 1),
+        (None, "a", 1),
+    ]
+
+    def frame(rows: list[tuple[float | None, str | None, int | None]]) -> pl.DataFrame:
+        return event_frame(
+            [1] * len(rows),
+            "A",
+            times=[T0] * len(rows),
+            numeric_values=[row[0] for row in rows],
+            text_values=[row[1] for row in rows],
+            hadm_id=pl.Series([row[2] for row in rows], dtype=pl.Int64),
+        )
+
+    reversed_rows = expected[::-1]
+    sharding_path = shard_extraction(
+        tmp_path,
+        {"db/1.0/t1/A.parquet": frame(reversed_rows[:4]), "db/1.0/t2/A.parquet": frame(reversed_rows[4:])},
+        extension_columns=["hadm_id"],
+    )
+
+    (shard,) = read_shards(sharding_path)
+    assert shard.select("numeric_value", "text_value", "hadm_id").rows() == expected
+
+
+def test_sharding_breaks_ties_with_concept_input(tmp_path: Path) -> None:
+    """Concept input is ordered by the same tie-breakers, with nulls last."""
+    rows = [(2.0, None, "100"), (2.0, "b", None), (2.0, "b", "200"), (2.0, "b", "100"), (1.0, None, None)]
+    sharding_path = shard_input(
+        tmp_path,
+        {
+            "heart_rate/1.0.0/testdb/1.0.parquet": event_frame(
+                [1] * len(rows),
+                "heart_rate//bpm",
+                times=[T0] * len(rows),
+                numeric_values=[row[0] for row in rows],
+                text_values=[row[1] for row in rows],
+                stay_id=pl.Series([row[2] for row in rows], dtype=pl.String),
+            )
+        },
+        {"concept_step": "Concept", "extension_columns": ["stay_id"]},
+        input_dataset="concept",
+    )
+
+    (shard,) = read_shards(sharding_path)
+    assert shard.select("numeric_value", "text_value", "stay_id").rows() == [
+        (1.0, None, None),
+        (2.0, "b", "100"),
+        (2.0, "b", "200"),
+        (2.0, "b", None),
+        (2.0, None, "100"),
+    ]
+
+
+def test_sharding_null_time_rows_first_within_subject(tmp_path: Path) -> None:
+    """Rows without time (static events) stay first within their subject: tie-breaker nulls-last does not apply to time."""
+    sharding_path = shard_extraction(
+        tmp_path,
+        {
+            "db/1.0/t1/A.parquet": event_frame([1, 1, 2], "A", times=[T1, T0, T0]),
+            "db/1.0/t2/SEX.parquet": event_frame([2, 1], "SEX"),
+        },
+    )
+
+    (shard,) = read_shards(sharding_path)
+    assert shard.select("subject_id", "time", "code").rows() == [
+        (1, None, "SEX"),
+        (1, T0, "A"),
+        (1, T1, "A"),
+        (2, None, "SEX"),
+        (2, T0, "A"),
+    ]
+
+
+def combination_events() -> pl.DataFrame:
+    """Every combination of two subjects, times, codes, numeric values, text values and ``hadm_id``, each twice.
+
+    Each column but ``subject_id`` and ``code`` has a null, and rows equal on every column occur, so the
+    rows only come out the same if the shard order is total and duplicates do not break the comparison.
+    """
+    return pl.DataFrame(
+        list(itertools.product([1, 2], [None, T0, T1], ["A", "B"], [None, 1.0, 2.0], [None, "x", "y"], [None, 10, 20]))
+        * 2,
+        schema={
+            "subject_id": pl.Int64,
+            "time": pl.Datetime("us"),
+            "code": pl.String,
+            "numeric_value": pl.Float32,
+            "text_value": pl.String,
+            "hadm_id": pl.Int64,
+        },
+        orient="row",
+    )
+
+
+def shard_in_two_layouts(tmp_path: Path, events: pl.DataFrame) -> list[Path]:
+    """Shard ``events`` twice and return both shard files.
+
+    The first run gets them split in two files in their order, the second shuffled and split
+    over three files with other names.
+    """
+    shuffled = events.sample(fraction=1.0, shuffle=True, seed=0)
+    shard_files = []
+    for run, files in {
+        "split_in_two": {
+            "db/1.0/t1/E.parquet": events[: events.height // 2],
+            "db/1.0/t2/E.parquet": events[events.height // 2 :],
+        },
+        "shuffled_in_three": {f"db/1.0/t{index}/F.parquet": shuffled[index::3] for index in range(3)},
+    }.items():
+        run_path = tmp_path / run
+        run_path.mkdir()
+        sharding_path = shard_extraction(run_path, files, extension_columns=["hadm_id"])
+        (shard_file,) = sorted((sharding_path / "data").glob("shard_*.parquet"))
+        shard_files.append(shard_file)
+    return shard_files
+
+
+def test_sharding_output_independent_of_input_order_and_file_split(tmp_path: Path) -> None:
+    """The same events in another row order and split over other files give the same rows in the same order."""
+    events = combination_events()
+
+    shards = [pl.read_parquet(shard_file) for shard_file in shard_in_two_layouts(tmp_path, events)]
+
+    assert shards[0].height == events.height
+    assert_frame_equal(shards[0], shards[1])
+
+
+def test_sharding_writes_fixed_row_groups_and_byte_identical_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Shard files have row groups of the configured size, so the same events in another layout give the same bytes.
+
+    The row group size is lowered so that the small input spans several row groups.
+    """
+    monkeypatch.setattr("weavehr.steps.sharding.step.SHARD_ROW_GROUP_SIZE", 100)
+    events = combination_events()
+
+    shard_files = shard_in_two_layouts(tmp_path, events)
+
+    metadata = pq.ParquetFile(shard_files[0]).metadata
+    row_group_sizes = [metadata.row_group(index).num_rows for index in range(metadata.num_row_groups)]
+    assert row_group_sizes == [100] * (events.height // 100) + [events.height % 100]
+    assert shard_files[0].read_bytes() == shard_files[1].read_bytes()
 
 
 def test_dataset_filter_without_match_warns(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:

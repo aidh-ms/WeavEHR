@@ -15,12 +15,14 @@ the dataset name, so identical subject IDs from different datasets stay distinct
 unless the dataset belongs to a configured subject group: then it is the group's
 name, and a subject ID that occurs in several members of the group is one subject.
 Rows are sorted by subject namespace, subject, time, dataset and code, so the rows
-of a grouped subject from different datasets are interleaved in time. Without
-subject groups the namespace equals the dataset and shard contents and order are
-the same as when keying by ``(dataset, subject_id)``.
+of a grouped subject from different datasets are interleaved in time, and then by
+every remaining output column, so the same input always gives the same rows in
+the same order.
+Without subject groups the namespace equals the dataset and shard contents and
+order are the same as when keying by ``(dataset, subject_id)``.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -51,11 +53,30 @@ group whose members share one subject-ID space.
 """
 
 SORT_KEY = [*SUBJECT_KEY, "time", DATASET_COLUMN, "code"]
-"""Row order within a shard.
+"""Leading columns of the row order within a shard.
 
 Time comes before dataset so that the rows of a subject from the members of a
 subject group are interleaved in time rather than placed one dataset after the
-other. Rows equal on the whole key have no defined order.
+other. Nulls sort first in these columns, so a subject's events without time come
+before its timed events. Rows equal on these columns are ordered by
+``TIE_BREAK_COLUMNS`` and the extension columns (see ``ShardingStep._sort_rows``).
+"""
+
+TIE_BREAK_COLUMNS = ["numeric_value", "text_value"]
+"""Output columns after ``SORT_KEY`` that order rows equal on it, before the extension columns.
+
+A parallel sort places rows equal on its key in any order, so without these a
+rerun on the same input could write the same rows in a different order.
+"""
+
+SHARD_ROW_GROUP_SIZE = 100_000
+"""Rows per Parquet row group of a shard file; only a file's last row group is smaller.
+
+Without a fixed size the streaming Parquet sink ends a row group wherever its
+threads happen to hand over their batches, so a rerun on the same input writes the
+same rows into row groups of other sizes and the file differs byte for byte. With
+fixed boundaries the same input gives byte-identical shard files (with the same
+Polars version, which the files record as their writer).
 """
 
 
@@ -155,10 +176,14 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
             files, datasets=datasets, namespaces=namespaces, extension_columns=extension_dtypes
         ).join(subject_keys.lazy(), on=SUBJECT_KEY, how="inner")
         sinks = [
-            lf.filter(pl.col(SHARD_COLUMN) == shard_idx)
-            .drop(SHARD_COLUMN)
-            .sort(SORT_KEY)
-            .sink_parquet(self._workspace_dir.path / self._shard_file_name(shard_idx), mkdir=True, lazy=True)
+            self._sort_rows(
+                lf.filter(pl.col(SHARD_COLUMN) == shard_idx).drop(SHARD_COLUMN), extension_dtypes
+            ).sink_parquet(
+                self._workspace_dir.path / self._shard_file_name(shard_idx),
+                row_group_size=SHARD_ROW_GROUP_SIZE,
+                mkdir=True,
+                lazy=True,
+            )
             for shard_idx in range(shard_count)
         ]
         pl.collect_all(sinks, engine="streaming")
@@ -511,6 +536,31 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
                 )
             )
         return pl.concat(lfs, how="vertical")
+
+    @staticmethod
+    def _sort_rows(lf: pl.LazyFrame, extension_columns: Iterable[str]) -> pl.LazyFrame:
+        """Sort a shard's rows into a total order over all output columns.
+
+        Rows are ordered by ``SORT_KEY`` (nulls first), then by ``TIE_BREAK_COLUMNS`` and
+        the extension columns in configured order (nulls last). Rows that still compare
+        equal are equal on every column, so the order of the written rows does not depend on
+        the order of the input files or rows, nor on how the parallel sort splits its work.
+
+        Args:
+            lf: The shard's rows with the output columns
+            extension_columns: The configured extension columns, in configured order
+
+        Returns:
+            The sorted rows
+        """
+        tie_breakers = [*TIE_BREAK_COLUMNS, *extension_columns]
+        return lf.sort(
+            [*SORT_KEY, *tie_breakers],
+            # Nulls first in the key columns keeps a subject's events without time (static
+            # events) before its timed events; in a tie-breaker a missing value sorts after
+            # the present ones.
+            nulls_last=[False] * len(SORT_KEY) + [True] * len(tie_breakers),
+        )
 
     @staticmethod
     def _namespace_column(dataset: str, namespaces: Mapping[str, str]) -> pl.Expr:

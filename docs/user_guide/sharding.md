@@ -68,7 +68,7 @@ Every shard has these columns, in this order:
 3. `subject_namespace` (String, never null): the subject group's name for datasets in a subject group, otherwise the dataset name;
 4. the configured extension columns, in configured order.
 
-Subjects are identified by `(subject_namespace, subject_id)`. Subject keys are sorted by namespace and subject ID and split into consecutive chunks of `subjects_per_shard`. Rows within a shard are sorted by `subject_namespace`, `subject_id`, `time`, `dataset`, `code`. Rows equal on all five have no defined order.
+Subjects are identified by `(subject_namespace, subject_id)`. Subject keys are sorted by namespace and subject ID and split into consecutive chunks of `subjects_per_shard`. Rows within a shard are sorted by `subject_namespace`, `subject_id`, `time`, `dataset`, `code`, with nulls first (a subject's events without time come before its timed events), and then by the remaining columns in output order, `numeric_value`, `text_value` and the extension columns in configured order, with nulls last. Rows that are still equal are equal on every column, so the same input always gives the same rows in the same order, whatever the order of the input files and rows. Each shard file is written in row groups of 100,000 rows (only its last row group is smaller), so the same input with the same Polars version gives byte-identical shard files.
 
 Without subject groups `subject_namespace` equals `dataset` on every row, so equal subject IDs from different datasets stay different subjects, and shard contents and order are those of keying by `(dataset, subject_id)`. Two versions of one dataset share one namespace, so selecting both pools their events per subject.
 
