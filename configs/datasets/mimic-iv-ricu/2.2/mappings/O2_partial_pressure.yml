@@ -1,7 +1,7 @@
 # Apply ricu 0.6.3 concept limits before aggregation.
 # mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
 # mimic-iv/concepts/measurement/bg.sql
-# Item selection and unit conversion only; preserve all source observations and values.
+# Item selection followed by ricu-compatible range filtering.
 type: simple
 mappings:
   - pattern:

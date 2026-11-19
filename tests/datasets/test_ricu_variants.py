@@ -33,7 +33,7 @@ def lab(concept: str, unit: str, value: float, expected: float, note: str) -> Ca
     )
 
 
-def fio2(table: str, event: str, value: float | None, text: str | None, expected: float, note: str) -> Case:
+def fio2(table: str, event: str, value: float | None, text: str | None, expected: float | None, note: str) -> Case:
     return Case(
         concept="fraction_of_inspired_oxygen",
         table=table,
@@ -41,7 +41,7 @@ def fio2(table: str, event: str, value: float | None, text: str | None, expected
         code=f"{event}//FiO2",
         value=value,
         text=text,
-        expect=[{"numeric_value": expected}],
+        expect=[] if expected is None else [{"numeric_value": expected}],
         note=note,
     )
 
@@ -66,13 +66,13 @@ EICU_CASES = [
         event="TEMPERATURE",
         code="VITALS_PERIODIC//C",
         value=98.6,
-        expect=[{"numeric_value": 98.6}],
-        note="ricu does not convert a Fahrenheit monitor value (eicu-crd does above 50)",
+        expect=[],
+        note="ricu does not convert Fahrenheit monitor values and drops them outside 32-42 C",
     ),
-    fio2("respiratorycharting", "RESPIRATORY_CHART", 0.4, "0.4", 0.4, "a fraction is not converted to percent"),
+    fio2("respiratorycharting", "RESPIRATORY_CHART", 0.4, "0.4", None, "a fraction is not converted and is dropped by the range filter"),
     fio2("respiratorycharting", "RESPIRATORY_CHART", None, "45.5%", 45.5, "a text is read as its leading number"),
     fio2("respiratorycharting", "RESPIRATORY_CHART", None, "40%", 40.0, "the percent sign is not part of it"),
-    fio2("lab", "LAB", 0.4, None, 0.4, "lab FiO2 is mapped unchanged"),
+    fio2("lab", "LAB", 0.4, None, None, "lab FiO2 is not converted and is dropped below 21 percent"),
 ]
 
 EICU_DEMO_CASES = [
