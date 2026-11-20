@@ -134,7 +134,7 @@ This is how composite scores or ratios (e.g. concepts that combine two measureme
 
 #### Reading extracted events
 
-A table or join can read extracted events instead of a concept: replace `concept` with a `pattern`, written exactly as in a simple mapping. This combines source events without wrapping each one in a concept of its own. For example, the time since birth (in Julian years) at each OMOP visit:
+A table or join can read extracted events instead of a concept: replace `concept` with a `pattern`, written exactly as in a simple mapping. This combines source events without wrapping each one in a concept of its own. For example, the age in completed years at each OMOP visit:
 
 ```yaml
 type: derived
@@ -147,8 +147,10 @@ join:
     both_on: [subject_id]
     how: left
 event:
-  numeric_value: datetime_diff(time_right, time, "years")
+  numeric_value: completed_years(time_right, time)
 ```
+
+`completed_years` counts whole years up to the birthday itself; `datetime_diff(..., "years")` divides by 365.25-day years and can be one year short on or shortly after a birthday. The AUMCdb age mapping (`configs/datasets/aumc/1.5.0/mappings/patient_age.yml`) is built this way.
 
 Each table reads exactly one of `concept` and `pattern`. A `pattern` table holds the matching rows of the extracted event files with all their columns (`subject_id`, `time`, `code`, `numeric_value`, `text_value` and the extension columns of the event), plus `dataset`, `version`, `table` and `event` as simple mapping expressions see them; as for concept tables, `columns` selects the ones to keep. Select the columns that the concept's extension expressions use, such as `dataset` and `table`. `pattern` tables are not dependencies, because extraction finishes before any concept runs. If none of the selected event files was extracted, the derived concept is skipped with a warning, as when an input concept has no output.
 

@@ -41,9 +41,9 @@ for that clinical concept.
 
 Currently mapped (`simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
-respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. The
-ventilation windows, GCS, suspected infection, the vasopressor rates, SOFA
-and Sepsis-3 are described below.
+respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. Sex,
+age, the ventilation windows, GCS, suspected infection, the vasopressor rates,
+SOFA and Sepsis-3 are described below.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -58,6 +58,33 @@ Respiratory support and the airway markers (`respiratory_support`,
 modes) and `device_exposure` (oxygen devices, tubes and tracheostomies). On
 AUMCdb 1.5.0 they select the listed items as intended. Whether a heat-moisture
 exchanger (Kunstneus) always means a tracheostomy is still open.
+
+#### Sex and age
+
+AUMCdb records sex, an age group and an admission-year group per admission,
+but no dates. AMSTEL's `person` row takes sex and birth year from the
+patient's first admission (`insert_person.sql`):
+
+- `patient_sex`: `gender_concept_id` 8532 (Vrouw) is `Female` and 8507 (Man)
+  is `Male`. Any other gender is 0 and gives no event, unless AMSTEL's
+  corrections set it to female because a procedure on the female genital
+  system is recorded; ricu leaves these patients missing.
+- `patient_age`: AMSTEL replaces each group by its midpoint (age 18-39 = 30,
+  40-49 = 45, ..., 80+ = 85; admission years 2003-2009 = 2006, 2010-2016 =
+  2013). The birth year is the first admission's year midpoint minus its age
+  midpoint, with no month or day, and each admission (`visit_occurrence`)
+  starts on 1 January of its year midpoint plus its time since the patient's
+  first admission.
+
+The age is therefore a `derived` mapping: it joins `MEDS_BIRTH` to each
+admission's `VISIT_START` and counts the years completed in between
+(`completed_years`), capped at 90. The first admission gets its group's
+midpoint and a later admission the midpoint plus the years since the first.
+These are midpoints, not exact ages. ricu reads each admission's own age
+group and maps 80+ to 90, so ages differ for 80+ and for later admissions in
+another age group. A later admission in 2010-2016 after a first one in
+2003-2009 is dated from 2013, which makes it 7 years older than the time
+since the first admission gives.
 
 #### Ventilation windows
 
@@ -283,8 +310,9 @@ Not yet mapped / not cleanly mappable from OMOP:
   current mapping yields no values. AMSTEL maps "+3 erg geagiteerd" and
   "+2 geagiteerd" to one answer concept, so the score has to come from the
   label (ricu reads its first two characters); pending.
-- Demographics, other drug *presence* and microbiology results: mappable from
-  `person`/`drug_exposure`/`specimen`, pending.
+- Height (an AMSTEL `measurement`, like the admission weight), admission
+  type, other drug *presence* and microbiology results
+  (`drug_exposure`/`specimen`): pending.
 - **troponin_I**, **erythrocyte_distribution_width**, **totcal_CO2**: no
   approved AMSTEL target in AUMCdb.
 - **prothrombine_time** (seconds): the only item holds INR values (see above).

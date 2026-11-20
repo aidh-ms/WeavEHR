@@ -7,7 +7,8 @@ IDs AMSTEL assigned to AUMCdb items. Each test pins a rule from
 show by itself: unit conversions (and the rows of the same analyte that must not convert),
 scale rules that depend on the value, the dropped device maxima, the choice between source
 items that share one OMOP concept, the classification of ventilator modes and devices, the
-scores of GCS list answers, and the antibiotics excluded or added relative to ricu. A check
+scores of GCS list answers, the antibiotics excluded or added relative to ricu, and the age
+reconstructed from AMSTEL's birth year and admission dates. A check
 that a concept ID is in a pattern would only restate the YAML, so there is none.
 
 - Behaviour cases: one extracted source row per :class:`Case`, grouped by rule and run through
@@ -15,6 +16,8 @@ that a concept ID is in a pattern would only restate the YAML, so there is none.
 - Native extraction: the rules that select by source value or unit read those parts of the code
   that the inherited OMOP tables assemble, so one case per such rule starts from native OMOP
   rows and runs through the AUMCdb table config and the mapping.
+- Demographics: sex and age from native ``person`` and ``visit_occurrence`` rows built as
+  AMSTEL's SQL writes them; age is a derived concept, so it runs through a real concept step.
 - Concept pipeline: real concept-step runs of the complex chains GCS -> CNS SOFA and
   antibiotics + culture orders -> suspected infection.
 
@@ -538,6 +541,99 @@ def test_source_text_rules_read_the_code_of_native_omop_rows(
     result = map_rows(concept, dataset=DATASET, version=VERSION, table=table, event=event, rows=extracted.to_dicts())
 
     assert_rows(result, expect)
+
+
+# --- Demographics ----------------------------------------------------------------------------------
+# AMSTEL writes person and visit_occurrence from the AUMCdb admissions table: insert_person.sql,
+# create_admissions_scalar.sql and insert_visit_occurrence.sql. The rows below follow those scripts.
+
+AGE_MIDPOINTS: Final = {"40-49": 45, "80+": 85}
+"""AMSTEL's midpoints of the AUMCdb age groups used below (create_admissions_scalar.sql)."""
+
+YEAR_MIDPOINTS: Final = {"2003-2009": 2006, "2010-2016": 2013}
+"""AMSTEL's midpoints of the AUMCdb admission-year groups (create_admissions_scalar.sql)."""
+
+
+def test_sex_follows_amstels_gender_concept(tmp_path: Path) -> None:
+    """insert_person.sql maps Vrouw to 8532 (FEMALE), Man to 8507 (MALE) and anything else to 0.
+
+    The mapping header: no event when sex is unknown.
+    """
+    genders = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="person",
+        rows=[
+            {"person_id": person, "year_of_birth": 1961, "gender_concept_id": concept, "gender_source_value": source}
+            for person, concept, source in [(1, 8532, "Vrouw"), (2, 8507, "Man"), (3, 0, None)]
+        ],
+    )["GENDER"]
+
+    result = map_rows(
+        "patient_sex", dataset=DATASET, version=VERSION, table="person", event="GENDER", rows=genders.to_dicts()
+    )
+
+    assert_rows(result, [{"subject_id": 1, "text_value": "Female"}, {"subject_id": 2, "text_value": "Male"}])
+
+
+def test_age_is_the_age_group_midpoint_at_the_first_admission_and_grows_from_there(tmp_path: Path) -> None:
+    """Native person and visit_occurrence rows as AMSTEL writes them, through the derived age mapping.
+
+    AMSTEL's birth year is the first admission's year midpoint minus its age midpoint, with no
+    month or day, and the first admission starts on 1 January of its year midpoint. So the first
+    admission falls on the birthday and its age is the age midpoint: 45 for 40-49 in 2003-2009
+    (born 1961; 365.25-day years would count 44) and 85 for 80+ (ricu: 90). A later admission adds
+    the completed years since; the mapping header caps it at 90. Subject 3 has no person row.
+    """
+    first = {subject: datetime(YEAR_MIDPOINTS[years], 1, 1) for subject, years in [(1, "2003-2009"), (2, "2010-2016")]}
+    births = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="person",
+        rows=[
+            {"person_id": 1, "year_of_birth": YEAR_MIDPOINTS["2003-2009"] - AGE_MIDPOINTS["40-49"]},
+            {"person_id": 2, "year_of_birth": YEAR_MIDPOINTS["2010-2016"] - AGE_MIDPOINTS["80+"]},
+        ],
+    )["MEDS_BIRTH"]
+    later = {1: datetime(2008, 6, 19), 2: datetime(2019, 3, 1)}
+    admissions = [(1, first[1]), (1, later[1]), (2, first[2]), (2, later[2]), (3, first[2])]
+    visits = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="visit_occurrence",
+        rows=[
+            {
+                "person_id": person,
+                "visit_occurrence_id": visit,
+                "visit_concept_id": 32037,
+                "visit_source_value": "IC",
+                "visit_start_datetime": start,
+            }
+            for visit, (person, start) in enumerate(admissions)
+        ],
+    )["VISIT_START"]
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["patient_age"],
+        sources={"person/MEDS_BIRTH": births, "visit_occurrence/VISIT_START": visits},
+    )
+
+    assert_rows(
+        outputs["patient_age"],
+        [
+            {"subject_id": 1, "time": first[1], "code": "patient_age//years", "numeric_value": 45},
+            {"subject_id": 1, "time": later[1], "numeric_value": 47},
+            {"subject_id": 2, "time": first[2], "numeric_value": 85},
+            # 91 at the later admission
+            {"subject_id": 2, "time": later[2], "numeric_value": 90},
+        ],
+    )
 
 
 # --- Concept pipeline -----------------------------------------------------------------------------

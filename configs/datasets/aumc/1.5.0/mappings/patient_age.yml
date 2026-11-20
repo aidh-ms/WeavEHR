@@ -1,0 +1,42 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- age in whole years at each ICU admission; 90
+# stands for 90 or older. AUMCdb ages are age-group midpoints, not exact ages.
+#
+# AUMCdb gives each admission an age group and an admission-year group, not dates.
+# AMSTEL (create_admissions_scalar.sql) replaces both by midpoints:
+#   age 18-39 = 30, 40-49 = 45, 50-59 = 55, 60-69 = 65, 70-79 = 75, 80+ = 85
+#   year 2003-2009 = 2006, 2010-2016 = 2013
+# and dates each admission (visit_occurrence, 32037 Intensive Care) from 1 January of
+# its year midpoint plus its time since the patient's first admission. The birth year
+# is the first admission's year midpoint minus its age midpoint (insert_person.sql),
+# with no month, day or time, so MEDS_BIRTH is on 1 January of that year.
+#
+# The age is the years completed from MEDS_BIRTH to the admission start: the age
+# midpoint at the first admission, plus the years since it at a later one. An
+# admission without a birth gives no age.
+#
+# ricu reads each admission's own age group and maps 80+ to 90. Here 80+ is 85, and a
+# later admission in another age group keeps aging from the first one. A later
+# admission in 2010-2016 after a first in 2003-2009 is dated from 2013 rather than
+# 2006, so it gets an age 7 years older than the time since the first admission
+# gives.
+type: derived
+table:
+  pattern:
+    table: visit_occurrence
+    event: VISIT_START
+    code: ^32037(//.*)?$
+  columns: [subject_id, time, dataset, table]
+join:
+  - pattern:
+      table: person
+      event: MEDS_BIRTH
+      code: ^MEDS_BIRTH$
+    columns: [subject_id, time]
+    how: left
+    both_on: [subject_id]
+    post_callbacks:
+      - completed_years(time_right, time, output=age)
+event:
+  numeric_value: replace(age > 90, 90, age)
+filters:
+  - drop_na(numeric_value)
