@@ -22,7 +22,7 @@ self-documenting and harmonisation can key on the leading numeric id.
 | HiRID table     | Source                          | Events emitted                                  |
 | --------------- | ------------------------------- | ----------------------------------------------- |
 | `observations`  | `observation_tables/` (`variableid`) | `OBSERVATION`                              |
-| `pharma`        | `pharma_records/` (`pharmaid`)  | `PHARMA`                                         |
+| `pharma`        | `pharma_records/` (`pharmaid`)  | `PHARMA`                                        |
 | `general`       | `general_table.csv`             | `SEX`, `AGE`, `ICU_ADMISSION`, `MEDS_BIRTH`, `MEDS_DEATH` |
 
 HiRID records whether a patient died (`general_table.discharge_status`) but not
@@ -65,10 +65,19 @@ haematology) from `observations`, vital signs, GCS components (eye/motor/verbal)
 and RASS, height/weight, and the demographics from `general` (`patient_sex`,
 `patient_age`).
 
+Norepinephrine, epinephrine, dobutamine and vasopressin rates come from the
+`pharma` records through `vasopressor_infusion` and the shared rate transformer.
+A record's `givendose` is the dose since the previous record of its infusion, so
+each record states the average rate from its time on: the next record's dose over
+the time until it. A recorded stop flag states 0. ricu's single-dose
+items (boluses and 1 mg epinephrine doses) are left out. The rules were checked
+against aggregate summaries of HiRID 1.1.1, not record by record. See
+[Vasopressor rates](../../../docs/user_guide/vasopressor_events.md).
+
 Not yet mapped / not cleanly mappable as `simple`:
-- **Drug rates / durations** (vasopressors, antibiotics, corticosteroids,
-  insulin, dextrose): live in `pharma` and need `derived`/`complex` handling of
-  HiRID's per-record dosing.
+- **Other drug rates / durations** (antibiotics, corticosteroids, insulin,
+  dextrose, vasopressor durations): live in `pharma` and need `derived`/`complex`
+  handling of HiRID's per-record dosing.
 - **Urine output**: HiRID records a cumulative signal that ricu de-accumulates
   (`hirid_urine`) — needs a `complex` transform.
 - **GCS total** and **lymphocytes**: derived (sum of GCS components / blood-cell
@@ -92,6 +101,9 @@ Not yet mapped / not cleanly mappable as `simple`:
   times, so they populate the `available_time` extension. HiRID has no recorded
   date of birth, so `MEDS_BIRTH` is derived as `admissiontime` minus `age` years.
 - `patientid` is used as the MEDS `subject_id`.
+- `pharma` decodes the `recordstatus` bit field into three flags: `given` (not
+  invalidated and administered, bits 2 and 32 unset), `infusion_start` (bit 4)
+  and `infusion_stop` (bit 256).
 - The `ordinal_vars_ref.csv` reference (which decodes coded ordinal/categorical
   observation values into text) is not wired in yet — it is only needed for the
   deferred categorical concepts (e.g. ventilation mode), so it will land with

@@ -415,6 +415,7 @@ def test_every_dataset_mapping_has_a_concept_definition() -> None:
 
 
 INFUSION_CONCEPT = CONFIG_ROOT / "concepts" / "medications" / "vasopressor_infusion.yml"
+INFUSION_TRANSFORMER = "weavehr.steps.concept.transformer.infusion.InfusionRateTransformer"
 
 
 @pytest.mark.parametrize("concept_dir", DATASET_CONCEPT_DIRS, ids=relative_id)
@@ -438,6 +439,33 @@ def test_infusion_events_follow_the_state_stream_contract(concept_dir: Path) -> 
         assert extension.get("rate_unit"), f"{where}: a rate needs its source unit"
         extra = sorted(set(extension) - set(concept.extension_columns))
         assert not extra, f"{where}: extension columns outside the concept's contract: {extra}"
+
+
+@pytest.mark.parametrize("concept_dir", DATASET_CONCEPT_DIRS, ids=relative_id)
+def test_rate_concepts_convert_their_own_drug_with_the_shared_transformer(concept_dir: Path) -> None:
+    """A rate mapping reads its own drug's infusion events, so no dataset converts units on its own."""
+    dataset, version = concept_dir.parent.parent.name, concept_dir.parent.name
+    infusion = ConceptConfig.load(INFUSION_CONCEPT, dataset_paths=[concept_dir])
+    for drug in infusion.levels:
+        concept = ConceptConfig.load(CONFIG_ROOT / "concepts" / "medications" / f"{drug}_rate.yml", [concept_dir])
+        dataset_concepts = concept.get_dataset_concepts(dataset, version)
+        if not dataset_concepts:
+            continue
+        where = f"{relative_id(concept_dir)}/{drug}_rate"
+        assert len(dataset_concepts) == 1, f"{where}: one conversion per dataset"
+        [mapping] = dataset_concepts
+        assert concept.limits.max is not None, f"{where}: an upper limit catches mislabelled units"
+        assert isinstance(mapping, ComplexDatasetConceptConfig), where
+        assert mapping.concept_transformer == INFUSION_TRANSFORMER, where
+        assert mapping.kwargs.get("drug") == drug, where
+        assert infusion.identifier in mapping.dependencies, where
+        levels = {
+            m.level
+            for dc in infusion.get_dataset_concepts(dataset, version)
+            if isinstance(dc, SimpleDatasetConceptConfig)
+            for m in dc.mappings
+        }
+        assert drug in levels, f"{where}: no {drug} infusion events to read"
 
 
 def test_config_inventory_is_nonempty() -> None:

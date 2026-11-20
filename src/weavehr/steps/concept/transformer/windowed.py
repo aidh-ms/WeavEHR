@@ -169,7 +169,7 @@ class ActiveState(Aggregation):
         window: Timeout since the latest numeric update when no identified
             matching stop is available; None carries values until a stop/update.
         id_column: Name of the input column linking one state's updates and
-            stop, e.g. ``linkorderid`` for an infusion across rate changes.
+            stop, e.g. ``stream_id`` for an infusion across rate changes.
             Its values need only be unique within the same subject and stay.
             Missing/null identifiers share one unidentified observation stream.
         stop_when: Boolean expression evaluated on the original input rows,

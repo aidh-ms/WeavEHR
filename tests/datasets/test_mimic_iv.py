@@ -16,11 +16,11 @@ that an item ID is in a mapping's pattern would only restate the YAML, so there 
   admission events, culture times and results, order times, infusion durations and weights,
   HCPCS, procedure and OMR dates, open ICU stays and their care units, and ICD titles.
 - Concept pipeline: a real concept step from prescription, infusion and culture rows to
-  suspected infection and Sepsis-3.
+  suspected infection and Sepsis-3, and from infusion segments and weights to vasopressor rates.
 
-Covered elsewhere: the GCS ETT correction, the ventilation markers of invasive ventilation and
-the pressor start, change and stop rules (``tests/steps/test_concept_step.py``), and the
-shared SOFA, sepsis, AKI and GCS calculations (``tests/transformers/``).
+Covered elsewhere: the GCS ETT correction and the ventilation markers of invasive ventilation
+(``tests/steps/test_concept_step.py``), and the shared SOFA, sepsis, AKI, GCS and infusion-rate
+calculations (``tests/transformers/``).
 """
 
 from collections.abc import Mapping, Sequence
@@ -58,6 +58,7 @@ ITEMS: Final[Mapping[int, str]] = {
     220277: "O2 saturation pulseoxymetry",
     220950: "Dextrose 10%",
     221289: "Epinephrine",
+    221749: "Phenylephrine",
     221906: "Norepinephrine",
     222315: "Vasopressin",
     223258: "Insulin - Regular",
@@ -66,6 +67,7 @@ ITEMS: Final[Mapping[int, str]] = {
     223835: "Inspired O2 Fraction",
     223849: "Ventilator Mode",
     224385: "Intubation",
+    224639: "Daily Weight",
     224650: "Ectopy Type 1",
     224651: "Ectopy Frequency 1",
     224829: "Trach Tube Type",
@@ -74,6 +76,7 @@ ITEMS: Final[Mapping[int, str]] = {
     226237: "Open Tracheostomy",
     226479: "Ectopy Type 2",
     226480: "Ectopy Frequency 2",
+    226512: "Admission Weight (Kg)",
     226707: "Height",
     226732: "O2 Delivery Device(s)",
     227130: "Trach Care",
@@ -196,22 +199,6 @@ def infusion_end(concept: str, item: int, *, expect: Sequence[Mapping[str, Any]]
 
 RATES = [
     infusion_end(
-        "vasopressin_rate",
-        222315,
-        rate=2.4,
-        rateuom="units/hour",
-        expect=[{"numeric_value": 0.04}],
-        note="units/hour are converted to the concept's units/min",
-    ),
-    infusion_end(
-        "vasopressin_rate",
-        222315,
-        rate=0.04,
-        rateuom="units/min",
-        expect=[{"numeric_value": 0.04}],
-        note="units/min is the concept unit and is not converted",
-    ),
-    infusion_end(
         "insulin",
         223258,
         rate=3,
@@ -237,15 +224,8 @@ RATES = [
         note="D10 is the reference solution",
     ),
     infusion_end("dextrose_as_D10", 228140, expect=NOTHING, note="a bolus has an amount but no rate"),
-    case(
-        "norepinephrine_rate",
-        "INFUSION_START",
-        221906,
-        extra={"originalrate": 16.0, "rateuom": "mcg/min", "stay_id": STAY_ID},
-        expect=NOTHING,
-        note="a rate per minute cannot become the concept's mcg/kg/min without a weight",
-    ),
 ]
+
 
 def infusion(
     event: str, item: int, *, expect: Sequence[Mapping[str, Any]], note: str, text: str | None = None, **columns: Any
@@ -1327,3 +1307,70 @@ def test_suspected_infection_pairs_prescription_starts_and_infusions_with_cultur
         context="suspected_infection",
     )
     assert_rows(outputs["sepsis3"], [{"subject_id": 1, "time": at(45)}], context="sepsis3")
+
+
+def test_infusion_rates_take_patient_weight_and_apply_limits(tmp_path: Path) -> None:
+    """MetaVision segments through vasopressor_infusion, patient_weight and the rate concepts.
+
+    The rate concepts' units and limits are their YAML's (ricu's norepinephrine limit of 3 mcg/kg/min);
+    the weight rules are InfusionRateTransformer's: the latest patient_weight at or before the
+    rate, a charted admission or daily weight. The weight entered with the infusion is not a
+    patient_weight, and a weight charted later is never used.
+    """
+    start = {"stay_id": STAY_ID, "available_time": at(0)}
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["vasopressor_infusion", "patient_weight", "norepinephrine_rate", "phenylephrine_rate", "vasopressin_rate"],
+        sources={
+            "inputevents/INFUSION_START": [
+                {**start, "subject_id": 1, "time": at(0), "code": code("INFUSION_START", 221906), "linkorderid": 1,
+                 "orderid": 1, "originalrate": 0.2, "rateuom": "mcg/kg/min", "patientweight": 80.0},
+                # 150 mcg/kg/min: above the limit, so the event keeps no value.
+                {**start, "subject_id": 1, "time": at(1), "code": code("INFUSION_START", 221906), "linkorderid": 1,
+                 "orderid": 2, "originalrate": 0.15, "rateuom": "mg/kg/min", "patientweight": 80.0},
+                {**start, "subject_id": 1, "time": at(0), "code": code("INFUSION_START", 221749), "linkorderid": 3,
+                 "orderid": 3, "originalrate": 40.0, "rateuom": "mcg/min", "patientweight": 50.0},
+                {**start, "subject_id": 2, "time": at(0), "code": code("INFUSION_START", 221749), "linkorderid": 4,
+                 "orderid": 4, "originalrate": 40.0, "rateuom": "mcg/min"},
+                {**start, "subject_id": 1, "time": at(0), "code": code("INFUSION_START", 222315), "linkorderid": 5,
+                 "orderid": 5, "originalrate": 2.4, "rateuom": "units/hour", "patientweight": 80.0},
+            ],
+            "inputevents/INFUSION_END": [
+                {"subject_id": 1, "time": at(1), "code": code("INFUSION_END", 221906), "stay_id": STAY_ID,
+                 "linkorderid": 1, "orderid": 1, "text_value": "ChangeDose/Rate"},
+                {"subject_id": 1, "time": at(2), "code": code("INFUSION_END", 221906), "stay_id": STAY_ID,
+                 "linkorderid": 1, "orderid": 2, "text_value": "Stopped"},
+            ],
+            "chartevents/CHART": [
+                {"subject_id": 1, "time": at(0), "code": code("CHART", 224639), "numeric_value": 80.0},
+                {"subject_id": 2, "time": at(2), "code": code("CHART", 226512), "numeric_value": 50.0},
+            ],
+        },
+    )  # fmt: skip
+
+    linked = {"stream_id": "inputevents:1", "stay_id": str(STAY_ID)}
+    assert_rows(
+        outputs["norepinephrine_rate"],
+        [
+            {"time": at(0), "numeric_value": 0.2, **linked},
+            {"time": at(1), "numeric_value": None, **linked},
+            {"time": at(2), "numeric_value": 0, "text_value": "Stopped", **linked},
+        ],
+        context="norepinephrine_rate",
+    )
+    assert_rows(
+        outputs["phenylephrine_rate"],
+        [
+            # 40 mcg/min with the charted daily weight of 80 kg, not the 50 kg entered with the infusion.
+            {"subject_id": 1, "numeric_value": 0.5, "available_time": at(0)},
+            # Subject 2's only weight is charted later: its rate cannot be converted.
+        ],
+        context="phenylephrine_rate",
+    )
+    assert_rows(
+        outputs["vasopressin_rate"],
+        [{"numeric_value": 0.04, "code": "vasopressin_rate//units/min"}],
+        context="vasopressin_rate",
+    )

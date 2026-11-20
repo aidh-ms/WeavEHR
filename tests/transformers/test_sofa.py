@@ -293,10 +293,10 @@ def test_component_measurement_alignment_includes_its_boundary(
 class TestCardiovascular:
     @staticmethod
     def rates(*rows: tuple[int, float, float | None, str | None, str | None]) -> pl.LazyFrame:
-        """Rate events with native stay and infusion identifiers."""
+        """Rate events with stay and episode identifiers, as the rate concepts write them."""
         return frame(*[(subject, at(hour), rate) for subject, hour, rate, _, _ in rows]).with_columns(
             pl.Series("stay_id", [row[3] for row in rows], dtype=pl.String),
-            pl.Series("linkorderid", [row[4] for row in rows], dtype=pl.String),
+            pl.Series("stream_id", [row[4] for row in rows], dtype=pl.String),
         )
 
     @pytest.mark.parametrize(
@@ -445,19 +445,15 @@ class TestCardiovascular:
             == expected
         )
 
-    @pytest.mark.parametrize(
-        ("kwargs", "expected"), [({"pressor_id_column": "segment"}, [4.0, 4.0, 0.0]), ({}, [4.0, 0.0, 0.0])]
-    )
-    def test_pressor_id_column_names_the_infusion_identifier(self, kwargs: dict, expected: list[float]) -> None:
-        # The identifier lives in another column; only the configured name links the stop to its start.
-        rates = self.rates((1, 0, 0.2, "100", None), (1, 10, 0, "100", None)).with_columns(
-            segment=pl.lit("A", dtype=pl.String)
+    def test_a_native_order_id_is_not_the_stream_identifier(self) -> None:
+        """The rate concepts carry ``stream_id``; a stray ``linkorderid`` must not link events."""
+        rates = self.rates((1, 0, 0.2, "100", None), (1, 1, 0, "100", None)).with_columns(
+            pl.Series("linkorderid", ["A", "A"], dtype=pl.String)
         )
-        transformer = make(SofaCardiovascularTransformer, pressor_window="6h", **kwargs)
-        assert (
-            scores(transformer, {"norepinephrine_rate": rates, "mean_arterial_pressure": frame((1, at(8), 75))})
-            == expected
-        )
+        assert scores(
+            make(SofaCardiovascularTransformer, pressor_window="6h"),
+            {"norepinephrine_rate": rates, "mean_arterial_pressure": frame((1, at(8), 75))},
+        ) == [4.0, 0.0, 0.0]
 
     def test_a_pause_and_restart_do_not_bridge_the_stopped_period(self) -> None:
         assert scores(
