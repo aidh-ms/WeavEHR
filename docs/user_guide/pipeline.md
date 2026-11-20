@@ -116,7 +116,7 @@ Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, 
 
 Each step's `datasets/<step name>/` directory is a self-contained [MEDS](https://github.com/Medical-Event-Data-Standard/meds) dataset:
 
-- `data/**/*.parquet` — event streams with the columns `subject_id` (int64), `time` (datetime, microseconds), `code` (string), `numeric_value` (float32), `text_value` (string), plus any configured extension columns (e.g. `hadm_id`, `stay_id`, `available_time`).
+- `data/**/*.parquet` — event streams with the columns `subject_id` (int64), `time` (datetime, microseconds), `code` (string), `numeric_value` (float32), `text_value` (string), plus any configured extension columns (e.g. `visit_occurrence_id`, `visit_detail_id`, `available_time`).
 - `metadata/dataset.json` — dataset metadata, validated against the MEDS schema, including the WeavEHR ETL version and creation timestamp.
 - `metadata/codes.parquet` — every distinct code in the dataset. Browse this file to discover what was extracted; it is also the natural starting point for writing [concept mappings](concepts.md).
 

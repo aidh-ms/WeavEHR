@@ -21,7 +21,7 @@ mappings:
     level: invasive
     columns: &procedure_columns
       extension:
-        stay_id: col(visit_occurrence_id)
+        visit_occurrence_id: col(visit_occurrence_id)
         record_id: col(procedure_occurrence_id)
   - pattern:
       table: procedure_occurrence
@@ -36,5 +36,5 @@ mappings:
     level: invasive
     columns:
       extension:
-        stay_id: col(visit_occurrence_id)
+        visit_occurrence_id: col(visit_occurrence_id)
         record_id: col(device_exposure_id)

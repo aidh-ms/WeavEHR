@@ -41,7 +41,7 @@ class Recording(BaseConceptTransformer):
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
         self.dependencies = dependencies
         first = next(iter(dependencies.values()))
-        return first.select("subject_id", "time", "numeric_value")
+        return first
 
 
 class TolerantRecording(Recording):
@@ -136,18 +136,21 @@ def test_preserved_infusion_metadata_reaches_a_downstream_transform(tmp_path: Pa
         pl.Series("orderid", ["101", "102", "102"]),
         pl.Series("linkorderid", ["101", "101", "101"]),
         pl.Series("event", ["INFUSION_START", "INFUSION_START", "INFUSION_END"]),
-        pl.lit("100").alias("stay_id"),
+        pl.lit("100").alias("visit_detail_id"),
     )
     dependency.write_parquet(path)
 
     transformer = Recording(concept, config(norepinephrine.identifier), cast(ConceptStep, step))
     transformer()
     received = transformer.dependencies["norepinephrine_rate"].collect()
-    assert received.select("numeric_value", "orderid", "linkorderid", "event", "stay_id").rows() == [
+    assert received.select("numeric_value", "orderid", "linkorderid", "event", "visit_detail_id").rows() == [
         (0.25, "101", "101", "INFUSION_START", "100"),
         (0.125, "102", "101", "INFUSION_START", "100"),
         (0.0, "102", "101", "INFUSION_END", "100"),
     ]
+    # The transformer returns the source rows, so their encounter ID survives
+    # even though the output concept declares only a dataset extension.
+    assert output_of(step, concept)["visit_detail_id"].to_list() == ["100", "100", "100"]
 
 
 def test_a_transform_may_produce_text_instead_of_a_number(tmp_path: Path, concept: ConceptConfig) -> None:

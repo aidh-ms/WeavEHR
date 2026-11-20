@@ -295,7 +295,7 @@ class TestCardiovascular:
     def rates(*rows: tuple[int, float, float | None, str | None, str | None]) -> pl.LazyFrame:
         """Rate events with native stay and infusion identifiers."""
         return frame(*[(subject, at(hour), rate) for subject, hour, rate, _, _ in rows]).with_columns(
-            pl.Series("stay_id", [row[3] for row in rows], dtype=pl.String),
+            pl.Series("visit_detail_id", [row[3] for row in rows], dtype=pl.String),
             pl.Series("linkorderid", [row[4] for row in rows], dtype=pl.String),
         )
 
@@ -551,7 +551,7 @@ class TestRespiration:
     def markers(*rows: tuple[int, float, str | None, str | None]) -> pl.LazyFrame:
         """Start/end event presence with native stay and procedure identifiers."""
         return frame(*[(subject, at(hour), None) for subject, hour, _, _ in rows]).with_columns(
-            pl.Series("stay_id", [row[2] for row in rows], dtype=pl.String),
+            pl.Series("visit_detail_id", [row[2] for row in rows], dtype=pl.String),
             pl.Series("orderid", [row[3] for row in rows], dtype=pl.String),
         )
 
@@ -792,7 +792,7 @@ class TestRespiration:
                 {
                     "ventilation_start": self.markers((1, 0, "100", "A")),
                     "O2_partial_pressure": frame((1, T0, 60.0), (1, at(0.5), 60.0)).with_columns(
-                        pl.Series("stay_id", ["100", "200"])
+                        pl.Series("visit_detail_id", ["100", "200"])
                     ),
                     "fraction_of_inspired_oxygen": frame((1, T0, 100.0)),
                 }

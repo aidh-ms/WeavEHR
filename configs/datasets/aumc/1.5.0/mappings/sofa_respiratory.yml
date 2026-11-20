@@ -9,4 +9,5 @@ concepts:
   - ventilation_start.1.0.0
   - ventilation_end.1.0.0
 kwargs:
+  ventilation_stay_column: visit_occurrence_id
   ventilation_id_column: record_id

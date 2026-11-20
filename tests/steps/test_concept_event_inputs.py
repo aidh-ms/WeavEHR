@@ -108,15 +108,17 @@ def test_event_input_frame_matches_like_a_simple_mapping() -> None:
             "time": [datetime(2024, 1, 1, hour) for hour in range(4)],
             # The code may contain the event name, which patterns need not repeat.
             "code": ["CHART//220045//Heart Rate", "CHART//220050//Systolic BP"] + ["CHART//220045//Heart Rate"] * 2,
-            # The last row matches the code but not the stay_id extension pattern.
-            "stay_id": ["100", "100", "101", "200"],
+            # The last row matches the code but not the visit_detail_id extension pattern.
+            "visit_detail_id": ["100", "100", "101", "200"],
         }
     )
-    pattern = MappingPatternConfig(table="vitals", event="CHART", code="^220045//", extensions={"stay_id": "^10"})
+    pattern = MappingPatternConfig(
+        table="vitals", event="CHART", code="^220045//", extensions={"visit_detail_id": "^10"}
+    )
 
     df = ConceptStep.build_event_input_frame(events, pattern, dataset="testdb", version="1.0", event_name="CHART")
 
-    assert df.collect().select("time", "stay_id", "dataset", "version", "table", "event").rows() == [
+    assert df.collect().select("time", "visit_detail_id", "dataset", "version", "table", "event").rows() == [
         (datetime(2024, 1, 1, 0), "100", "testdb", "1.0", "vitals", "CHART"),
         (datetime(2024, 1, 1, 2), "101", "testdb", "1.0", "vitals", "CHART"),
     ]
@@ -167,11 +169,11 @@ event:
 type: derived
 table:
   {table_yaml(WEIGHT_EVENTS)}
-  columns: [subject_id, time, stay_id, dataset, table, event]
+  columns: [subject_id, time, visit_detail_id, dataset, table, event]
 event:
   text_value: col(event)
   extension:
-    stay: col(stay_id)
+    stay: col(visit_detail_id)
     source_table: col(table)
 """
             },

@@ -71,7 +71,7 @@ join:
 event_defaults:
   subject_id: col(subject_id)
   extension:
-    hadm_id: col(hadm_id)
+    visit_occurrence_id: col(hadm_id)
     poe_id: col(poe_id)
     poe_seq: col(poe_seq)
     pharmacy_id: col(pharmacy_id)

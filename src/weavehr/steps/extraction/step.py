@@ -15,6 +15,7 @@ import pyarrow.dataset as ds
 from polars import LazyFrame
 
 from weavehr.callbacks.interpreter import parse_expr
+from weavehr.identifiers import ENCOUNTER_ID_COLUMNS
 from weavehr.logging import get_logger
 from weavehr.steps.base.step import ConfigurableBaseStep
 from weavehr.steps.extraction.config.event import EventConfig
@@ -303,7 +304,11 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 pl.col("numeric_value").cast(pl.Float32, strict=False),
                 pl.col("text_value").cast(pl.String),
             ]
-            + [pl.col(col) for col in event.columns.extension.keys()]
+            + [
+                pl.col(col).cast(pl.String) if col in ENCOUNTER_ID_COLUMNS else pl.col(col)
+                for col in event.columns.extension
+                if event.name != "MEDS_BIRTH" or col not in ENCOUNTER_ID_COLUMNS
+            ]
         )
 
         event_lf = cls._apply_filters(

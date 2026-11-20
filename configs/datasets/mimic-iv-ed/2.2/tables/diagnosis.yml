@@ -1,3 +1,4 @@
+# Encounter IDs use the hospital admission if linked, otherwise a standalone ED visit.
 # Billed diagnoses of an ED stay (up to 9 per stay). The table carries its own
 # icd_title, so no ICD dictionary is joined. It has no time column: diagnoses are
 # determined after the patient left the ED (MIMIC-IV-ED documentation, diagnosis).
@@ -25,12 +26,16 @@ columns:
 join:
   # The diagnoses of a stay are dated at the stay's ED departure (outtime): the
   # documentation states that diagnoses are determined after the patient left the ED,
-  # so they are not known at arrival. Joined on stay_id from the ED release's own
+  # so they are not known at arrival. Joined on subject_id and stay_id from the ED release's own
   # edstays, never from MIMIC-IV.
   - name: edstays
     path: ed/edstays.csv.gz
     columns:
-      # subject_id and extensions
+      # Encounter link and event time from the ED stay.
+      - name: subject_id
+        type: int64
+      - name: hadm_id
+        type: int64
       - name: stay_id
         type: int64
       # db fields - times
@@ -39,12 +44,14 @@ join:
         params:
           format: "%Y-%m-%d %H:%M:%S"
     both_on:
+      - subject_id
       - stay_id
 
 event_defaults:
   subject_id: col(subject_id)
   extension:
-    stay_id: col(stay_id)
+    visit_occurrence_id: replace(hadm_id != None, cast(hadm_id, "string"), concat_str("ed:", stay_id))
+    visit_detail_id: replace(hadm_id != None, concat_str("ed:", stay_id), None)
 
 events:
   # Same code layout as mimic-iv diagnoses_icd: ICD//<version>//<code>//<title>.

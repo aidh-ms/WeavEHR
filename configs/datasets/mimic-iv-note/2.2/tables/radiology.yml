@@ -32,5 +32,5 @@ events:
         - col("note_id")
       text_value: col("text")
       extension:
-        hadm_id: col(hadm_id)
+        visit_occurrence_id: col(hadm_id)
         sequence: col(note_seq)

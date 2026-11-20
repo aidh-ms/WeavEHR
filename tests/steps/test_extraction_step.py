@@ -57,7 +57,7 @@ class TestExtractionStep:
         assert df.schema["code"] == pl.String
         assert df.schema["numeric_value"] == pl.Float32
         assert df.schema["text_value"] == pl.String
-        assert "stay_id" in df.columns  # extension column preserved
+        assert "visit_detail_id" in df.columns  # extension column preserved
 
     def test_output_is_moved_from_workspace_to_dataset(self, tmp_path: Path, extraction_config: Path) -> None:
         project = run_extraction(tmp_path, extraction_config)
@@ -212,7 +212,7 @@ class TestExtractionStep:
                 "code": ["WEIGHT//earlier"],
                 "numeric_value": [1.0],
                 "text_value": [None],
-                "stay_id": [90],
+                "visit_detail_id": ["90"],
             },
             schema={
                 "subject_id": pl.Int64,
@@ -220,7 +220,7 @@ class TestExtractionStep:
                 "code": pl.String,
                 "numeric_value": pl.Float32,
                 "text_value": pl.String,
-                "stay_id": pl.Int64,
+                "visit_detail_id": pl.String,
             },
         )
         existing.write_parquet(workspace / "WEIGHT.parquet")

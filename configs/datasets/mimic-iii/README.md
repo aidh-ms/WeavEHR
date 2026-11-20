@@ -50,7 +50,10 @@ Bundled configs load automatically. Substitute `mimic-iii-demo` or
 | `diagnoses_icd`, `procedures_icd`, `drgcodes`, `cptevents` | Diagnoses, procedures, billing |
 | `services`, `transfers`, `callout`, `noteevents` | Services, movements, callouts, notes |
 
-Source `icustay_id` becomes the `stay_id` extension. Undated diagnoses and ICD
+Source `HADM_ID` becomes `visit_occurrence_id`; `ICUSTAY_ID` becomes
+`visit_detail_id` (`icu:<id>`). Transfer rows use `transfer:<ROW_ID>` as
+the detail, retain the recorded ICU detail as `parent_visit_detail_id`, and
+expose `CURR_WARDID` as `care_site_id`. Undated diagnoses and ICD
 procedures are dated at discharge, not at admission. Error-marked chart,
 output and note events and rewritten MetaVision infusions are excluded.
 Unmapped source items remain available in extraction.
@@ -138,3 +141,6 @@ CareVue stays and removes subjects found in IV v2.0. A CareVue-only filter of
 full III does not reproduce that cohort. Consult its documentation for the
 IV version used for exclusion and mortality-selection bias. These mappings
 do not infer identities between the databases.
+
+See [encounter identifiers](../../../docs/user_guide/identifiers.md) for the
+shared visit hierarchy, source-specific ID mappings and migration guidance.

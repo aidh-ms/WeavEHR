@@ -83,7 +83,7 @@ preserve their source metadata on both infusion starts and retained ends:
 columns:
   numeric_value: col(originalrate)   # the start mapping; ends still map to zero
   extension:
-    stay_id: col(stay_id)
+    visit_detail_id: col(visit_detail_id)
     linkorderid: col(linkorderid)
 ```
 
@@ -92,17 +92,23 @@ map to a zero rate, so no separate `event` column is needed for the rate state.
 Match identifiers within the relevant dataset, patient, stay and drug; an
 identifier is not evidence that the infusion was uninterrupted between records.
 
-The corresponding eICU mappings preserve only `stay_id`. Their
+The corresponding eICU mappings preserve `visit_occurrence_id` and `visit_detail_id`. Their
 `infusiondrug` source supplies rate observations rather than paired start/end
 records, so these mappings do not invent an infusion identifier. The cardiovascular
 SOFA consumer applies the alignment and expiry policy described below.
 
+For state alignment, AUMCdb SOFA mappings select `visit_occurrence_id` through
+`pressor_stay_column` and `ventilation_stay_column`; other datasets use
+`visit_detail_id` by default. This preserves the available admission boundary.
+
 The AUMCdb mappings are `derived`: the OMOP export has no rate field, so they read
 the dose rate from the text in `drug_exposure.sig` and divide a rate not per kg by
-the admission weight (`patient_weight`, joined on `stay_id`). Each `drug_exposure`
+the admission weight (`patient_weight`, joined on `visit_occurrence_id`). Each `drug_exposure`
 row is one rate segment; its start maps to the rate and its end to zero, both
-keeping `stay_id` and `drug_exposure_id`, which identifies the segment because the
+keeping `visit_occurrence_id` and `drug_exposure_id`, which identifies the segment because the
 export drops the source order ID. See the AUMCdb README.
+
+Canonical [encounter identifiers](identifiers.md) are preserved automatically from simple mapping source rows. Explicit extension expressions can override them. Derived mappings preserve IDs selected in their primary table's `columns`; complex transformers preserve IDs only when they return them.
 
 ### Derived concepts
 
@@ -323,7 +329,7 @@ the input event timestamps rather than ricu's hourly grid. Scoring thresholds
 and ventilation-state rules are unchanged.
 
 The MIMIC-IV mappings select procedure items 225792 and 225794, preserving native
-`orderid` and `stay_id` to pair each procedure's start and end. Both markers carry
+`orderid` and `visit_detail_id` to pair each procedure's start and end. Both markers carry
 the ventilation level in the code: `ventilation_start//invasive` (225792) or
 `ventilation_start//noninvasive` (225794), and likewise for `ventilation_end`.
 Respiratory SOFA does not use the level, so noninvasive ventilation counts as
@@ -349,7 +355,7 @@ End markers are `RT Vent On/Off` charted as `Off` or `Suspended` and the episode
 end in `respiratoryCare` (`ventendoffset`, zero dropped). Text values match
 regardless of case. Prior episodes recorded in `respiratoryCare`
 (`priorventstartoffset`, `priorventendoffset`) are not used. The markers preserve
-`stay_id`; they have no shared episode identifier and no level, so their codes
+`visit_detail_id`; they have no shared episode identifier and no level, so their codes
 stay `ventilation_start` and `ventilation_end`.
 
 ricu at c0efac7
@@ -563,7 +569,7 @@ recorded timestamps. Prescription starts and ends are native datetimes from
 extraction and are used directly. Medication rows with missing starts are
 excluded from antibiotic output; the original orders remain in extraction.
 Both emit `numeric_value: 1`, including zero-rate infusion
-observations as in the reference. Neither retains `stay_id`. Both mappings supply a
+observations as in the reference. Both retain the available encounter IDs and supply a
 common `coverage_end` extension: the prescribed stop for medication, or one minute
 after an infusion observation. Infusion rates are not used to infer longer
 coverage. eICU demo 2.0 inherits these mappings.
@@ -607,7 +613,7 @@ For the missing eICU death events described in
 recorded death timestamp. ICU discharge is eligible when `unitdischargestatus`
 is `Expired`; hospital discharge is eligible when `hospitaldischargestatus` is
 `Expired`. `min` selects the earliest non-null death timestamp within each row,
-then `first_distinct(subject_id, order_by=[time, stay_id])` retains exactly one event per MEDS
+then `first_distinct(subject_id, order_by=[time, visit_detail_id])` retains exactly one event per MEDS
 subject, using the lowest ICU stay ID to break equal-time ties. In eICU the MEDS
 subject is a hospital admission (`patienthealthsystemstayid`), so several ICU
 stays share one death event. Death events have no numeric measurement value.
@@ -639,7 +645,7 @@ charted in place; an end is a recorded removal. An end without a level records
 that no artificial airway is present.
 
 All three are observations without duration; each row keeps the raw text in
-`text_value` and the `stay_id`. Several observations can share a timestamp, for
+`text_value` and the `visit_detail_id`. Several observations can share a timestamp, for
 example a nasal cannula charted with a high-flow device. Ranking them and
 deciding how long an observation stays valid is left to the concepts that use
 them. An endotracheal tube on its own is recorded only as an airway, not as

@@ -8,6 +8,8 @@ columns:
     type: int64
   - name: visit_occurrence_id
     type: int64
+  - name: visit_detail_id
+    type: int64
   - name: provider_id
     type: int64
   # db fields - times
@@ -53,6 +55,7 @@ event_defaults:
   extension:
     measurement_id: col(measurement_id)
     visit_occurrence_id: col(visit_occurrence_id)
+    visit_detail_id: col(visit_detail_id)
     provider_id: col(provider_id)
 
 events:

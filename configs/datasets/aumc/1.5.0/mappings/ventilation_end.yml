@@ -16,7 +16,7 @@ mappings:
     columns: &procedure_columns
       time: col(procedure_end)
       extension:
-        stay_id: col(visit_occurrence_id)
+        visit_occurrence_id: col(visit_occurrence_id)
         record_id: col(procedure_occurrence_id)
     filters: &recorded_end
       - drop_na(time)
@@ -34,5 +34,5 @@ mappings:
     level: invasive
     columns:
       extension:
-        stay_id: col(visit_occurrence_id)
+        visit_occurrence_id: col(visit_occurrence_id)
         record_id: col(device_exposure_id)

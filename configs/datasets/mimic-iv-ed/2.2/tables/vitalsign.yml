@@ -1,3 +1,4 @@
+# Encounter IDs use the hospital admission if linked, otherwise a standalone ED visit.
 # Vital signs charted during the ED stay, one row per charttime, one column per
 # measurement. Each non-null measurement becomes one event, dated at its charttime;
 # the code prefix VITALSIGN keeps them apart from the triage measurements.
@@ -42,6 +43,20 @@ columns:
 filters:
   - drop_na(charttime)
 
+# Carry the ED stay's hospital link onto each source row.
+join:
+  - path: ed/edstays.csv.gz
+    columns:
+      - name: subject_id
+        type: int64
+      - name: stay_id
+        type: int64
+      - name: hadm_id
+        type: int64
+    both_on:
+      - subject_id
+      - stay_id
+
 event_defaults:
   subject_id: col(subject_id)
   time: col(charttime)
@@ -49,7 +64,8 @@ event_defaults:
     - const(VITALSIGN)
   extension:
     available_time: col(charttime)
-    stay_id: col(stay_id)
+    visit_occurrence_id: replace(hadm_id != None, cast(hadm_id, "string"), concat_str("ed:", stay_id))
+    visit_detail_id: replace(hadm_id != None, concat_str("ed:", stay_id), None)
 
 # A null measurement in this wide table means it was not taken at that time, so it is not
 # an event: every event drops the rows where its own value is null.

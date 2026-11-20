@@ -154,8 +154,8 @@ def assert_end_of_day(actual: datetime, day: date, *, context: str) -> None:
 
 # --- Behaviour cases -------------------------------------------------------------------------------
 
-IN_STAY: Final = {"stay_id": STAY_ID}
-"""Extra columns of an ICU row recorded in stay ``STAY_ID`` (extracted ``stay_id`` is Int64)."""
+IN_STAY: Final = {"visit_detail_id": f"icu:{STAY_ID}"}
+"""Extra columns of an ICU row recorded in stay ``STAY_ID`` (canonical identifiers are strings)."""
 
 CONVERSIONS = [
     case(concept, event, item, unit=unit, value=value, expect=[{"numeric_value": expected}], note=note)
@@ -241,7 +241,7 @@ RATES = [
         "norepinephrine_rate",
         "INFUSION_START",
         221906,
-        extra={"originalrate": 16.0, "rateuom": "mcg/min", "stay_id": STAY_ID},
+        extra={"originalrate": 16.0, "rateuom": "mcg/min", "visit_detail_id": f"icu:{STAY_ID}"},
         expect=NOTHING,
         note="a rate per minute cannot become the concept's mcg/kg/min without a weight",
     ),
@@ -314,7 +314,7 @@ RESPIRATORY_SUPPORT = [
         extra=IN_STAY,
         expect=NOTHING
         if level is None
-        else [{"code": f"respiratory_support//{level}", "text_value": text, "stay_id": str(STAY_ID)}],
+        else [{"code": f"respiratory_support//{level}", "text_value": text, "visit_detail_id": f"icu:{STAY_ID}"}],
         note=note,
     )
     for item, text, level, note in [
@@ -341,7 +341,9 @@ RESPIRATORY_SUPPORT = [
 def airway(concept: str, event: str, item: int, level: str | None, *, text: str | None = None, note: str) -> Case:
     """A behaviour case for an airway marker of stay ``STAY_ID``."""
     expect: Sequence[Mapping[str, Any]] = (
-        NOTHING if level is None else [{"code": f"{concept}//{level}", "text_value": text, "stay_id": str(STAY_ID)}]
+        NOTHING
+        if level is None
+        else [{"code": f"{concept}//{level}", "text_value": text, "visit_detail_id": f"icu:{STAY_ID}"}]
     )
     return case(concept, event, item, text=text, extra=IN_STAY, expect=expect, note=note)
 
@@ -365,8 +367,8 @@ VENTILATION = [
         concept,
         event,
         225794,
-        extra={"stay_id": STAY_ID, "orderid": ORDER_ID},
-        expect=[{"code": f"{concept}//noninvasive", "stay_id": str(STAY_ID), "orderid": str(ORDER_ID)}],
+        extra={"visit_detail_id": f"icu:{STAY_ID}", "orderid": ORDER_ID},
+        expect=[{"code": f"{concept}//noninvasive", "visit_detail_id": f"icu:{STAY_ID}", "orderid": str(ORDER_ID)}],
         note="noninvasive ventilation keeps its level and order",
     )
     for concept, event in [("ventilation_start", "PROCEDURE_START"), ("ventilation_end", "PROCEDURE_END")]
@@ -726,7 +728,7 @@ def test_optional_admission_details_are_events_only_when_recorded(
 
     extracted = extract_native(tmp_path, dataset=DATASET, version=VERSION, table="admissions", rows=rows)[event]
 
-    assert_rows(extracted, [{"subject_id": 1, "hadm_id": 100, **expect}])
+    assert_rows(extracted, [{"subject_id": 1, "visit_occurrence_id": "100", **expect}])
 
 
 BLOOD_CULTURE: Final = {"spec_itemid": 70012, "spec_type_desc": "BLOOD CULTURE"}
@@ -1004,7 +1006,10 @@ def test_a_procedure_charted_before_the_discharge_date_is_dated_at_the_end_of_it
     """ICD procedures have a chart date only and are billing codes of the admission, known at discharge."""
     procedures = extract_procedure(tmp_path, chartdate="2150-01-02", dischtime="2150-01-05 12:00:00")
 
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "available_time": datetime(2150, 1, 5, 12)}])
+    assert_rows(
+        procedures,
+        [{"visit_occurrence_id": "100", "code": PROCEDURE_CODE, "available_time": datetime(2150, 1, 5, 12)}],
+    )
     assert_end_of_day(procedures["time"][0], date(2150, 1, 2), context="procedure chart date")
 
 
@@ -1013,7 +1018,10 @@ def test_a_procedure_charted_on_the_discharge_date_is_dated_at_discharge(tmp_pat
     procedures = extract_procedure(tmp_path, chartdate="2151-03-01", dischtime="2151-03-01 09:30:00")
 
     discharge = datetime(2151, 3, 1, 9, 30)
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}])
+    assert_rows(
+        procedures,
+        [{"visit_occurrence_id": "100", "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}],
+    )
 
 
 def test_a_procedure_charted_after_the_discharge_date_is_dated_at_discharge(tmp_path: Path) -> None:
@@ -1021,14 +1029,17 @@ def test_a_procedure_charted_after_the_discharge_date_is_dated_at_discharge(tmp_
     procedures = extract_procedure(tmp_path, chartdate="2152-06-03", dischtime="2152-06-02 18:00:00")
 
     discharge = datetime(2152, 6, 2, 18)
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}])
+    assert_rows(
+        procedures,
+        [{"visit_occurrence_id": "100", "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}],
+    )
 
 
 def test_a_procedure_without_an_admission_is_dated_at_the_end_of_its_chart_date(tmp_path: Path) -> None:
     """Without a discharge time there is nothing to cap the end of the chart date at, nor a time it is known."""
     procedures = extract_procedure(tmp_path, chartdate="2153-02-10", dischtime=None)
 
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "available_time": None}])
+    assert_rows(procedures, [{"visit_occurrence_id": "100", "code": PROCEDURE_CODE, "available_time": None}])
     assert_end_of_day(procedures["time"][0], date(2153, 2, 10), context="procedure without an admission")
 
 
@@ -1085,9 +1096,12 @@ def test_an_open_icu_stay_has_an_admission_but_no_discharge_or_length_of_stay(tm
         ],
     )
 
-    assert_rows(stays["icu_admission"], [{"stay_id": 10, "time": at(10)}, {"stay_id": 20, "time": at(10)}])
-    assert_rows(stays["icu_discharge"], [{"stay_id": 10, "time": at(58)}])
-    assert_rows(stays["icu_length_of_stay"], [{"stay_id": 10, "time": at(58), "numeric_value": 2.0}])
+    assert_rows(
+        stays["icu_admission"],
+        [{"visit_detail_id": "icu:10", "time": at(10)}, {"visit_detail_id": "icu:20", "time": at(10)}],
+    )
+    assert_rows(stays["icu_discharge"], [{"visit_detail_id": "icu:10", "time": at(58)}])
+    assert_rows(stays["icu_length_of_stay"], [{"visit_detail_id": "icu:10", "time": at(58), "numeric_value": 2.0}])
 
 
 def test_every_icu_stay_event_carries_the_first_and_last_care_unit_of_the_stay(tmp_path: Path) -> None:
@@ -1128,8 +1142,8 @@ def test_every_icu_stay_event_carries_the_first_and_last_care_unit_of_the_stay(t
         assert_rows(
             stays[event],
             [
-                {"stay_id": 10, "first_careunit": micu, "last_careunit": sicu},
-                {"stay_id": 20, "first_careunit": cvicu, "last_careunit": None},
+                {"visit_detail_id": "icu:10", "first_careunit": micu, "last_careunit": sicu},
+                {"visit_detail_id": "icu:20", "first_careunit": cvicu, "last_careunit": None},
             ],
             context=event,
         )
@@ -1164,8 +1178,16 @@ def test_diagnoses_are_dated_at_discharge_and_titled_by_their_icd_version(tmp_pa
     assert_rows(
         diagnoses,
         [
-            {"hadm_id": 100, "code": f"DIAGNOSIS//ICD//9//V140//{titles[9]}", "time": datetime(2150, 1, 5, 12)},
-            {"hadm_id": 200, "code": f"DIAGNOSIS//ICD//10//V140//{titles[10]}", "time": datetime(2151, 3, 1, 9, 30)},
+            {
+                "visit_occurrence_id": "100",
+                "code": f"DIAGNOSIS//ICD//9//V140//{titles[9]}",
+                "time": datetime(2150, 1, 5, 12),
+            },
+            {
+                "visit_occurrence_id": "200",
+                "code": f"DIAGNOSIS//ICD//10//V140//{titles[10]}",
+                "time": datetime(2151, 3, 1, 9, 30),
+            },
         ],
     )
 
@@ -1196,7 +1218,12 @@ def test_suspected_infection_pairs_prescription_starts_and_infusions_with_cultur
                 {"subject_id": 3, "time": at(0), "prescribed_start": at(1), "route": "BOTH EYES", **order},
             ],
             "inputevents/INFUSION_START": [
-                {"subject_id": 2, "time": at(12), "code": code("INFUSION_START", 225798), "stay_id": STAY_ID}
+                {
+                    "subject_id": 2,
+                    "time": at(12),
+                    "code": code("INFUSION_START", 225798),
+                    "visit_detail_id": f"icu:{STAY_ID}",
+                }
             ],
             "microbiologyevents/MICROBIOLOGY_SPECIMEN": [
                 {"subject_id": subject, "time": at(hours), "code": specimen, "micro_specimen_id": subject}

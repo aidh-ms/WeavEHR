@@ -91,7 +91,8 @@ class CustomConfig(BaseModel):
         exclude_events: Extraction event files to leave out, in the same form as
             ``events``; applied after ``events``. Only for extraction input.
         extension_columns: Columns of the input files to carry into the shards
-            after the core, ``dataset`` and ``subject_namespace`` columns.
+            after the core, ``dataset`` and ``subject_namespace`` columns. Available
+            canonical encounter IDs are also carried automatically.
         subject_groups: Groups of datasets whose subjects share one subject-ID
             space and are therefore merged per subject ID.
         config_roots: Configuration directories (with the ``datasets/`` layout of
@@ -141,7 +142,10 @@ class CustomConfig(BaseModel):
     )
     extension_columns: list[str] = Field(
         default_factory=list,
-        description="Input columns carried into the shards after the core, dataset and subject_namespace columns.",
+        description=(
+            "Input columns carried into the shards after the core, dataset and subject_namespace columns. "
+            "Available canonical encounter IDs are also preserved automatically."
+        ),
     )
     subject_groups: list[SubjectGroupConfig] = Field(
         default_factory=list,

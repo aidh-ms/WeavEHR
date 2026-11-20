@@ -142,13 +142,13 @@ class TestEventDefaults:
             events=[
                 {
                     "name": "LAB",
-                    "columns": {"extension": {"stay_id": "col(stay_id)"}},
+                    "columns": {"extension": {"visit_detail_id": "col(visit_detail_id)"}},
                 }
             ],
         )
         assert table.events[0].columns.extension == {
             "hadm_id": "col(hadm_id)",
-            "stay_id": "col(stay_id)",
+            "visit_detail_id": "col(visit_detail_id)",
         }
 
     def test_code_prefix_and_suffix_defaults(self) -> None:

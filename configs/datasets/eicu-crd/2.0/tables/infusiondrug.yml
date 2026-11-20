@@ -48,7 +48,8 @@ join:
 event_defaults:
   subject_id: col(patienthealthsystemstayid)
   extension:
-    stay_id: col(patientunitstayid)
+    visit_occurrence_id: col(patienthealthsystemstayid)
+    visit_detail_id: col(patientunitstayid)
 
 events:
   - name: SUBJECT_WEIGHT_AT_INFUSION

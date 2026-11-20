@@ -46,7 +46,8 @@ event_defaults:
   subject_id: col(patienthealthsystemstayid)
   time: col(event_timestamp)
   extension:
-    stay_id: col(patientunitstayid)
+    visit_occurrence_id: col(patienthealthsystemstayid)
+    visit_detail_id: col(patientunitstayid)
     respchart_id: col(respchartid)
 
 events:

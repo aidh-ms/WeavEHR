@@ -71,7 +71,7 @@ def concept_output_schema(concept_reference: str, dataset: str, version: str) ->
     """Output schema of a concept referenced as ``<name>.<version>`` by a derived mapping of a dataset version.
 
     Besides the concept's own extension columns, a simple mapping writes the extension columns
-    its ``columns.extension`` adds for that dataset version (e.g. a ``stay_id`` to join on).
+    its ``columns.extension`` adds for that dataset version (e.g. a ``visit_detail_id`` to join on).
     """
     name = concept_reference.split(".", 1)[0]
     (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")

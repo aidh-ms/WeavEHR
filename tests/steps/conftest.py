@@ -70,7 +70,7 @@ join:
 event_defaults:
   subject_id: col(subject_id)
   extension:
-    stay_id: col(stay_id)
+    visit_detail_id: col(stay_id)
 
 events:
   - name: CHART
@@ -104,7 +104,7 @@ event_defaults:
   subject_id: col(subject_id)
   time: col(charttime)
   extension:
-    stay_id: col(stay_id)
+    visit_detail_id: col(stay_id)
 
 events:
   - name: WEIGHT
@@ -268,7 +268,7 @@ config:
     - name: testdb
       version: "1.0"
       extension_columns:
-        stay_id: col("stay_id")
+        visit_detail_id: col("visit_detail_id")
 """
     )
     return config_file

@@ -11,4 +11,5 @@ concepts:
 kwargs:
   window: 1h
   pressor_window: 48h
+  pressor_stay_column: visit_occurrence_id
   pressor_id_column: drug_exposure_id

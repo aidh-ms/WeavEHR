@@ -8,6 +8,6 @@ mappings:
     numeric_value: col(numeric_value)
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - drop_na(numeric_value)

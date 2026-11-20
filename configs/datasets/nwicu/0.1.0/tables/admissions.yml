@@ -71,7 +71,7 @@ event_defaults:
   time: col(admittime)
   extension:
     available_time: col(admittime)
-    hadm_id: col(hadm_id)
+    visit_occurrence_id: col(hadm_id)
     admit_provider_id: col(admit_provider_id)
 
 events:

@@ -101,10 +101,10 @@ Each event produces one output file. The `columns` block maps source columns (or
 
     The dataset and table prefixes are added automatically. By default, the technical event name is also included after `code_prefix`; `include_event_name_in_code` can disable it globally or per table. Typical code parts are the item ID, its label, and the unit of measurement.
 
-- `extension` — a mapping of additional output columns, preserved alongside the MEDS standard columns (IDs like `hadm_id`/`stay_id`, data-availability timestamps, reference ranges, …).
+- `extension` — a mapping of additional output columns, preserved alongside the MEDS standard columns (IDs like `visit_occurrence_id`/`visit_detail_id`, data-availability timestamps, reference ranges, …).
 
 MIMIC-III, MIMIC-IV and NWICU carry `hospital_expire_flag` on `HOSPITAL_DISCHARGE`.
-For the admission identified by `hadm_id`, `1` means the patient died in hospital and
+For the admission identified by `visit_occurrence_id`, `1` means the patient died in hospital and
 `0` means they survived to discharge. A value requires both a recorded flag and a
 discharge time. Use `MEDS_DEATH` for the patient's recorded death time.
 

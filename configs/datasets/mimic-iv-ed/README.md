@@ -16,8 +16,8 @@ carries that admission's `hadm_id`.
 
     - `edstays` — arrival (`ED_REGISTRATION`, coded by `arrival_transport`) and
       departure (`ED_OUT`, coded by `disposition`) of each stay, plus the
-      stay's `GENDER` and race (`ETHNICITY`). These are the only ED events with
-      a `hadm_id` column, because only this table has one.
+      stay's `GENDER` and race (`ETHNICITY`). It supplies the hospital-admission
+      link for the other ED tables.
     - `diagnosis` — billed ICD-9/ICD-10 diagnoses (`DIAGNOSIS//ICD//<version>//<code>//<title>`),
       dated at the stay's `outtime`: diagnoses are determined after the patient
       left the ED.
@@ -30,7 +30,11 @@ carries that admission's `hadm_id`.
     - `vitalsign` — vital signs, heart rhythm and pain score at their
       `charttime`.
 
-  Every event carries `stay_id`. A measurement that is null in the raw data
+  Every event carries `visit_occurrence_id`: the linked hospital `hadm_id`
+  when admitted, otherwise `ed:<stay_id>`. Admitted visits also carry the ED
+  segment as `visit_detail_id` (`ed:<stay_id>`); standalone visits have no
+  separate detail. Other tables join `edstays` on subject and ED stay to obtain
+  this link. A measurement that is null in the raw data
   produces no event. Free-text pain entries are kept as `text_value`, with
   `numeric_value` set when the entry is a number.
 
@@ -49,3 +53,6 @@ The openly available demo is configured in `../mimic-iv-ed-demo/` as a diff of
 New MIMIC-IV-ED versions should extend the closest existing version via an
 `extends.yml` marker and state only their differences — see
 `docs/user_guide/versioning.md`.
+
+See [encounter identifiers](../../../docs/user_guide/identifiers.md) for the
+shared visit hierarchy, source-specific ID mappings and migration guidance.

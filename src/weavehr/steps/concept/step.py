@@ -16,6 +16,7 @@ from uuid import uuid4
 import polars as pl
 
 from weavehr.callbacks.interpreter import parse_expr
+from weavehr.identifiers import ENCOUNTER_ID_COLUMNS
 from weavehr.logging import get_logger
 from weavehr.steps.base.step import ConfigurableBaseStep
 from weavehr.steps.concept.config.concept import (
@@ -667,7 +668,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         lf = lf.with_columns(pl.lit(table).alias("table"))
         lf = lf.with_columns(pl.lit(event_name).alias("event"))
 
-        extension_columns = concept.extension_columns.copy()
+        # Encounter linkage belongs to the source row, independently of the clinical concept.
+        schema = lf.collect_schema()
+        extension_columns = {name: f'col("{name}")' for name in ENCOUNTER_ID_COLUMNS if name in schema}
+        extension_columns.update(concept.extension_columns)
         extension_columns.update(dataset_extension_columns or {})
         extension_columns.update(mapping.columns.extension)
         for col_name, col_expr in extension_columns.items():
@@ -765,6 +769,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         columns = dataset_concept.event.model_dump()
         extension = concept.extension_columns.copy()
+        # Only identifiers explicitly selected by the primary table are unambiguous here.
+        for name in ENCOUNTER_ID_COLUMNS:
+            if name in dataset_concept.table.columns:
+                extension.setdefault(name, f'col("{name}")')
         extension.update(columns.pop("extension") or {})
         # Keyed by output column name so several columns may share the same expression.
         mapping = {col_name: col_expr for col_name, col_expr in (columns | extension).items() if col_expr is not None}

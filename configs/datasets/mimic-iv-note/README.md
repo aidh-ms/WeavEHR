@@ -22,3 +22,6 @@ critical care database from the Beth Israel Deaconess Medical Center
 New MIMIC-IV versions should extend the closest existing version via an
 `extends.yml` marker and state only their differences — see
 `docs/user_guide/versioning.md`.
+
+See [encounter identifiers](../../../docs/user_guide/identifiers.md) for the
+shared visit hierarchy, source-specific ID mappings and migration guidance.

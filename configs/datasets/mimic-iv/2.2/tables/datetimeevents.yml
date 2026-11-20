@@ -48,8 +48,8 @@ join:
 event_defaults:
   subject_id: col(subject_id)
   extension:
-    hadm_id: col(hadm_id)
-    stay_id: col(stay_id)
+    visit_occurrence_id: col(hadm_id)
+    visit_detail_id: concat_str("icu:", stay_id)
     caregiver_id: col(caregiver_id)
 
 events:

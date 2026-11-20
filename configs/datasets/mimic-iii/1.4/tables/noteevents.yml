@@ -35,7 +35,7 @@ columns:
 event_defaults:
   subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(HADM_ID)
+    visit_occurrence_id: col(HADM_ID)
     caregiver_id: col(CGID)
     row_id: col(ROW_ID)
 filters:

@@ -6,9 +6,9 @@ mappings:
       code: ^RESPIRATORY_CARE(//.*)?$
     columns:
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
     filters:
-      - first_distinct(subject_id, stay_id, time)
+      - first_distinct(subject_id, visit_detail_id, time)
   - pattern:
       table: respiratorycharting
       event: RESPIRATORY_CHART
@@ -16,6 +16,6 @@ mappings:
     columns:
       text_value: col(text_value)
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
     filters:
       - str_contains(text_value, "(?i)^(off|suspended)$")

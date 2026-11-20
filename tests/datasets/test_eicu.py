@@ -20,7 +20,6 @@ from typing import Any, NamedTuple
 import pytest
 
 from tests.datasets.support import (
-    ABSENT,
     DEFAULT_TIME,
     NOTHING,
     Case,
@@ -57,15 +56,15 @@ def at(minutes: float) -> datetime:
 # --- Mapping behaviour on extracted rows ------------------------------------------------------------
 
 ANTIBIOTICS_CASES = [
-    # Each source supplies the coverage end that suspected infection needs; neither keeps the stay.
+    # Each source supplies the coverage end and retains its recorded unit detail.
     Case(
         concept="antibiotics",
         table="medication",
         event="MEDICATION_ORDER",
         code="MEDICATION_ORDER//cefepime",
         value=0.0,
-        extra={"stay_id": 100, "prescribed_start": at(5 * 60), "prescribed_end": at(53 * 60)},
-        expect=[{"time": at(5 * 60), "numeric_value": 1, "coverage_end": at(53 * 60), "stay_id": ABSENT}],
+        extra={"visit_detail_id": "100", "prescribed_start": at(5 * 60), "prescribed_end": at(53 * 60)},
+        expect=[{"time": at(5 * 60), "numeric_value": 1, "coverage_end": at(53 * 60), "visit_detail_id": "100"}],
         note="an order starts at its prescribed start and covers until its prescribed end",
     ),
     Case(
@@ -74,8 +73,8 @@ ANTIBIOTICS_CASES = [
         event="INFUSION",
         code="INFUSION//vancomycin",
         value=0.0,
-        extra={"stay_id": 100},
-        expect=[{"time": at(0), "numeric_value": 1, "coverage_end": at(1), "stay_id": ABSENT}],
+        extra={"visit_detail_id": "100"},
+        expect=[{"time": at(0), "numeric_value": 1, "coverage_end": at(1), "visit_detail_id": "100"}],
         note="an infusion row covers one minute from its own time",
     ),
     # An order needs a start but may have an unknown end.
@@ -237,7 +236,7 @@ def test_death_keeps_one_earliest_event_per_subject(tmp_path: Path, reverse: boo
             {
                 "subject_id": subject,
                 "time": admission + timedelta(minutes=minutes),
-                "stay_id": stay,
+                "visit_detail_id": str(stay),
                 "code": "MEDS_DEATH",
                 "numeric_value": None,
             }
@@ -364,10 +363,10 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
     assert_rows(
         outputs["antibiotics"],
         [
-            {"subject_id": 1, "time": at(0), "coverage_end": at(24 * 60), "stay_id": ABSENT},
-            {"subject_id": 2, "time": at(0), "coverage_end": at(60), "stay_id": ABSENT},
-            {"subject_id": 3, "time": at(0), "coverage_end": at(60), "stay_id": ABSENT},
-            {"subject_id": 1, "time": at(48 * 60), "coverage_end": at(48 * 60 + 1), "stay_id": ABSENT},
+            {"subject_id": 1, "time": at(0), "coverage_end": at(24 * 60), "visit_detail_id": None},
+            {"subject_id": 2, "time": at(0), "coverage_end": at(60), "visit_detail_id": None},
+            {"subject_id": 3, "time": at(0), "coverage_end": at(60), "visit_detail_id": None},
+            {"subject_id": 1, "time": at(48 * 60), "coverage_end": at(48 * 60 + 1), "visit_detail_id": None},
         ],
         context="antibiotics",
     )

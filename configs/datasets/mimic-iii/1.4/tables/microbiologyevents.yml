@@ -42,7 +42,7 @@ columns:
 event_defaults:
   subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(HADM_ID)
+    visit_occurrence_id: col(HADM_ID)
     row_id: col(ROW_ID)
     time_precision: replace(CHARTTIME == None, const(day), const(second))
     time_lower_bound: first_not_null(CHARTTIME, CHARTDATE)

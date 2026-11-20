@@ -91,7 +91,7 @@ output/project/
         └── metadata/{dataset.json, codes.parquet}
 ```
 
-All data files share the MEDS event schema — `subject_id`, `time`, `code`, `numeric_value`, `text_value` — plus any extension columns the configs define (e.g. `hadm_id`, `stay_id`). Read them with any Parquet-capable tool:
+All data files share the MEDS event schema — `subject_id`, `time`, `code`, `numeric_value`, `text_value` — plus any extension columns the configs define (e.g. `visit_occurrence_id`, `visit_detail_id`). Read them with any Parquet-capable tool:
 
 ```python
 import polars as pl

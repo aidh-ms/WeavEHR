@@ -1,3 +1,4 @@
+# Encounter IDs use the hospital admission if linked, otherwise a standalone ED visit.
 # One row per emergency department (ED) stay. intime and outtime are the times the
 # patient entered and left the ED (MIMIC-IV-ED documentation, edstays). The stay's
 # demographics (gender, race) are recorded per stay, so they are dated at intime.
@@ -36,12 +37,8 @@ event_defaults:
   time: col(intime)
   extension:
     available_time: col(intime)
-    stay_id: col(stay_id)
-    # hadm_id exists in the raw data only in this table, so only edstays events carry it.
-    # It is not joined onto the other ED tables: each event keeps the identifiers of its
-    # own raw row, and those tables link to a stay through stay_id alone (the stay's
-    # hadm_id can still be looked up through stay_id).
-    hadm_id: col(hadm_id)
+    visit_occurrence_id: replace(hadm_id != None, cast(hadm_id, "string"), concat_str("ed:", stay_id))
+    visit_detail_id: replace(hadm_id != None, concat_str("ed:", stay_id), None)
 
 events:
   # Arrival in the ED. ED_REGISTRATION and ED_OUT are the names the bundled hospital

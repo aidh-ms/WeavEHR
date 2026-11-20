@@ -182,7 +182,7 @@ def test_respiratory_sofa_consumes_mapped_start_and_end_markers(
                 "code": [f"{event}//{code}"] * len(rows),
                 "numeric_value": [None] * len(rows),
                 "text_value": [row[1] for row in rows],
-                "stay_id": ["100"] * len(rows),
+                "visit_detail_id": ["100"] * len(rows),
                 **({"orderid": ["101"] * len(rows)} if dataset == "mimic-iv" else {}),
             },
             schema_overrides={"numeric_value": pl.Float32, "text_value": pl.String},
@@ -191,7 +191,7 @@ def test_respiratory_sofa_consumes_mapped_start_and_end_markers(
     ConceptStep.load(project, concept_config).run()
     for name in ("ventilation_start", "ventilation_end"):
         markers = pl.read_parquet(concept_path(project, name))
-        assert markers["stay_id"].to_list() == ["100"]
+        assert markers["visit_detail_id"].to_list() == ["100"]
         if dataset == "mimic-iv":
             assert markers["orderid"].to_list() == ["101"]
     result = pl.read_parquet(concept_path(project, "sofa_respiratory")).sort("time")
@@ -223,7 +223,7 @@ class TestSimpleConcepts:
         df = pl.read_parquet(concept_path(project, "heart_rate")).sort("time")
         assert df["dataset"].unique().to_list() == ["testdb"]
         assert df["table"].unique().to_list() == ["vitals"]
-        assert df["stay_id"].to_list() == ["100", "100"]
+        assert df["visit_detail_id"].to_list() == ["100", "100"]
 
     def test_unit_concepts(self, project: WeavEHRProject) -> None:
         weight = pl.read_parquet(concept_path(project, "patient_weight"))
@@ -324,7 +324,7 @@ class TestSimpleConcepts:
                     {
                         "subject_id": [row[0] for row in rows],
                         "time": [datetime(2024, 1, 1, row[1]) for row in rows],
-                        "stay_id": [row[2] for row in rows],
+                        "visit_detail_id": [row[2] for row in rows],
                         "orderid": [row[3] for row in rows],
                         "linkorderid": [row[4] for row in rows],
                         "originalrate": [str(row[5]) if row[5] is not None else None for row in rows],
@@ -340,7 +340,7 @@ class TestSimpleConcepts:
                 {
                     "subject_id": [1, 1, 1],
                     "time": [datetime(2024, 1, 1, hour) for hour in (10, 11, 12)],
-                    "stay_id": ["100"] * 3,
+                    "visit_detail_id": ["100"] * 3,
                     "code": [f"INFUSION//{drug} (mcg/kg/min)"] * 3,
                     "numeric_value": [0.25, 0.0625, 0.0],
                     "text_value": [None] * 3,
@@ -355,7 +355,7 @@ class TestSimpleConcepts:
         assert result["code"].unique().to_list() == [f"{name}//mcg/kg/min"]
         if dataset == "mimic-iv":
             actual = result.sort("subject_id", "time", "linkorderid").select(
-                "subject_id", "time", "numeric_value", "stay_id", "linkorderid"
+                "subject_id", "time", "numeric_value", "visit_detail_id", "linkorderid"
             )
             assert actual.rows() == [
                 (1, datetime(2024, 1, 1, 10), 0.25, "100", "101"),
@@ -369,7 +369,7 @@ class TestSimpleConcepts:
                 (2, datetime(2024, 1, 1, 12), 0.0, "200", "101"),
             ]
         else:
-            assert result.sort("time").select("time", "numeric_value", "stay_id").rows() == [
+            assert result.sort("time").select("time", "numeric_value", "visit_detail_id").rows() == [
                 (datetime(2024, 1, 1, 10), 0.25, "100"),
                 (datetime(2024, 1, 1, 11), 0.0625, "100"),
                 (datetime(2024, 1, 1, 12), 0.0, "100"),
@@ -435,7 +435,7 @@ mappings:
     columns:
       numeric_value: col(numeric_value)
       extension:
-        source_stay: col(stay_id)
+        source_stay: col(visit_detail_id)
     filters:
       - col(numeric_value) == 80
   - pattern:

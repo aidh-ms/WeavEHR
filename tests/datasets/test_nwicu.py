@@ -247,7 +247,7 @@ def test_ed_registration_and_exit_are_emitted_only_with_their_time(tmp_path: Pat
     )
 
     for event, column in [("ED_REGISTRATION", "edregtime"), ("ED_OUT", "edouttime")]:
-        assert_rows(events[event], [{"hadm_id": 100, "time": recorded[column]}], context=event)
+        assert_rows(events[event], [{"visit_occurrence_id": "100", "time": recorded[column]}], context=event)
 
 
 def test_icu_discharge_and_length_of_stay_need_an_out_time(tmp_path: Path) -> None:
@@ -266,11 +266,11 @@ def test_icu_discharge_and_length_of_stay_need_an_out_time(tmp_path: Path) -> No
 
     assert_rows(
         events["icu_admission"],
-        [{"stay_id": 10, "time": at(0)}, {"stay_id": 20, "time": at(72)}],
+        [{"visit_detail_id": "icu:10", "time": at(0)}, {"visit_detail_id": "icu:20", "time": at(72)}],
         context="icu_admission",
     )
     for event in ("icu_discharge", "icu_length_of_stay"):
-        assert_rows(events[event], [{"stay_id": 10, "time": at(48)}], context=event)
+        assert_rows(events[event], [{"visit_detail_id": "icu:10", "time": at(48)}], context=event)
 
 
 def test_diagnoses_are_dated_at_their_admission_discharge_with_the_title_of_their_icd_version(tmp_path: Path) -> None:
@@ -302,8 +302,16 @@ def test_diagnoses_are_dated_at_their_admission_discharge_with_the_title_of_thei
     assert_rows(
         extracted,
         [
-            {"hadm_id": 100, "time": datetime(2150, 1, 5, 12), "code": f"DIAGNOSIS//ICD//9//V140//{icd9_title}"},
-            {"hadm_id": 200, "time": datetime(2151, 3, 1, 9, 30), "code": f"DIAGNOSIS//ICD//10//V140//{icd10_title}"},
+            {
+                "visit_occurrence_id": "100",
+                "time": datetime(2150, 1, 5, 12),
+                "code": f"DIAGNOSIS//ICD//9//V140//{icd9_title}",
+            },
+            {
+                "visit_occurrence_id": "200",
+                "time": datetime(2151, 3, 1, 9, 30),
+                "code": f"DIAGNOSIS//ICD//10//V140//{icd10_title}",
+            },
         ],
     )
 
