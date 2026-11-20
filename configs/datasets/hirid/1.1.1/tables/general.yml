@@ -61,6 +61,8 @@ post_join_callbacks:
 
 event_defaults:
   subject_id: col(patientid)
+  extension:
+    visit_occurrence_id: col(patientid)
   time: col(admissiontime)
 
 events:

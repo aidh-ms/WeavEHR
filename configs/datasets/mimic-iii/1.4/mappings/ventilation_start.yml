@@ -8,7 +8,7 @@ mappings:
   level: invasive
   columns:
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
       orderid: col(orderid)
 - pattern:
     table: procedureevents_mv
@@ -17,7 +17,7 @@ mappings:
   level: noninvasive
   columns:
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
       orderid: col(orderid)
 - pattern:
     table: chartevents
@@ -27,7 +27,7 @@ mappings:
     numeric_value: col(numeric_value)
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - drop_na(text_value) or drop_na(numeric_value)
 - pattern:
@@ -37,7 +37,7 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - drop_na(text_value)
   - text_value != "Other/Remarks"
@@ -48,7 +48,7 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - text_value == "Ventilator"
 - pattern:
@@ -58,7 +58,7 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - drop_na(text_value)
   - strip_str(text_value) != "Other"
@@ -69,6 +69,6 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - drop_na(text_value)

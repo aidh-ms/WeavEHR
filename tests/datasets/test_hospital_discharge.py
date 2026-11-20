@@ -37,9 +37,9 @@ def test_discharge_carries_the_outcome_of_its_own_admission(tmp_path: Path, data
     assert_rows(
         discharges.drop_nulls("time"),
         [
-            {"hadm_id": 10, "time": first, "available_time": first, "hospital_expire_flag": 0},
-            {"hadm_id": 20, "time": last, "available_time": last, "hospital_expire_flag": 1},
-            {"hadm_id": 30, "time": last, "available_time": last, "hospital_expire_flag": None},
+            {"visit_occurrence_id": "10", "time": first, "available_time": first, "hospital_expire_flag": 0},
+            {"visit_occurrence_id": "20", "time": last, "available_time": last, "hospital_expire_flag": 1},
+            {"visit_occurrence_id": "30", "time": last, "available_time": last, "hospital_expire_flag": None},
         ],
     )
     undated = discharges.filter(pl.col("time").is_null())

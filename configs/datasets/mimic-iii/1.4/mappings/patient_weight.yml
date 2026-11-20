@@ -8,7 +8,7 @@ mappings:
     numeric_value: col(numeric_value)
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
 - pattern:
     table: chartevents
     event: CHART
@@ -17,7 +17,7 @@ mappings:
     numeric_value: col(numeric_value) * 0.45359237
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
 - pattern:
     table: chartevents
     event: CHART
@@ -26,7 +26,7 @@ mappings:
     numeric_value: col(numeric_value) * 0.028349523125
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
 - pattern:
     table: chartevents
     event: CHART
@@ -35,4 +35,4 @@ mappings:
     numeric_value: replace(col(numeric_value) > 100, col(numeric_value) / 1000, col(numeric_value))
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)

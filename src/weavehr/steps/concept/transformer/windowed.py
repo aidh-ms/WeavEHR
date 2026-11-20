@@ -176,7 +176,7 @@ class ActiveState(Aggregation):
             e.g. ``pl.col("numeric_value") == 0`` or a source end flag. Null
             predicates are treated as false. Stops may have null numeric values.
         stay_column: Name of the input column identifying the encounter, e.g.
-            ``stay_id``. It keeps a reused state identifier in a later stay
+            ``visit_detail_id``. It keeps a reused state identifier in a later stay
             separate. The latest non-null stay from any input selects the
             current encounter; without stay metadata, only subject scope is
             available. Both column arguments are field names, not ID values.
@@ -193,7 +193,7 @@ class ActiveState(Aggregation):
         *,
         id_column: str,
         stop_when: pl.Expr,
-        stay_column: str = "stay_id",
+        stay_column: str = "visit_detail_id",
         aggregate: Callable[[pl.Expr], pl.Expr] = pl.Expr.max,
     ) -> None:
         self._window = window

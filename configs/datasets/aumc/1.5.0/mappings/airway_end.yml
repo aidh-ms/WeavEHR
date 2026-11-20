@@ -11,7 +11,7 @@ mappings:
     columns: &device_columns
       text_value: col(code)
       extension:
-        stay_id: col(visit_occurrence_id)
+        visit_occurrence_id: col(visit_occurrence_id)
         device_exposure_id: col(device_exposure_id)
   - pattern:
       table: device_exposure

@@ -182,12 +182,14 @@ class SofaCardiovascularTransformer(SofaComponent):
     def build_inputs(self) -> dict[str, Aggregation]:
         pressor_window = self._kwargs.get("pressor_window", "48h")
         id_column = self._kwargs.get("pressor_id_column", "linkorderid")
+        stay_column = self._kwargs.get("pressor_stay_column", "visit_detail_id")
         return {
             "mean_arterial_pressure": WindowedLocf(self.window, aggregate=pl.Expr.min),
             **{
                 name: ActiveState(
                     pressor_window,
                     id_column=id_column,
+                    stay_column=stay_column,
                     stop_when=pl.col("numeric_value") == 0,
                     aggregate=pl.Expr.max,
                 )
@@ -231,7 +233,9 @@ class SofaRespiratoryTransformer(SofaComponent):
 
     Ventilation start/end markers are combined only inside this transformer.
     ActiveState matches native ``orderid`` values within subject and stay;
-    ``ventilation_id_column`` can select another identifier. Concurrent active
+    ``ventilation_id_column`` can select another identifier;
+    ``ventilation_stay_column`` selects the encounter column (default
+    ``visit_detail_id``). Concurrent active
     episodes keep ventilation on until all have stopped. Unidentified markers
     form one observation stream per subject/stay.
 
@@ -254,6 +258,7 @@ class SofaRespiratoryTransformer(SofaComponent):
             "ventilation_state": ActiveState(
                 self._kwargs.get("ventilation_window"),
                 id_column=self._kwargs.get("ventilation_id_column", "orderid"),
+                stay_column=self._kwargs.get("ventilation_stay_column", "visit_detail_id"),
                 stop_when=pl.col("numeric_value") == 0,
             ),
         }

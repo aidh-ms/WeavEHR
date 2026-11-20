@@ -8,7 +8,7 @@ mappings:
     columns: &chart_columns
       text_value: col(text_value)
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
     filters: &invasive
       - str_contains(strip_str(text_value), "(?i)trach.*vent|vent.*trach|^(cmv|ac/cmv|simv)$")
   - pattern:

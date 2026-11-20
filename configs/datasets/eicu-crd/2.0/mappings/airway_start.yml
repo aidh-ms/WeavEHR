@@ -7,7 +7,7 @@ mappings:
     level: endotracheal_tube
     columns: &care_columns
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
   - pattern:
       table: respiratorycare
       event: AIRWAY
@@ -22,6 +22,6 @@ mappings:
     columns:
       text_value: col(text_value)
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
     filters:
       - str_contains(strip_str(text_value), "(?i)trach")

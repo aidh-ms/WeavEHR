@@ -1,3 +1,4 @@
+# Encounter IDs use the hospital admission if linked, otherwise a standalone ED visit.
 # Medicine reconciliation: the medications a patient reported taking when asked on
 # arrival in the ED. A medication belongs to one or more Enhanced Therapeutic Class
 # (ETC) groups and has one row per group, told apart by etc_rn, so the same medication
@@ -36,10 +37,25 @@ columns:
 filters:
   - drop_na(charttime)
 
+# Carry the ED stay's hospital link onto each source row.
+join:
+  - path: ed/edstays.csv.gz
+    columns:
+      - name: subject_id
+        type: int64
+      - name: stay_id
+        type: int64
+      - name: hadm_id
+        type: int64
+    both_on:
+      - subject_id
+      - stay_id
+
 event_defaults:
   subject_id: col(subject_id)
   extension:
-    stay_id: col(stay_id)
+    visit_occurrence_id: replace(hadm_id != None, cast(hadm_id, "string"), concat_str("ed:", stay_id))
+    visit_detail_id: replace(hadm_id != None, concat_str("ed:", stay_id), None)
 
 events:
   # One event per raw row, i.e. per medication and ETC group; the medication name is

@@ -77,3 +77,6 @@ and the derived `condition_era` / `drug_era` tables duplicate
 <version>/
 └── tables/<table>.yml   # how to read each OMOP table and which MEDS events to emit
 ```
+
+See [encounter identifiers](../../../docs/user_guide/identifiers.md) for the
+shared visit hierarchy, source-specific ID mappings and migration guidance.

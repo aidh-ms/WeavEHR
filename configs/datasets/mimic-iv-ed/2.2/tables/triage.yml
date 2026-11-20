@@ -1,3 +1,4 @@
+# Encounter IDs use the hospital admission if linked, otherwise a standalone ED visit.
 # Information collected at triage, one row per ED stay, one column per measurement.
 # Each non-null measurement becomes one event; the code prefix TRIAGE keeps triage
 # measurements apart from the routine ones in vitalsign, as eicu-crd prefixes its
@@ -39,11 +40,15 @@ columns:
 
 join:
   # Triage has no time of its own. The documentation names the stay's intime as the
-  # closest approximation, so it is joined from the ED release's edstays on stay_id.
+  # closest approximation, so it is joined from edstays on subject_id and stay_id.
   - name: edstays
     path: ed/edstays.csv.gz
     columns:
-      # subject_id and extensions
+      # Encounter link and event time from the ED stay.
+      - name: subject_id
+        type: int64
+      - name: hadm_id
+        type: int64
       - name: stay_id
         type: int64
       # db fields - times
@@ -52,6 +57,7 @@ join:
         params:
           format: "%Y-%m-%d %H:%M:%S"
     both_on:
+      - subject_id
       - stay_id
 
 event_defaults:
@@ -61,7 +67,8 @@ event_defaults:
     - const(TRIAGE)
   extension:
     available_time: col(intime)
-    stay_id: col(stay_id)
+    visit_occurrence_id: replace(hadm_id != None, cast(hadm_id, "string"), concat_str("ed:", stay_id))
+    visit_detail_id: replace(hadm_id != None, concat_str("ed:", stay_id), None)
 
 # A null measurement in this wide table means it was not taken at that time, so it is not
 # an event: every event drops the rows where its own value is null.

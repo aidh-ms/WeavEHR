@@ -24,3 +24,6 @@ table configs reconstruct absolute timestamps by joining the `patient` table
 
 The freely available demo subset is configured in `../eicu-demo/` as a diff
 of this dataset via `extends.yml`.
+
+See [encounter identifiers](../../../docs/user_guide/identifiers.md) for the
+shared visit hierarchy, source-specific ID mappings and migration guidance.

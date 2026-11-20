@@ -9,6 +9,8 @@ columns:
     type: int64
   - name: visit_occurrence_id
     type: int64
+  - name: visit_detail_id
+    type: int64
   - name: provider_id
     type: int64
   # db fields - times

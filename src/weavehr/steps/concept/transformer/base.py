@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from weavehr.callbacks.interpreter import parse_expr
+from weavehr.identifiers import ENCOUNTER_ID_COLUMNS
 from weavehr.logging import get_logger
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig, ConceptTransformerProtocol
 from weavehr.steps.concept.config.simple import MappingPatternConfig
@@ -153,7 +154,10 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
             numeric_value=pl.coalesce(pl.col("^numeric_value$"), pl.lit(None, dtype=pl.Float32)),
         )
 
-        for col_name, col_expr in self._concept.extension_columns.items():
+        schema = lf.collect_schema()
+        extension_columns = {name: f'col("{name}")' for name in ENCOUNTER_ID_COLUMNS if name in schema}
+        extension_columns.update(self._concept.extension_columns)
+        for col_name, col_expr in extension_columns.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
         lf = lf.select(
@@ -164,7 +168,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                 pl.col("numeric_value").cast(pl.Float32),
                 pl.col("text_value").cast(pl.String),
             ]
-            + [pl.col(col).cast(pl.String) for col in self._concept.extension_columns]
+            + [pl.col(col).cast(pl.String) for col in extension_columns]
         ).sort("subject_id", "time")
 
         output_file = self._output_file(self._concept)

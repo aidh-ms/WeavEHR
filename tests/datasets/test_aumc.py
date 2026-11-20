@@ -192,7 +192,7 @@ SOURCE_SELECTION = measurements(
     ]
 )
 
-IN_VISIT: Final = {"visit_occurrence_id": VISIT_ID}
+IN_VISIT: Final = {"visit_occurrence_id": str(VISIT_ID)}
 """Extra columns of a procedure or device row recorded in visit ``VISIT_ID``."""
 
 RESPIRATORY_SUPPORT = [
@@ -202,7 +202,7 @@ RESPIRATORY_SUPPORT = [
         event=event,
         code=code(event, concept_id, source),
         extra=IN_VISIT,
-        expect=[{"code": f"respiratory_support//{level}", "stay_id": str(VISIT_ID)}] if level else NOTHING,
+        expect=[{"code": f"respiratory_support//{level}", "visit_occurrence_id": str(VISIT_ID)}] if level else NOTHING,
         note=note,
     )
     for table, event, concept_id, source, level, note in [
@@ -226,7 +226,13 @@ AIRWAYS = [
         extra={**IN_VISIT, "device_exposure_id": DEVICE_EXPOSURE_ID},
         expect=NOTHING
         if level is None
-        else [{"code": f"{concept}//{level}", "stay_id": str(VISIT_ID), "device_exposure_id": str(DEVICE_EXPOSURE_ID)}],
+        else [
+            {
+                "code": f"{concept}//{level}",
+                "visit_occurrence_id": str(VISIT_ID),
+                "device_exposure_id": str(DEVICE_EXPOSURE_ID),
+            }
+        ],
         note=note,
     )
     for concept, event, concept_id, source, level, note in [
@@ -266,7 +272,7 @@ VENTILATION = [
         else [
             {
                 "code": f"{concept}//{level}",
-                "stay_id": str(VISIT_ID),
+                "visit_occurrence_id": str(VISIT_ID),
                 "record_id": str(RECORD_ID),
                 **({"time": END} if concept == "ventilation_end" else {}),
             }
@@ -367,7 +373,7 @@ WEIGHT = [
         code=code("MEASUREMENT", concept_id, source, "kg"),
         value=85.0,
         extra=IN_VISIT,
-        expect=[{"numeric_value": 85.0, "stay_id": str(VISIT_ID)}] if admission else NOTHING,
+        expect=[{"numeric_value": 85.0, "visit_occurrence_id": str(VISIT_ID)}] if admission else NOTHING,
         note=note,
     )
     for concept_id, source, admission, note in [
@@ -443,8 +449,8 @@ NATIVE_RULES = [
             for procedure_occurrence_id, source in [(1, "SIMV(PC) + PS"), (2, NIV_MODE)]
         ],
         [
-            {"code": "respiratory_support//invasive", "stay_id": str(VISIT_ID)},
-            {"code": "respiratory_support//noninvasive", "stay_id": str(VISIT_ID)},
+            {"code": "respiratory_support//invasive", "visit_occurrence_id": str(VISIT_ID)},
+            {"code": "respiratory_support//noninvasive", "visit_occurrence_id": str(VISIT_ID)},
         ],
         id="procedure_source_value decides NIV",
     ),
@@ -464,7 +470,14 @@ NATIVE_RULES = [
             }
             for device_exposure_id, source in [(1, "Tracheostoma"), (2, "Trach. stoma")]
         ],
-        [{"code": "airway_end//tracheostomy", "time": END_TIME, "stay_id": str(VISIT_ID), "device_exposure_id": "1"}],
+        [
+            {
+                "code": "airway_end//tracheostomy",
+                "time": END_TIME,
+                "visit_occurrence_id": str(VISIT_ID),
+                "device_exposure_id": "1",
+            }
+        ],
         id="device_source_value decides a recorded tracheostomy end",
     ),
     pytest.param(
@@ -483,7 +496,14 @@ NATIVE_RULES = [
             }
             for procedure_occurrence_id, end in [(1, END_TIME), (2, None)]
         ],
-        [{"code": "ventilation_end//invasive", "time": END_TIME, "stay_id": str(VISIT_ID), "record_id": "1"}],
+        [
+            {
+                "code": "ventilation_end//invasive",
+                "time": END_TIME,
+                "visit_occurrence_id": str(VISIT_ID),
+                "record_id": "1",
+            }
+        ],
         id="procedure_end_datetime dates the end of ventilation",
     ),
     pytest.param(
@@ -759,7 +779,7 @@ def segment(drug_exposure_id: int, sig: str, start: float, stop: float, stay: in
     """The DRUG_START and DRUG_END rows AMSTEL writes for one drugitems rate segment of norepinephrine."""
     row = {"subject_id": 1, "sig": sig, "drug_exposure_id": drug_exposure_id}
     return {
-        event: [{**row, "time": at(hours), "code": code(event, *NOREPINEPHRINE), "visit_occurrence_id": stay}]
+        event: [{**row, "time": at(hours), "code": code(event, *NOREPINEPHRINE), "visit_occurrence_id": str(stay)}]
         for event, hours in [("DRUG_START", start), ("DRUG_END", stop)]
     }
 
@@ -775,7 +795,7 @@ ADMISSION_WEIGHT: Final = {
     "time": TIME,
     "code": code("MEASUREMENT", 3013762, "weight", "kg"),
     "numeric_value": 85.0,
-    "visit_occurrence_id": VISIT_ID,
+    "visit_occurrence_id": str(VISIT_ID),
 }
 
 
@@ -795,13 +815,17 @@ def test_vasopressor_rates_read_the_dose_rate_from_sig(tmp_path: Path) -> None:
         5: "4 mg @ 0.51 mg/uur = 6 ml/uur",
     }
     dropped = [segment(6, "4 mg @ 8.5 µg/min = 2 ml/uur", 0, 1, stay=20), segment(7, "1 mg", 0, 1)]
+    segments = drug_sources(*[segment(i, sig, 0, 1) for i, sig in kept.items()], *dropped)
+    for rows in segments.values():
+        for row in rows:
+            row["visit_detail_id"] = "30" if row["visit_occurrence_id"] == str(VISIT_ID) else None
     outputs = run_concepts(
         tmp_path,
         dataset=DATASET,
         version=VERSION,
         concepts=["patient_weight", "norepinephrine_rate"],
         sources={
-            **drug_sources(*[segment(i, sig, 0, 1) for i, sig in kept.items()], *dropped),
+            **segments,
             "measurement/MEASUREMENT": [ADMISSION_WEIGHT],
         },
     )
@@ -812,7 +836,7 @@ def test_vasopressor_rates_read_the_dose_rate_from_sig(tmp_path: Path) -> None:
             {"code": "norepinephrine_rate//mcg/kg/min", "time": at(hours), "numeric_value": rate, **ids}
             for i in kept
             for hours, rate in [(0, 0.1), (1, 0.0)]
-            for ids in [{"drug_exposure_id": str(i), "stay_id": str(VISIT_ID)}]
+            for ids in [{"drug_exposure_id": str(i), "visit_occurrence_id": str(VISIT_ID), "visit_detail_id": "30"}]
         ],
         context="norepinephrine_rate",
     )
@@ -880,7 +904,7 @@ def beademen(procedure_occurrence_id: int, start: float, stop: float | None) -> 
         "subject_id": 1,
         "time": at(start),
         "code": code("PROCEDURE", *BEADEMEN),
-        "visit_occurrence_id": VISIT_ID,
+        "visit_occurrence_id": str(VISIT_ID),
         "procedure_occurrence_id": procedure_occurrence_id,
         "procedure_end": None if stop is None else at(stop),
     }
@@ -930,7 +954,7 @@ def test_respiratory_sofa_counts_ventilation_until_each_record_stops(tmp_path: P
     and 7 h are current for 2 h, so the record changes at 2 h and 6 h are scored too, while the
     end of Beademen at 4 h, 3 h after the last gas, is not.
     """
-    device = {"subject_id": 1, "visit_occurrence_id": VISIT_ID, "device_exposure_id": 2}
+    device = {"subject_id": 1, "visit_occurrence_id": str(VISIT_ID), "device_exposure_id": 2}
     outputs = run_concepts(
         tmp_path,
         dataset=DATASET,
@@ -948,6 +972,72 @@ def test_respiratory_sofa_counts_ventilation_until_each_record_stops(tmp_path: P
         outputs["sofa_respiratory"],
         [{"time": at(hours), "numeric_value": score} for hours, score in [(1, 3), (2, 3), (5, 3), (6, 2), (7, 2)]],
         context="sofa_respiratory",
+    )
+
+
+def test_respiratory_state_does_not_cross_aumc_admissions(tmp_path: Path) -> None:
+    """An unterminated ventilation record in admission 1 does not ventilate admission 2."""
+    gases = [
+        {**row, "visit_occurrence_id": visit}
+        for hour, visit in [(0, str(VISIT_ID)), (1, str(VISIT_ID + 1))]
+        for row in blood_gas(hour)
+    ]
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=RESPIRATORY_SOFA,
+        sources={
+            "procedure_occurrence/PROCEDURE": [beademen(1, 0, None)],
+            "measurement/MEASUREMENT": gases,
+        },
+    )
+    # PaO2/FiO2 = 160: 3 during ventilation, 2 without ventilation (Vincent et al., 1996).
+    assert_rows(
+        outputs["sofa_respiratory"],
+        [
+            {"time": at(0), "numeric_value": 3},
+            {"time": at(1), "numeric_value": 2},
+        ],
+    )
+
+
+def test_pressor_state_does_not_cross_aumc_admissions(tmp_path: Path) -> None:
+    """A current norepinephrine infusion belongs to its admission, even without an end."""
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=[
+            "mean_arterial_pressure",
+            "patient_weight",
+            "norepinephrine_rate",
+            "epinephrine_rate",
+            "dopamine_rate",
+            "dobutamine_rate",
+            "sofa_cardiovascular",
+        ],
+        sources={
+            "drug_exposure/DRUG_START": segment(1, "4 mg @ 0.2 µg/kg/min = 6 ml/uur", 0, 10)["DRUG_START"],
+            "measurement/MEASUREMENT": [
+                {
+                    "subject_id": 1,
+                    "time": at(hour),
+                    "code": code("MEASUREMENT", 21490852),
+                    "numeric_value": 80.0,
+                    "visit_occurrence_id": visit,
+                }
+                for hour, visit in [(0, str(VISIT_ID)), (1, str(VISIT_ID + 1))]
+            ],
+        },
+    )
+    # Norepinephrine >0.1 scores 4; MAP >=70 without pressors scores 0.
+    assert_rows(
+        outputs["sofa_cardiovascular"],
+        [
+            {"time": at(0), "numeric_value": 4},
+            {"time": at(1), "numeric_value": 0},
+        ],
     )
 
 

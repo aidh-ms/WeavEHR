@@ -6,4 +6,4 @@ mappings:
       code: ^RESPIRATORY_CARE//No Artificial Airway$
     columns:
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)

@@ -77,7 +77,7 @@ event_defaults:
   subject_id: col(PatientID)
   time: col(event_time)
   extension:
-    case_id: col(CaseID)
+    visit_occurrence_id: col(CaseID)
 
 events:
   - name: MEDICATION

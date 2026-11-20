@@ -9,7 +9,7 @@ mappings:
     level: invasive
     columns:
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
         orderid: col(orderid)
   - pattern:
       table: procedureevents
@@ -18,5 +18,5 @@ mappings:
     level: noninvasive
     columns:
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
         orderid: col(orderid)

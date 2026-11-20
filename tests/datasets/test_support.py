@@ -45,8 +45,8 @@ NOREPINEPHRINE = Case(
     table="inputevents",
     event="INFUSION_START",
     code="INFUSION_START//221906//Norepinephrine",
-    extra={"originalrate": 0.2, "rateuom": "mcg/kg/min", "stay_id": 10},
-    expect=[{"numeric_value": 0.2, "stay_id": "10"}],
+    extra={"originalrate": 0.2, "rateuom": "mcg/kg/min", "visit_detail_id": "icu:10"},
+    expect=[{"numeric_value": 0.2, "visit_detail_id": "icu:10"}],
     note="weight-based rates are kept",
 )
 
@@ -139,7 +139,9 @@ def test_check_case_fails_outside_the_case_tolerance(deviation: float, tolerance
         pytest.param(
             "temperature", "chartevents", "CHART", {"stay": 10}, r"unknown column\(s\) \['stay'\]", id="column"
         ),
-        pytest.param("temperature", "chartevents", "CHART", {"stay_id": "10"}, "'stay_id' do not fit", id="dtype"),
+        pytest.param(
+            "temperature", "chartevents", "CHART", {"visit_detail_id": 10}, "'visit_detail_id' do not fit", id="dtype"
+        ),
         pytest.param("temperature", "labevents", "LAB", {}, "no mimic-iv 2.2 mapping of temperature reads", id="table"),
         pytest.param("temperature", "chartevents", "CHARTS", {}, "reads chartevents/CHARTS", id="event"),
         pytest.param("sofa_coagulation", "labevents", "LAB", {}, "has a complex mapping", id="complex"),

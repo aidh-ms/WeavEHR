@@ -40,7 +40,7 @@ columns:
 event_defaults:
   subject_id: col(subject_id)
   extension:
-    hadm_id: col(hadm_id)
+    visit_occurrence_id: col(hadm_id)
     emar_id: col(emar_id)
     emar_seq: col(emar_seq)
     poe_id: col(poe_id)

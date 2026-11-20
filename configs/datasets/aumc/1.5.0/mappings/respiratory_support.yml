@@ -21,7 +21,7 @@ mappings:
     columns: &source_columns
       text_value: col(code)
       extension:
-        stay_id: col(visit_occurrence_id)
+        visit_occurrence_id: col(visit_occurrence_id)
     filters:
       - str_contains(code, "//40486624//|NIV")
   - pattern:

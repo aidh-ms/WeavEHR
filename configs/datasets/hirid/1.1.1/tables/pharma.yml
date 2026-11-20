@@ -60,6 +60,7 @@ event_defaults:
   subject_id: col(patientid)
   time: col(givenat)
   extension:
+    visit_occurrence_id: col(patientid)
     available_time: col(enteredentryat)
     infusion_id: col(infusionid)
 

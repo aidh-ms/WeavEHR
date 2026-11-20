@@ -281,7 +281,7 @@ def test_cdm_version_columns_reach_the_extracted_events(
 
     assert extracted.keys() == expect.keys()
     for event, extensions in expect.items():
-        assert_rows(extracted[event], [{"visit_occurrence_id": VISIT_ID, **extensions}], context=event)
+        assert_rows(extracted[event], [{"visit_occurrence_id": str(VISIT_ID), **extensions}], context=event)
 
 
 def test_cdm_5_4_procedure_end_falls_back_to_the_end_date(tmp_path: Path) -> None:

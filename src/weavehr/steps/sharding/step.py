@@ -28,6 +28,7 @@ from pathlib import Path
 
 import polars as pl
 
+from weavehr.identifiers import ENCOUNTER_ID_COLUMNS
 from weavehr.logging import get_logger
 from weavehr.steps.base.step import ConfigurableBaseStep
 from weavehr.steps.sharding.config.sharding import ShardingConfig
@@ -371,10 +372,10 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         return concept_path_str in concept_filters or concept_name in concept_filters
 
     def _extension_column_dtypes(self, files: list[Path]) -> dict[str, pl.DataType]:
-        """Determine the shard dtype of every configured extension column.
+        """Determine shard dtypes for configured extensions and available encounter IDs.
 
         Reads only the Parquet schemas. A column missing from some files is filled with
-        nulls there, since tables carry different columns (``hadm_id`` exists on
+        nulls there, since tables carry different columns (``visit_occurrence_id`` exists on
         admissions, not on patients). An all-null column (dtype ``Null``) fits any dtype.
 
         Returns:
@@ -386,11 +387,11 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
                 column), or the files disagree on its dtype (a silent cast could
                 break joins on the column downstream)
         """
-        columns = self._config.config.extension_columns
-        if not columns:
-            return {}
-
         schemas = {file: pl.read_parquet_schema(file) for file in files}
+        columns = list(self._config.config.extension_columns)
+        for name in ENCOUNTER_ID_COLUMNS:
+            if name not in columns and any(name in schema for schema in schemas.values()):
+                columns.append(name)
         dtypes: dict[str, pl.DataType] = {}
         for column in columns:
             present = False

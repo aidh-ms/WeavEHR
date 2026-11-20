@@ -15,7 +15,7 @@ mappings:
       numeric_value: col(originalrate)
       text_value: col(text_value)
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
         linkorderid: col(linkorderid)
   # A genuine cessation is a rate of 0 — the components carry the last rate
   # forward, so a stop has to be charted rather than merely implied. A dose
@@ -31,7 +31,7 @@ mappings:
       numeric_value: const(0)
       text_value: col(text_value)
       extension:
-        stay_id: col(stay_id)
+        visit_detail_id: col(visit_detail_id)
         linkorderid: col(linkorderid)
     filters:
       - drop_if(text_value == "ChangeDose/Rate")

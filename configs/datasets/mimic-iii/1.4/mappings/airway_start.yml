@@ -7,7 +7,7 @@ mappings:
   level: endotracheal_tube
   columns:
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
 - pattern:
     table: chartevents
     event: CHART
@@ -16,7 +16,7 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - strip_str(text_value) == "Endotracheal tube"
 - pattern:
@@ -26,7 +26,7 @@ mappings:
   level: tracheostomy
   columns:
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
 - pattern:
     table: chartevents
     event: CHART
@@ -35,7 +35,7 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - str_contains(strip_str(text_value), "^(Tracheostomy tube|Trach mask)$")
 - pattern:
@@ -46,7 +46,7 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
 - pattern:
     table: chartevents
     event: CHART
@@ -55,6 +55,6 @@ mappings:
   columns:
     text_value: col(text_value)
     extension:
-      stay_id: col(stay_id)
+      visit_detail_id: col(visit_detail_id)
   filters:
   - strip_str(text_value) == "1"

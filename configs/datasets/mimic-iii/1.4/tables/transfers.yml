@@ -35,8 +35,10 @@ columns:
 event_defaults:
   subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(HADM_ID)
-    stay_id: col(ICUSTAY_ID)
+    visit_occurrence_id: col(HADM_ID)
+    visit_detail_id: concat_str("transfer:", ROW_ID)
+    parent_visit_detail_id: concat_str("icu:", ICUSTAY_ID)
+    care_site_id: col(CURR_WARDID)
     row_id: col(ROW_ID)
 events:
 - name: TRANSFER_TO

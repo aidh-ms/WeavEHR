@@ -186,7 +186,7 @@ convert mg to µg and per hour (uur) to per minute, and divide a rate not per
 kg by the admission weight, as ricu (`aumc_rate_kg`) and AmsterdamUMCdb's own
 SOFA code do. `patient_weight` is that admission weight: AMSTEL's midpoint of
 the weight group (55 to 115 kg; ricu uses 50 and 120 kg for the open-ended
-groups), joined on the admission (`stay_id`). A segment without a dose rate,
+groups), joined on the admission (`visit_occurrence_id`). A segment without a dose rate,
 with another unit or, if not per kg, without a weight is dropped. On AUMCdb
 1.5.0 the admission weight is missing for 3 to 7% of the segments of each drug.
 
@@ -316,3 +316,6 @@ Not yet mapped / not cleanly mappable from OMOP:
 - **troponin_I**, **erythrocyte_distribution_width**, **totcal_CO2**: no
   approved AMSTEL target in AUMCdb.
 - **prothrombine_time** (seconds): the only item holds INR values (see above).
+
+See [encounter identifiers](../../../docs/user_guide/identifiers.md) for the
+shared visit hierarchy, source-specific ID mappings and migration guidance.

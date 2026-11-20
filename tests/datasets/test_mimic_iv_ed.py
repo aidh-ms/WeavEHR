@@ -11,7 +11,7 @@ column means, when it was recorded) and from these modelling choices:
   dated, and known, at the stay's ED departure (``edstays.outtime``), as MIMIC-IV hospital
   diagnoses are dated at discharge.
 - A value that is null in the raw data records nothing, so it is not an event.
-- Only ``edstays`` has a ``hadm_id``, so only its events carry one.
+- ``edstays`` supplies hospital linkage to every ED table, with a distinct ID for standalone ED visits.
 
 There are no concept mappings for MIMIC-IV-ED, so there are no mapping cases.
 """
@@ -23,7 +23,7 @@ from typing import Any, Final
 
 import pytest
 
-from tests.datasets.support import ABSENT, assert_rows, extract_native, extracted_event_schemas
+from tests.datasets.support import assert_rows, extract_native, extracted_event_schemas
 
 DATASET: Final = "mimic-iv-ed"
 VERSION: Final = "2.2"
@@ -76,7 +76,10 @@ def test_a_stay_is_an_arrival_and_a_departure_with_the_stays_demographics(tmp_pa
         ],
     )
 
-    ids = [{"subject_id": 1, "stay_id": 10, "hadm_id": 100}, {"subject_id": 2, "stay_id": 20, "hadm_id": None}]
+    ids = [
+        {"subject_id": 1, "visit_detail_id": "ed:10", "visit_occurrence_id": "100"},
+        {"subject_id": 2, "visit_detail_id": None, "visit_occurrence_id": "ed:20"},
+    ]
     assert_rows(
         stays["ED_REGISTRATION"],
         [
@@ -123,7 +126,7 @@ def test_a_departure_without_disposition_is_still_an_event_but_a_missing_race_is
         ],
     )
 
-    assert_rows(stays["ED_OUT"], [{"stay_id": 10, "code": "ED_OUT", "time": at(2)}])
+    assert_rows(stays["ED_OUT"], [{"visit_occurrence_id": "ed:" + "10", "code": "ED_OUT", "time": at(2)}])
     assert_rows(stays["ETHNICITY"], [])
 
 
@@ -163,8 +166,8 @@ def test_diagnoses_are_dated_and_known_at_the_departure_of_their_stay(tmp_path: 
         ],
         joins={
             EDSTAYS: [
-                {"stay_id": 10, "outtime": stamp(6)},
-                {"stay_id": 11, "outtime": stamp(52)},
+                {"subject_id": 1, "stay_id": 10, "outtime": stamp(6)},
+                {"subject_id": 1, "stay_id": 11, "outtime": stamp(52)},
             ]
         },
     )["DIAGNOSIS"]
@@ -173,21 +176,26 @@ def test_diagnoses_are_dated_and_known_at_the_departure_of_their_stay(tmp_path: 
         diagnoses,
         [
             {
-                "stay_id": 10,
+                "visit_occurrence_id": "ed:" + "10",
                 "seq_num": 1,
                 "code": "DIAGNOSIS//ICD//10//R0789//OTHER CHEST PAIN",
                 "time": at(6),
                 "available_time": at(6),
-                "hadm_id": ABSENT,
+                "visit_detail_id": None,
             },
             {
-                "stay_id": 10,
+                "visit_occurrence_id": "ed:" + "10",
                 "seq_num": 2,
                 "code": "DIAGNOSIS//ICD//9//4019//HYPERTENSION NOS",
                 "time": at(6),
                 "available_time": at(6),
             },
-            {"stay_id": 11, "seq_num": 1, "code": "DIAGNOSIS//ICD//9//486//PNEUMONIA", "time": at(52)},
+            {
+                "visit_occurrence_id": "ed:" + "11",
+                "seq_num": 1,
+                "code": "DIAGNOSIS//ICD//9//486//PNEUMONIA",
+                "time": at(52),
+            },
         ],
     )
 
@@ -218,8 +226,8 @@ def test_triage_is_dated_at_arrival_and_a_missing_measurement_is_no_event(tmp_pa
         ],
         joins={
             EDSTAYS: [
-                {"stay_id": 10, "intime": stamp(1)},
-                {"stay_id": 20, "intime": stamp(2)},
+                {"subject_id": 1, "stay_id": 10, "intime": stamp(1)},
+                {"subject_id": 2, "stay_id": 20, "intime": stamp(2)},
             ]
         },
     )
@@ -237,15 +245,36 @@ def test_triage_is_dated_at_arrival_and_a_missing_measurement_is_no_event(tmp_pa
     for event, (code, value) in expected.items():
         assert_rows(
             triage[event],
-            [{"stay_id": 10, "code": code, "numeric_value": value, "time": at(1), "available_time": at(1)}],
+            [
+                {
+                    "visit_occurrence_id": "ed:" + "10",
+                    "code": code,
+                    "numeric_value": value,
+                    "time": at(1),
+                    "available_time": at(1),
+                }
+            ],
             context=event,
         )
-    assert_rows(triage["PAIN"], [{"stay_id": 10, "code": "TRIAGE//PAIN", "numeric_value": 7, "text_value": "7"}])
+    assert_rows(
+        triage["PAIN"],
+        [{"visit_occurrence_id": "ed:" + "10", "code": "TRIAGE//PAIN", "numeric_value": 7, "text_value": "7"}],
+    )
     assert_rows(
         triage["CHIEF_COMPLAINT"],
         [
-            {"stay_id": 10, "code": "TRIAGE//CHIEF_COMPLAINT", "text_value": "Chest pain", "time": at(1)},
-            {"stay_id": 20, "code": "TRIAGE//CHIEF_COMPLAINT", "text_value": "Dyspnea", "time": at(2)},
+            {
+                "visit_occurrence_id": "ed:" + "10",
+                "code": "TRIAGE//CHIEF_COMPLAINT",
+                "text_value": "Chest pain",
+                "time": at(1),
+            },
+            {
+                "visit_occurrence_id": "ed:" + "20",
+                "code": "TRIAGE//CHIEF_COMPLAINT",
+                "text_value": "Dyspnea",
+                "time": at(2),
+            },
         ],
     )
 
@@ -254,7 +283,9 @@ def test_triage_is_dated_at_arrival_and_a_missing_measurement_is_no_event(tmp_pa
 def test_pain_is_free_text_with_a_number_only_when_it_is_one(tmp_path: Path, table: str) -> None:
     """Since v2.0 ``pain`` is free text that includes entries which are not valid numbers."""
     times: dict[str, Any] = {"charttime": stamp(1)} if table == "vitalsign" else {}
-    joins: Mapping[str, Any] | None = {EDSTAYS: [{"stay_id": 10, "intime": stamp(1)}]} if table == "triage" else None
+    joins: Mapping[str, Any] | None = (
+        {EDSTAYS: [{"subject_id": 1, "stay_id": 10, "intime": stamp(1)}]} if table == "triage" else None
+    )
     pain = extract_native(
         tmp_path,
         dataset=DATASET,
@@ -299,8 +330,18 @@ def test_vital_signs_are_dated_at_their_charttime_and_a_missing_value_is_no_even
     assert_rows(
         vitals["HEART_RATE"],
         [
-            {"stay_id": 10, "code": "VITALSIGN//HEART_RATE//bpm", "numeric_value": 110, "time": at(1)},
-            {"stay_id": 10, "code": "VITALSIGN//HEART_RATE//bpm", "numeric_value": 95, "time": at(2)},
+            {
+                "visit_occurrence_id": "ed:" + "10",
+                "code": "VITALSIGN//HEART_RATE//bpm",
+                "numeric_value": 110,
+                "time": at(1),
+            },
+            {
+                "visit_occurrence_id": "ed:" + "10",
+                "code": "VITALSIGN//HEART_RATE//bpm",
+                "numeric_value": 95,
+                "time": at(2),
+            },
         ],
     )
     singles = {
@@ -313,7 +354,11 @@ def test_vital_signs_are_dated_at_their_charttime_and_a_missing_value_is_no_even
         "PAIN": {"code": "VITALSIGN//PAIN", "numeric_value": 3, "text_value": "3"},
     }
     for event, expect in singles.items():
-        assert_rows(vitals[event], [{"stay_id": 10, "time": at(1), "available_time": at(1), **expect}], context=event)
+        assert_rows(
+            vitals[event],
+            [{"visit_occurrence_id": "ed:" + "10", "time": at(1), "available_time": at(1), **expect}],
+            context=event,
+        )
 
 
 def test_one_reconciled_medication_event_per_therapeutic_class_with_its_codes_as_charted(tmp_path: Path) -> None:
@@ -343,7 +388,7 @@ def test_one_reconciled_medication_event_per_therapeutic_class_with_its_codes_as
     )["MEDICATION_RECONCILIATION"]
 
     reconciled = {
-        "stay_id": 10,
+        "visit_occurrence_id": "ed:" + "10",
         "code": "MEDICATION_RECONCILIATION//aspirin",
         "time": at(1),
         "available_time": at(1),
@@ -380,7 +425,12 @@ def test_one_dispensation_event_per_gsn_with_the_rows_that_group_it(tmp_path: Pa
         ],
     )["MEDICATION_DISPENSATION"]
 
-    dispensed = {"stay_id": 10, "code": "MEDICATION_DISPENSATION//Ondansetron", "time": at(2), "med_rn": 1}
+    dispensed = {
+        "visit_occurrence_id": "ed:" + "10",
+        "code": "MEDICATION_DISPENSATION//Ondansetron",
+        "time": at(2),
+        "med_rn": 1,
+    }
     assert_rows(pyxis, [{**dispensed, "gsn_rn": 1, "gsn": "016255"}, {**dispensed, "gsn_rn": 2, "gsn": "061716"}])
 
 
@@ -400,11 +450,9 @@ def test_a_row_without_charttime_is_no_event(tmp_path: Path, table: str, values:
     assert all(frame.is_empty() for frame in extracted.values()), {e: f.height for e, f in extracted.items()}
 
 
-def test_only_stay_events_carry_a_hospital_admission_id() -> None:
-    """``hadm_id`` is a column of ``edstays`` only; every ED event carries ``stay_id``."""
+def test_every_ed_table_exposes_canonical_encounter_identifiers() -> None:
+    """The ED-stay lookup supplies encounter linkage consistently across its tables."""
     schemas = extracted_event_schemas(DATASET, VERSION)
     assert {table for table, _ in schemas} == {"edstays", "diagnosis", "medrecon", "pyxis", "triage", "vitalsign"}
-
-    with_hadm = {key for key, schema in schemas.items() if "hadm_id" in schema}
-    assert with_hadm == {key for key in schemas if key[0] == "edstays"}
-    assert all("stay_id" in schema for schema in schemas.values())
+    assert all("visit_occurrence_id" in schema and "visit_detail_id" in schema for schema in schemas.values())
+    assert all("hadm_id" not in schema and "stay_id" not in schema for schema in schemas.values())

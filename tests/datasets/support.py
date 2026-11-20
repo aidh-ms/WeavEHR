@@ -201,7 +201,7 @@ def extracted_rows(
     (see :func:`extracted_event_schemas`), so a mapping sees the columns the real pipeline
     gives it. Columns a row does not set are null; ``subject_id`` and ``time`` default to
     :data:`DEFAULT_SUBJECT_ID` and :data:`DEFAULT_TIME`. Values are not coerced: they must fit
-    the extracted dtype (e.g. an Int64 ``stay_id`` takes ``10``, not ``"10"``).
+    the extracted dtype (e.g. a String ``visit_detail_id`` takes ``"icu:10"``, not ``10``).
 
     Raises:
         ValueError: The dataset version does not extract ``table``/``event``, a row sets a
@@ -315,7 +315,7 @@ class Case:
             (the concept step matches both)
         value: The source row's ``numeric_value``
         text: The source row's ``text_value``
-        extra: Further extracted columns of the source row (e.g. ``stay_id``,
+        extra: Further extracted columns of the source row (e.g. ``visit_detail_id``,
             ``prescribed_start``, or ``time``/``subject_id`` instead of the defaults)
         expect: Expected output rows, each giving only the columns it asserts; :data:`NOTHING`
             if the row emits nothing. See :func:`assert_rows` for how rows are compared.

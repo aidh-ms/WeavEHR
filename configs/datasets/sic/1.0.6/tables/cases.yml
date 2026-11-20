@@ -68,7 +68,7 @@ event_defaults:
   subject_id: col(PatientID)
   time: col(admission_base)
   extension:
-    case_id: col(CaseID)
+    visit_occurrence_id: col(CaseID)
 
 events:
   - name: SEX
@@ -120,4 +120,4 @@ events:
     filters:
       - drop_na(time)
       # One death per patient, even if several of their cases record it.
-      - first_distinct(subject_id, order_by=[time, case_id])
+      - first_distinct(subject_id, order_by=[time, visit_occurrence_id])

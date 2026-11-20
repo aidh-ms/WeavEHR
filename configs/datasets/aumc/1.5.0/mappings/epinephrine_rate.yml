@@ -21,9 +21,8 @@ table:
   pattern:
     table: drug_exposure
     code: ^19076867//
-  columns: [subject_id, time, event, dataset, table, sig, drug_exposure_id, visit_occurrence_id]
+  columns: [subject_id, time, event, dataset, table, sig, drug_exposure_id, visit_occurrence_id, visit_detail_id]
   callbacks:
-    - cast(visit_occurrence_id, "string", output=stay_id)
     # The dose rate follows "@": a number and a unit, e.g. "0.1 µg/kg/min".
     - sig.str.extract("@ [^ ]+ ([^ ]+)", 1, output=dose_unit)
     # Only µg or mg (µ in either Unicode form), optionally per kg, per minute or hour (uur).
@@ -36,15 +35,15 @@ table:
 join:
   - concept: patient_weight.1.0.0
     how: left
-    both_on: [subject_id, stay_id]
-    columns: [subject_id, stay_id, numeric_value]
+    both_on: [subject_id, visit_occurrence_id]
+    columns: [subject_id, visit_occurrence_id, numeric_value]
     callbacks:
       - col(numeric_value, output=weight)
 event:
   numeric_value: replace(event == "DRUG_END", 0, rate)
   text_value: col(sig)
   extension:
-    stay_id: col(stay_id)
+    visit_occurrence_id: col(visit_occurrence_id)
     drug_exposure_id: col(drug_exposure_id)
 filters:
   - drop_na(rate)

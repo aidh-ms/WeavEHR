@@ -104,3 +104,6 @@ Not yet mapped / not cleanly mappable as `simple`:
 ├── tables/<table>.yml   # how to read each HiRID table and which MEDS events to emit
 └── mappings/<name>.yml  # how shared concepts map onto HiRID variableids
 ```
+
+See [encounter identifiers](../../../docs/user_guide/identifiers.md) for the
+shared visit hierarchy, source-specific ID mappings and migration guidance.

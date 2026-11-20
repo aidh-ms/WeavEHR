@@ -204,7 +204,7 @@ def test_events_are_placed_on_the_timeline_of_the_patients_first_admission(tmp_p
             {
                 "subject_id": patient,
                 "time": ADMISSION[case] + timedelta(seconds=offset),
-                "case_id": case,
+                "visit_occurrence_id": str(case),
                 "numeric_value": value,
                 "available_time": ABSENT,
             }
@@ -227,7 +227,10 @@ def test_case_values_are_dated_at_the_start_of_their_case(tmp_path: Path) -> Non
     for event in ("SEX", "AGE", "HEIGHT", "WEIGHT"):
         assert_rows(
             events[event],
-            [{"subject_id": PATIENT[case], "time": time, "case_id": case} for case, time in ADMISSION.items()],
+            [
+                {"subject_id": PATIENT[case], "time": time, "visit_occurrence_id": str(case)}
+                for case, time in ADMISSION.items()
+            ],
             context=event,
         )
 

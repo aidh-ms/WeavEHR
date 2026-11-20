@@ -88,7 +88,7 @@ def test_simple_and_derived_mappings_are_combined(
         (2, datetime(2024, 1, 2, 10), "vital", 120.0, None),
     ]
     # The dataset-wide extension column is written by simple mappings only; derived rows get nulls.
-    assert df["stay_id"].to_list() == ["100", "100", None]
+    assert df["visit_detail_id"].to_list() == ["100", "100", None]
 
     # Neither the combined mappings' parts nor a simple mapping's own parts are left behind.
     output_dir = project.datasets_path / "concept" / "data" / "vital" / "1.0.0" / "testdb"
@@ -119,7 +119,7 @@ def test_complex_mapping_is_combined_with_a_simple_one(
     assert df.select("subject_id", "numeric_value").rows() == [(1, 160.0), (2, 120.0), (2, 120.0)]
     assert df["text_value"].to_list() == [None, None, None]
     # Only the simple mapping's rows carry the dataset-wide extension column.
-    assert sorted(df["stay_id"].to_list(), key=str) == ["200", None, None]
+    assert sorted(df["visit_detail_id"].to_list(), key=str) == ["200", None, None]
 
 
 def test_mapping_without_output_contributes_no_rows(

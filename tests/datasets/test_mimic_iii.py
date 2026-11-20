@@ -32,7 +32,7 @@ def mapped(name: str, table: str, item: int, value: float | None, text: str | No
             "code": [f"{item}//label"],
             "numeric_value": [value],
             "text_value": [text],
-            "stay_id": ["10"],
+            "visit_detail_id": ["icu:10"],
         },
         schema_overrides={"numeric_value": pl.Float32, "text_value": pl.String},
     )
@@ -283,7 +283,7 @@ def test_ventilation_start_has_one_rule_per_source_row(item: int, text: str, exp
     result = mapped("ventilation_start", "chartevents", item, None, text)
     assert result.height == expected
     if expected:
-        assert result["stay_id"].to_list() == ["10"]
+        assert result["visit_detail_id"].to_list() == ["icu:10"]
 
 
 def extract_rows(tmp_path: Path, table: str, rows: list[dict]) -> dict[str, pl.DataFrame]:

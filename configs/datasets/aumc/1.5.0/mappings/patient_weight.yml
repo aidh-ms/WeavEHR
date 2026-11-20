@@ -7,7 +7,7 @@
 #   3025315 = Body weight            (no source)
 # The value is AMSTEL's midpoint of the weight group (59- = 55 ... 110+ = 115 kg,
 # as in AmsterdamUMCdb's own SOFA code; ricu uses 50 and 120 kg for the open
-# groups). Other body weight items are not read. stay_id is the admission, so
+# groups). Other body weight items are not read. visit_occurrence_id is the admission, so
 # the AUMCdb vasopressor rates can join it.
 type: simple
 mappings:
@@ -19,6 +19,6 @@ mappings:
       numeric_value: col(numeric_value)
       text_value: col(text_value)
       extension:
-        stay_id: col(visit_occurrence_id)
+        visit_occurrence_id: col(visit_occurrence_id)
     filters:
       - drop_na(numeric_value)

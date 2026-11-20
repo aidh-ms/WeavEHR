@@ -33,7 +33,7 @@ join:
 event_defaults:
   subject_id: col(SUBJECT_ID)
   extension:
-    hadm_id: col(HADM_ID)
+    visit_occurrence_id: col(HADM_ID)
     row_id: col(ROW_ID)
 events:
 - name: PROCEDURE

@@ -1,3 +1,4 @@
+# Encounter IDs use the hospital admission if linked, otherwise a standalone ED visit.
 # Medicine dispensations through the Pyxis system. med_rn groups the rows of one
 # dispensation; a medicine with several Generic Sequence Numbers has one row per GSN,
 # told apart by gsn_rn, so a row is not necessarily a unique dispensation
@@ -33,10 +34,25 @@ columns:
 filters:
   - drop_na(charttime)
 
+# Carry the ED stay's hospital link onto each source row.
+join:
+  - path: ed/edstays.csv.gz
+    columns:
+      - name: subject_id
+        type: int64
+      - name: stay_id
+        type: int64
+      - name: hadm_id
+        type: int64
+    both_on:
+      - subject_id
+      - stay_id
+
 event_defaults:
   subject_id: col(subject_id)
   extension:
-    stay_id: col(stay_id)
+    visit_occurrence_id: replace(hadm_id != None, cast(hadm_id, "string"), concat_str("ed:", stay_id))
+    visit_detail_id: replace(hadm_id != None, concat_str("ed:", stay_id), None)
 
 events:
   # One event per raw row (per dispensation and GSN); med_rn and gsn_rn are kept so
