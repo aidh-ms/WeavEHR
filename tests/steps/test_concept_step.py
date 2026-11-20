@@ -245,6 +245,34 @@ class TestSimpleConcepts:
 
         assert df["code"].to_list() == [code]
 
+    def test_mapping_callbacks_see_every_matched_row_and_are_not_written(self) -> None:
+        concept = ConceptConfig(name="rate", version="1.0.0")
+        mapping = MappingConfig.model_validate(
+            {
+                "pattern": {"table": "t", "code": "x"},
+                "callbacks": ["next_record(numeric_value, time, by=[subject_id], output=next_value)"],
+                "columns": {"numeric_value": "col(next_value)"},
+                "filters": ["col(keep)"],
+            }
+        )
+        events = pl.LazyFrame(
+            {
+                "subject_id": [1, 1, 1],
+                "time": [datetime(2024, 1, 1, hour) for hour in range(3)],
+                "code": ["x"] * 3,
+                "numeric_value": [1.0, 5.0, 3.0],
+                "keep": [True, False, True],
+            }
+        )
+
+        df = ConceptStep.build_mapping_frame(
+            events, concept, mapping, dataset="testdb", version="1.0", table="t", event_name="E"
+        ).collect()
+
+        # The first row takes the value of the row the filter drops; the last has no next row.
+        assert df["numeric_value"].to_list() == [5.0, None]
+        assert "next_value" not in df.columns
+
     @pytest.mark.parametrize(
         ("level", "code"),
         [("invasive", "ventilation_start//invasive"), (None, "ventilation_start")],

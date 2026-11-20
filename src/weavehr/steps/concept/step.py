@@ -651,6 +651,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         lf = lf.with_columns(pl.lit(table).alias("table"))
         lf = lf.with_columns(pl.lit(event_name).alias("event"))
 
+        # Helper columns, on every matched row: no filter has dropped one yet. The final select drops them.
+        for expr in mapping.callbacks:
+            lf = lf.with_columns(parse_expr(lf, expr))
+
         extension_columns = concept.extension_columns.copy()
         extension_columns.update(dataset_extension_columns or {})
         extension_columns.update(mapping.columns.extension)
