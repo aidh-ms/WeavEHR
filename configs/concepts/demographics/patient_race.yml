@@ -1,0 +1,9 @@
+# Race and ethnicity as recorded by the hospital, grouped into broad categories:
+# the US federal race categories plus Hispanic or Latino. The recorded value stays
+# in text_value. No event when it is unknown, was not obtained or was declined.
+name: patient_race
+version: 1.0.0
+levels: [white, black, hispanic, asian, american_indian, pacific_islander, multiple, other]
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")

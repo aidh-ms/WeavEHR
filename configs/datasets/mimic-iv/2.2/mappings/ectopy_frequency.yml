@@ -1,0 +1,39 @@
+# mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
+# mimic-iv/concepts/measurement/rhythm.sql: Ectopy Frequency 1 (224651) and Ectopy
+# Frequency 2 (226480), mimic-code's ectopy_frequency and ectopy_frequency_secondary.
+# Labels are matched after trimming spaces; "Runs Vtach" is runs of ventricular
+# tachycardia. A second frequency of "None" belongs to no second type and is dropped.
+type: simple
+mappings:
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^(?:CHART//)?(?:224651)(?:$|//)
+    level: none
+    columns: &columns
+      text_value: col(text_value)
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^none$")
+  - pattern: &both
+      table: chartevents
+      event: CHART
+      code: ^(?:CHART//)?(?:224651|226480)(?:$|//)
+    level: rare
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^rare$")
+  - pattern: *both
+    level: occasional
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^occasional$")
+  - pattern: *both
+    level: frequent
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^frequent$")
+  - pattern: *both
+    level: runs
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^runs")

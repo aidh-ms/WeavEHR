@@ -388,6 +388,10 @@ DEFERRED_INFUSIONS = {
     "sepsis3",
 }
 
+# Mapped for MIMIC-IV first; MIMIC-III still needs CareVue's own rhythm and ectopy items and
+# labels, and the grouping of its ethnicity values.
+NOT_YET_MAPPED = {"heart_rhythm", "ectopy_type", "ectopy_frequency", "patient_race"}
+
 
 def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
     iii = {p.stem for p in (DATASET / "mappings").glob("*.yml")}
@@ -398,4 +402,5 @@ def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
         "immature_granulocytes",
         "neutrophils_absolute",
         *DEFERRED_INFUSIONS,
+        *NOT_YET_MAPPED,
     }

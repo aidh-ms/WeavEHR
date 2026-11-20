@@ -684,6 +684,39 @@ airway, like every other tube. No high-flow nasal cannula or room-air item is
 mapped yet. Rows keep the source code, concept ID and source value, in
 `text_value`.
 
+### Heart rhythm and ectopy
+
+`heart_rhythm` records each charted rhythm, grouped into the levels
+`sinus_rhythm` (including sinus arrhythmia), `sinus_tachycardia`,
+`sinus_bradycardia`, `atrial_fibrillation`, `atrial_flutter`,
+`supraventricular_tachycardia`, `junctional`, `first_degree_av_block`,
+`second_degree_av_block`, `third_degree_av_block`, `paced`,
+`ventricular_tachycardia`, `ventricular_fibrillation` and `asystole`. Every
+other label, such as a bundle branch block, is `other`, so no charted rhythm is
+lost. `ectopy_type` groups ectopic beats by origin (`ventricular`, `atrial`,
+`junctional`, `other`), and `ectopy_frequency` records how often they occur
+(`rare`, `occasional`, `frequent`, or `runs` of ventricular tachycardia). Both
+use `none` for an assessment that found no ectopy. Every row keeps the charted
+label in `text_value`.
+
+The MIMIC-IV mappings read Heart Rhythm and the first and second ectopy type
+and frequency fields, which mimic-code's `rhythm.sql` reads too. A second type
+or frequency of "None" means only that there is no second type, so it gives no
+event. Ectopy rows keep `source_code`, the charted field, so a type can be
+paired with the frequency charted alongside it. Unlike mimic-code, labels
+charted at the same time are not joined into one value.
+
+### Race
+
+`patient_race` records race and ethnicity as the hospital recorded them,
+grouped into the levels `white`, `black`, `hispanic`, `asian`,
+`american_indian`, `pacific_islander`, `multiple` and `other`, with the recorded
+value in `text_value`. An unknown, unobtained or declined value gives no event.
+MIMIC-IV records race per hospital admission, at the admission time, so it can
+differ between a patient's admissions. Its subgroups take their leading
+category (`HISPANIC/LATINO - CUBAN` is `hispanic`); `PORTUGUESE` is `white` and
+`SOUTH AMERICAN` is `hispanic`.
+
 ## Output layout
 
 Each concept is written per dataset and dataset version:

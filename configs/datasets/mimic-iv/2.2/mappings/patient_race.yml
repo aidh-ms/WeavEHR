@@ -1,0 +1,60 @@
+# admissions.race, at admission, as in mimic-code's icustay_detail.sql (race of the
+# hospital admission). Values are grouped by their leading category, e.g.
+# "HISPANIC/LATINO - CUBAN" is hispanic and "WHITE - BRAZILIAN" white. PORTUGUESE
+# counts as white and SOUTH AMERICAN as hispanic. UNKNOWN, UNABLE TO OBTAIN and
+# PATIENT DECLINED TO ANSWER give no event. Patterns include the event name so that
+# an admission without a race (code "ETHNICITY") matches none of them.
+type: simple
+mappings:
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: (?i)^ETHNICITY//(?:WHITE|PORTUGUESE)
+    level: white
+    columns: &columns
+      text_value: code.str.strip_prefix("ETHNICITY//")
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: (?i)^ETHNICITY//BLACK
+    level: black
+    columns: *columns
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: (?i)^ETHNICITY//(?:HISPANIC|SOUTH AMERICAN)
+    level: hispanic
+    columns: *columns
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: (?i)^ETHNICITY//ASIAN
+    level: asian
+    columns: *columns
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: (?i)^ETHNICITY//AMERICAN INDIAN
+    level: american_indian
+    columns: *columns
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: (?i)^ETHNICITY//NATIVE HAWAIIAN
+    level: pacific_islander
+    columns: *columns
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: (?i)^ETHNICITY//MULTIPLE
+    level: multiple
+    columns: *columns
+  # OTHER, and any value outside the groups above, so that no recorded race is lost.
+  - pattern:
+      table: admissions
+      event: ETHNICITY
+      code: ^ETHNICITY//.
+    level: other
+    columns: *columns
+    filters:
+      - not str_contains(text_value, "(?i)^(WHITE|PORTUGUESE|BLACK|HISPANIC|SOUTH AMERICAN|ASIAN|AMERICAN INDIAN|NATIVE HAWAIIAN|MULTIPLE|UNKNOWN|UNABLE TO OBTAIN|PATIENT DECLINED)")

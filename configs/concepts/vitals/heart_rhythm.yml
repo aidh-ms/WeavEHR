@@ -1,0 +1,24 @@
+# The charted cardiac rhythm. Levels group a dataset's rhythm labels; the label
+# itself stays in text_value. `other` holds labels outside these groups, such as
+# bundle branch blocks or a wandering atrial pacemaker.
+name: heart_rhythm
+version: 1.0.0
+levels:
+  - sinus_rhythm
+  - sinus_tachycardia
+  - sinus_bradycardia
+  - atrial_fibrillation
+  - atrial_flutter
+  - supraventricular_tachycardia
+  - junctional
+  - first_degree_av_block
+  - second_degree_av_block
+  - third_degree_av_block
+  - paced
+  - ventricular_tachycardia
+  - ventricular_fibrillation
+  - asystole
+  - other
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")
