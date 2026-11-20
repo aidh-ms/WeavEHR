@@ -95,22 +95,38 @@ For dataset-bound configs the name, dataset, and version are inferred from the f
 
 ## Loading configurations
 
-Importing `weavehr` does not load any configuration. The dataset and concept configurations bundled in `configs/` are loaded into the global registries (`dataset_config_registry`, `concept_config_registry`) when the first step is created, once per process. To control loading yourself:
+Importing `weavehr` does not load any configuration. The dataset and concept configurations bundled in `configs/` are loaded into the global registries (`dataset_config_registry`, `concept_config_registry`) when the first step is created, once per process. To control loading yourself, call `auto_load_configs` once at startup, before the first step:
 
 ```python
 from pathlib import Path
 
-from weavehr import auto_load_configs, dataset_config_registry
+from weavehr import auto_load_configs
 
-# Register custom configs first: bundled configs never replace a config already
-# registered under the same identifier.
-dataset_config_registry.load(Path("my_configs/datasets/my-icu/1.0/tables"))
-
-auto_load_configs()  # load the bundled configs now
-auto_load_configs(Path("my_configs"))  # or load a directory with the same layout as configs/
+auto_load_configs()  # the bundled configs
+auto_load_configs(custom_config_path=Path("my_configs"))  # the bundled configs and your own
+auto_load_configs(load_bundled=False, custom_config_path=Path("my_configs"))  # your own only
 ```
 
-Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call always loads.
+Configurations already registered under the same identifier are kept, so anything you register directly in a registry beforehand takes precedence.
+
+### Your own dataset
+
+A directory of your own uses the layout of `configs/` and needs only the tables and mappings of your dataset. Bundled and custom configurations are loaded together, so a mapping attaches to the concept it is named after wherever that concept is defined: a mapping file `heart_rate.yml` reuses the bundled `heart_rate` concept.
+
+```
+my_configs/
+└── datasets/my_hospital/1.0/
+    ├── tables/observations.yml
+    └── mappings/heart_rate.yml
+```
+
+```python
+auto_load_configs(custom_config_path=Path("my_configs"))
+```
+
+Your directory takes precedence where both configure the same thing: its mapping of a concept for a dataset version replaces the bundled one, and a concept it defines replaces the bundled definition while keeping the bundled mappings of the other datasets.
+
+Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs(...)` call always loads, and the first step then does not load again.
 
 ## The MEDS output
 

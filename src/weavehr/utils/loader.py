@@ -51,44 +51,75 @@ def auto_load_enabled() -> bool:
     return os.environ.get(AUTO_LOAD_ENV_VAR, "1").strip().lower() not in _DISABLED_VALUES
 
 
-def auto_load_configs(config_path: Path | None = None) -> bool:
+def _version_dirs(config_path: Path) -> list[Path]:
+    """Return the ``datasets/<dataset>/<version>`` directories of a config directory."""
+    datasets_path = config_path / "datasets"
+    if not datasets_path.is_dir():
+        return []
+    return [
+        version_path
+        for dataset_path in sorted(datasets_path.iterdir())
+        if dataset_path.is_dir()
+        for version_path in sorted(dataset_path.iterdir())
+        if version_path.is_dir()
+    ]
+
+
+def auto_load_configs(load_bundled: bool = True, custom_config_path: Path | None = None) -> bool:
     """Load the dataset and concept configurations into the global registries.
 
-    Searches ``config_path`` (by default the bundled configurations) for dataset
-    table configs (``datasets/<dataset>/<version>/tables``) and concept configs
-    (``concepts/``, with mappings from ``datasets/<dataset>/<version>/mappings``)
-    and registers them. Configurations already registered under the same
-    identifier are kept, so custom configurations registered beforehand take
+    Meant to be called once at startup. Loads the bundled configurations and/or a
+    directory of your own with the same layout (``datasets/<dataset>/<version>/tables``,
+    ``datasets/<dataset>/<version>/mappings`` and ``concepts/``) and registers its
+    table and concept configurations. Configurations already registered under the
+    same identifier are kept, so configurations registered beforehand take
     precedence. Calling this function ignores ``WEAVEHR_AUTO_LOAD_CONFIGS``.
 
+    Both sources are loaded together, so a mapping attaches to its concept whichever
+    source defines it: the custom directory may hold only the tables and mappings of
+    a new dataset and reuse the bundled concepts. The custom directory takes
+    precedence: its mapping of a concept for a dataset version replaces the bundled
+    one, and a concept it defines replaces the bundled definition while keeping the
+    bundled mappings of the other dataset versions.
+
     Args:
-        config_path: Root directory of the configurations to load
+        load_bundled: Whether to load the configurations bundled with WeavEHR
+        custom_config_path: Root directory of your own configurations to load as well
 
     Returns:
         True if configurations were loaded, False if no config directory was found
     """
     global _loaded
 
-    config_path = config_path or bundled_config_path()
-    if config_path is None or not config_path.is_dir():
-        logger.warning("No configuration directory found to load from: %s", config_path)
+    roots: list[Path] = []
+    if custom_config_path is not None:
+        if custom_config_path.is_dir():
+            roots.append(custom_config_path)
+        else:
+            logger.warning("No configuration directory found to load from: %s", custom_config_path)
+    if load_bundled:
+        bundled = bundled_config_path()
+        if bundled is not None and bundled.is_dir():
+            roots.append(bundled)
+        else:
+            logger.warning("No configuration directory found to load from: %s", bundled)
+    if not roots:
         return False
 
-    logger.debug("Loading configurations from %s", config_path)
+    # Custom configs come first: tables, mappings and concepts loaded first take precedence.
     mapping_paths = []
-    for dataset_path in (config_path / "datasets").iterdir():
-        for version_path in dataset_path.iterdir():
-            if version_path.is_dir():
-                dataset_config_registry.load(version_path / "tables")
-                mapping_paths.append(version_path / "mappings")
+    for root in roots:
+        logger.debug("Loading configurations from %s", root)
+        for version_path in _version_dirs(root):
+            dataset_config_registry.load(version_path / "tables")
+            mapping_paths.append(version_path / "mappings")
 
-    concepts = load_configs(
-        config_path / "concepts",
-        config_type=ConceptConfig,
-        dataset_paths=mapping_paths,
-    )
-    for concept in concepts:
-        concept_config_registry.register(concept)
+    for root in roots:
+        concepts_path = root / "concepts"
+        if not concepts_path.is_dir():
+            continue
+        for concept in load_configs(concepts_path, config_type=ConceptConfig, dataset_paths=mapping_paths):
+            concept_config_registry.register_or_merge(concept)
 
     _loaded = True
     return True
