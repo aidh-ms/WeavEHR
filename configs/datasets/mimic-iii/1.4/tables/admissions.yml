@@ -88,6 +88,7 @@ events:
     - col(DISCHARGE_LOCATION)
     extension:
       available_time: col(DISCHTIME)
+      hospital_expire_flag: col(HOSPITAL_EXPIRE_FLAG)
   filters:
   - drop_na(time)
 - name: PATIENT_AGE
@@ -170,15 +171,5 @@ events:
     - col(RELIGION)
     extension:
       available_time: col(ADMITTIME)
-  filters:
-  - drop_na(time)
-- name: IN_HOSPITAL_MORTALITY
-  columns:
-    time: col(DISCHTIME)
-    code:
-    - const("IN_HOSPITAL_MORTALITY")
-    numeric_value: col(HOSPITAL_EXPIRE_FLAG)
-    extension:
-      available_time: col(DISCHTIME)
   filters:
   - drop_na(time)
