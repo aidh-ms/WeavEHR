@@ -20,7 +20,7 @@ whether they are the ones the input was extracted with.
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from weavehr.config.inheritance import resolve_version_chain
+from weavehr.config.inheritance import get_search_roots, resolve_version_chain
 from weavehr.steps.sharding.config.step import SubjectGroupConfig
 from weavehr.utils.loader import bundled_config_path
 
@@ -64,9 +64,11 @@ def validate_subject_groups(
         if not root.is_dir():
             raise ValueError(f"config_roots entry {root} is not a directory")
 
+    # The roots auto_load_configs loaded from (custom roots, then bundled) follow config_roots.
     roots = [*config_roots]
-    if (bundled := bundled_config_path()) is not None:
-        roots.append(bundled)
+    for root in [*get_search_roots(), bundled_config_path()]:
+        if root is not None and root not in roots:
+            roots.append(root)
 
     for group in groups:
         for dataset in group.datasets:

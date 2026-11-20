@@ -8,6 +8,7 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
+from weavehr.config import inheritance
 from weavehr.steps.sharding.config.step import ShardingStepConfig
 from tests.steps.test_sharding_step import (
     T0,
@@ -285,6 +286,35 @@ def test_subject_groups_ambiguous_roots_fail(tmp_path: Path) -> None:
             subject_groups=[{"name": "g", "datasets": ["x", "z"]}],
             config_roots=[str(first), str(second)],
         )
+    assert_nothing_written(tmp_path)
+
+
+def test_subject_groups_use_roots_loaded_by_auto_load_configs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The custom roots auto_load_configs loaded from resolve the chains without config_roots."""
+    root = config_root(tmp_path, "db_a/1.0", "db_b/1.0")
+    monkeypatch.setattr(inheritance, "_search_roots", [root])
+
+    sharding_path = shard_extraction(
+        tmp_path,
+        {"db_a/1.0/t/A.parquet": event_frame([1], "A"), "db_b/1.0/t/B.parquet": event_frame([1], "B")},
+        subject_groups=[{"name": "g", "datasets": ["db_a", "db_b"]}],
+    )
+
+    (shard,) = read_shards(sharding_path)
+    assert shard.select("subject_namespace", "dataset").rows() == [("g", "db_a"), ("g", "db_b")]
+
+
+def test_subject_groups_resolve_custom_version_extending_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A custom version that overrides the same version of a later root resolves to that root's base."""
+    custom = config_root(tmp_path / "custom", extends={"db_a/1.0": "db_a/1.0"})
+    reference = config_root(tmp_path / "reference", "db_a/1.0", "db_b/1.0", extends={"db-demo/1.0": "db_a/1.0"})
+    monkeypatch.setattr(inheritance, "_search_roots", [custom, reference])
+    files = {"db_a/1.0/t/A.parquet": event_frame([1], "A"), "db-demo/1.0/t/D.parquet": event_frame([1], "D")}
+
+    with pytest.raises(ValueError, match="share the configuration base 'db_a' through extends.yml"):
+        shard_extraction(tmp_path, files, subject_groups=[{"name": "g", "datasets": ["db_a", "db-demo"]}])
     assert_nothing_written(tmp_path)
 
 
