@@ -307,7 +307,7 @@ class TestLazyLoading:
             monkeypatch.setattr(loader, "_loaded", True)
             return True
 
-        monkeypatch.setattr(loader, "auto_load_configs", fake_auto_load_configs)
+        monkeypatch.setattr(loader, "load_configs", fake_auto_load_configs)
         return calls
 
     @pytest.mark.parametrize("value", ["1", "true", "yes", ""])
