@@ -98,7 +98,7 @@ EVENT_TABLES: Final[Mapping[str, str]] = {
 }
 """Item table of each extracted event the behaviour cases read."""
 
-LABEL_COLUMNS: Final = ("rate", "rateuom", "originalrate", "duration_minutes")
+LABEL_COLUMNS: Final = ("rate", "rateuom", "originalrate", "patientweight", "duration_minutes")
 """Extracted infusion columns that distinguish cases of the same item in their pytest ids."""
 
 
@@ -244,6 +244,72 @@ RATES = [
         extra={"originalrate": 16.0, "rateuom": "mcg/min", "stay_id": STAY_ID},
         expect=NOTHING,
         note="a rate per minute cannot become the concept's mcg/kg/min without a weight",
+    ),
+]
+
+def infusion(
+    event: str, item: int, *, expect: Sequence[Mapping[str, Any]], note: str, text: str | None = None, **columns: Any
+) -> Case:
+    """A behaviour case of the infusion-event concept for one MetaVision segment start or end."""
+    return case(
+        "vasopressor_infusion", event, item, text=text, extra={"stay_id": STAY_ID, **columns}, expect=expect, note=note
+    )
+
+
+STOP: Final = {"code": "vasopressor_infusion//norepinephrine", "numeric_value": 0}
+
+INFUSIONS = [
+    infusion(
+        "INFUSION_START",
+        221906,
+        originalrate=0.2,
+        rateuom="mcg/kg/min",
+        linkorderid=7,
+        expect=[{"numeric_value": 0.2, "rate_unit": "mcg/kg/min", "stream_id": "inputevents:7"}],
+        note="the set rate: the delivered rate is only known when the segment ends",
+    ),
+    infusion(
+        "INFUSION_START",
+        221906,
+        originalrate=0.15,
+        rateuom="mg/kg/min",
+        patientweight=1.0,
+        expect=[{"numeric_value": 0.15, "rate_unit": "mcg/kg/min"}],
+        note="mg/kg/min with the dummy weight 1 is mislabelled mcg/kg/min (mimic-code norepinephrine.sql)",
+    ),
+    infusion(
+        "INFUSION_START",
+        221906,
+        originalrate=0.15,
+        rateuom="mg/kg/min",
+        patientweight=80.0,
+        expect=[{"numeric_value": 0.15, "rate_unit": "mg/kg/min"}],
+        note="with a real weight the unit is kept; the rate concept's limits judge the value",
+    ),
+    *[
+        infusion(
+            "INFUSION_END",
+            221906,
+            text=status,
+            expect=[STOP] if stop else NOTHING,
+            note=note,
+        )
+        for status, stop, note in [
+            ("ChangeDose/Rate", False, "a dose change starts the next segment of the order at the same time"),
+            ("Stopped", True, "a documented stop"),
+            ("Paused", True, "a pause stops the drug until a new segment starts"),
+            ("FinishedRunning", True, "the bag ran out"),
+            ("Flushed", True, "the line was flushed; no rate runs on"),
+            (None, False, "an end without a status is no evidence of a stop"),
+        ]
+    ],
+    infusion(
+        "INFUSION_END",
+        221906,
+        text="FinishedRunning",
+        continueinnextdept=1,
+        expect=[STOP],
+        note="inputevents does not follow an infusion into the next department, so its ICU record ends here",
     ),
 ]
 
@@ -491,6 +557,7 @@ CASES = [
     *CONVERSIONS,
     *FIO2,
     *RATES,
+    *INFUSIONS,
     *DURATIONS,
     *SATURATIONS,
     *ANTIBIOTICS,

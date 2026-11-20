@@ -414,6 +414,32 @@ def test_every_dataset_mapping_has_a_concept_definition() -> None:
     assert not missing, f"dataset mappings without a concept definition: {sorted(missing)}"
 
 
+INFUSION_CONCEPT = CONFIG_ROOT / "concepts" / "medications" / "vasopressor_infusion.yml"
+
+
+@pytest.mark.parametrize("concept_dir", DATASET_CONCEPT_DIRS, ids=relative_id)
+def test_infusion_events_follow_the_state_stream_contract(concept_dir: Path) -> None:
+    """Every mapping of the infusion-event concept feeds one lean state stream.
+
+    It names its drug and the source unit its rate converts from, and adds no extension column
+    beyond the concept's own: whatever a consumer needs is in the value and the shared columns.
+    """
+    concept = ConceptConfig.load(INFUSION_CONCEPT, dataset_paths=[concept_dir])
+    dataset, version = concept_dir.parent.parent.name, concept_dir.parent.name
+    dataset_concepts = concept.get_dataset_concepts(dataset, version)
+    if not dataset_concepts:
+        pytest.skip(f"{dataset} {version} has no vasopressor_infusion mapping")
+    assert all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts)
+    mappings = [m for dc in dataset_concepts if isinstance(dc, SimpleDatasetConceptConfig) for m in dc.mappings]
+    for i, mapping in enumerate(mappings):
+        where = f"{relative_id(concept_dir)} mapping {i} ({mapping.level})"
+        extension = mapping.columns.extension
+        assert mapping.level is not None, f"{where}: needs a drug level"
+        assert extension.get("rate_unit"), f"{where}: a rate needs its source unit"
+        extra = sorted(set(extension) - set(concept.extension_columns))
+        assert not extra, f"{where}: extension columns outside the concept's contract: {extra}"
+
+
 def test_config_inventory_is_nonempty() -> None:
     assert len(effective_table_cases()) >= 50
     assert len(CONCEPT_FILES) >= 80

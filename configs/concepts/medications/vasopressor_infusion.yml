@@ -1,0 +1,32 @@
+# Vasopressor and inotrope infusion events in their source units, one level per drug.
+#
+# Dataset mappings only classify source rows; they convert nothing. The <drug>_rate
+# concepts read this concept and convert it with one shared transformer
+# (weavehr.steps.concept.transformer.infusion.InfusionRateTransformer), so weight
+# lookup, unit conversion and limits work the same for every dataset.
+# See docs/user_guide/vasopressor_events.md.
+#
+# A state stream, like every stateful concept: numeric_value is the rate from that time on, in
+# `rate_unit`; 0 means off, whether a documented stop or a charted zero. Weights come from
+# patient_weight, never from these events.
+name: vasopressor_infusion
+version: 1.0.0
+levels:
+  - norepinephrine
+  - epinephrine
+  - dopamine
+  - dobutamine
+  - phenylephrine
+  - vasopressin
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")
+  source_code: col(code)
+  # The unit of numeric_value as the source spells it, e.g. mcg/kg/min, mcgmin, units/hour, µg/min.
+  # Set by every mapping (tests/test_shipped_configs.py); a row without one takes its stream's.
+  rate_unit: const(None)
+  stay_id: const(None)
+  # Links the events of one infusion, prefixed with the source table; null if the source has none.
+  stream_id: const(None)
+  # When the row was documented; null if unknown, never "immediately".
+  available_time: const(None)

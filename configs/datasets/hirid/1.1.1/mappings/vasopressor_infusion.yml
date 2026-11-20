@@ -1,0 +1,54 @@
+# HiRID pharma records in source units; <drug>_rate converts them.
+# See docs/user_guide/vasopressor_events.md.
+#
+# A record's givendose is the dose given since the previous record of its infusion (see the
+# pharma table config). So each record states the rate from its own time on: the dose the next
+# record reports, over the minutes until it, in doseunit per minute. A stop states 0. A record
+# that was not given (invalidated or not administered) states nothing, and no rate is read from
+# a next record that was not given or that starts a new infusion. The stream is one infusion
+# and item (the code holds pharmaid and doseunit); records without a time, or sharing it, break
+# it (see next_record).
+#
+# Item IDs follow ricu's concept dictionary, which has none for HiRID dopamine or phenylephrine,
+# without its single-dose items: norepinephrine 1000658 (10 ug/ml bolus) and epinephrine 1000655
+# and 1000750 (boluses) and 71 (1 mg/ml, a median dose of 1 mg). Their records start and stop
+# at once, so they would only add stops. Checked against aggregates of HiRID 1.1.1, not record
+# by record.
+type: simple
+mappings:
+  - level: norepinephrine
+    pattern: {table: pharma, event: PHARMA, code: '^(?:1000462|1000656|1000657)(?:$|//)'}
+    <<: &rate
+      # The next record of the same infusion and item, looked up before any record is dropped.
+      callbacks:
+        - next_record(numeric_value, time, by=[subject_id, infusion_id, code], output=next_dose)
+        - next_record(time, time, by=[subject_id, infusion_id, code], output=next_time)
+        - next_record(available_time, time, by=[subject_id, infusion_id, code], output=next_entry)
+        - next_record(given, time, by=[subject_id, infusion_id, code], output=next_given)
+        - next_record(infusion_start, time, by=[subject_id, infusion_id, code], output=next_starts)
+      columns:
+        # At a stop: 0. Otherwise the dose the next record reports, over the minutes until it.
+        numeric_value: replace(infusion_stop, 0, next_dose / datetime_diff(time, next_time, unit="minutes"))
+        extension:
+          rate_unit: concat_str(doseunit, "/min")
+          stay_id: col(stay_id)
+          stream_id: concat_str("pharma:", infusion_id)
+          # A stop is known when it is documented; a rate once the next record is.
+          available_time: replace(infusion_stop, max(available_time, time), max(available_time, time, next_entry, next_time))
+      filters:
+        - col(given)
+        # A rate needs a next record that was given and doesn't start a new infusion.
+        - infusion_stop or (next_given and not next_starts)
+        - numeric_value >= 0
+
+  - level: epinephrine
+    pattern: {table: pharma, event: PHARMA, code: '^(?:1000649|1000650)(?:$|//)'}
+    <<: *rate
+
+  - level: dobutamine
+    pattern: {table: pharma, event: PHARMA, code: '^(?:426)(?:$|//)'}
+    <<: *rate
+
+  - level: vasopressin
+    pattern: {table: pharma, event: PHARMA, code: '^(?:112|113)(?:$|//)'}
+    <<: *rate
