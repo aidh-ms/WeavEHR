@@ -244,9 +244,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             return pl.DataFrame()
         return pl.read_parquet(codes_path)
 
-    def apply_limits(self, concept: ConceptConfig, lf: pl.LazyFrame) -> pl.LazyFrame:
-        return concept.limits.apply(lf)
-
     @staticmethod
     def _code_matches(event_name: str, regex: str) -> pl.Expr:
         """Whether ``regex`` is found in the code, with or without the event name in it.
@@ -583,7 +580,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     dataset_extension_columns=dataset_extension_columns,
                 )
 
-                lf = self.apply_limits(concept, lf)
+                lf = concept.limits.apply(lf)
 
                 tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
                 logger.debug(
@@ -829,7 +826,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             )
             return
 
-        lf = self.apply_limits(concept, lf)
+        lf = concept.limits.apply(lf)
 
         output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
         output_file.parent.mkdir(parents=True, exist_ok=True)

@@ -5,7 +5,7 @@ the production code paths, never through re-implementations:
 
 - :func:`map_rows` / :class:`Case` + :func:`check_case`: one shipped *simple* mapping on
   synthetic extracted rows, in memory (`ConceptStep.match_pattern`,
-  `ConceptStep.build_mapping_frame`, `ConceptStep.apply_limits`).
+  `ConceptStep.build_mapping_frame`, `ConceptLimits.apply`).
 - :func:`extract_native`: one shipped *table* config on synthetic rows written in the
   table's native file layout (`ExtractionStep.build_table_frame` with
   `ExtractionStep._scan_table`, `ExtractionStep.build_event_frame`).
@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, Final
 
 import polars as pl
 import pytest
@@ -231,7 +231,7 @@ def map_rows(
     ``pattern.table`` is ``table`` and whose ``pattern.event`` is ``event`` or unset is applied
     with `ConceptStep.match_pattern` (code pattern and ``pattern.extensions``), then
     `ConceptStep.build_mapping_frame` (columns, filters, concept code) and
-    `ConceptStep.apply_limits`; the outputs are concatenated diagonally in mapping order.
+    the concept's `ConceptLimits.apply`; the outputs are concatenated diagonally in mapping order.
 
     Args:
         concept: Name of a shipped concept, loaded with :func:`load_concept`, or a loaded
@@ -283,8 +283,7 @@ def map_rows(
             event_name=event,
             dataset_extension_columns=dataset_extension_columns,
         )
-        # apply_limits reads nothing from the step instance, so no step (project, config) is built.
-        frames.append(ConceptStep.apply_limits(cast(ConceptStep, None), concept, lf).collect())
+        frames.append(concept.limits.apply(lf).collect())
     return pl.concat(frames, how="diagonal")
 
 
