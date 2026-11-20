@@ -110,6 +110,23 @@ auto_load_configs()  # load the bundled configs now
 auto_load_configs(Path("my_configs"))  # or load a directory with the same layout as configs/
 ```
 
+### Your own dataset
+
+A directory of your own needs only the tables and mappings of your dataset. Its mappings attach to the concepts they are named after, wherever those concepts are defined, so a mapping file `heart_rate.yml` reuses the bundled `heart_rate` concept:
+
+```
+my_configs/
+└── datasets/my_hospital/1.0/
+    ├── tables/observations.yml
+    └── mappings/heart_rate.yml
+```
+
+```python
+auto_load_configs(Path("my_configs"))  # before or after the bundled configs
+```
+
+The loading order matters only where two directories configure the same thing. For a concept and dataset version, the mapping loaded first is kept; load your directory before the first step is created (or before `auto_load_configs()`) to replace a bundled mapping. A concept defined in two directories keeps its first definition and gains the mappings of the other.
+
 Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call always loads.
 
 ## The MEDS output

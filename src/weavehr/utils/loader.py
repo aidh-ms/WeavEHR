@@ -61,6 +61,13 @@ def auto_load_configs(config_path: Path | None = None) -> bool:
     identifier are kept, so custom configurations registered beforehand take
     precedence. Calling this function ignores ``WEAVEHR_AUTO_LOAD_CONFIGS``.
 
+    Mappings attach to their concept wherever it is defined: a directory may hold
+    only the tables and mappings of a new dataset and reuse the concepts defined
+    elsewhere (e.g. the bundled ones), in either loading order. For a concept and
+    dataset version, the mapping loaded first is kept, so a directory loaded before
+    the bundled configurations can also replace a bundled mapping. A concept defined
+    in two directories keeps its first definition and gains the other's mappings.
+
     Args:
         config_path: Root directory of the configurations to load
 
@@ -76,19 +83,25 @@ def auto_load_configs(config_path: Path | None = None) -> bool:
 
     logger.debug("Loading configurations from %s", config_path)
     mapping_paths = []
-    for dataset_path in (config_path / "datasets").iterdir():
-        for version_path in dataset_path.iterdir():
+    datasets_path = config_path / "datasets"
+    for dataset_path in sorted(datasets_path.iterdir()) if datasets_path.is_dir() else []:
+        for version_path in sorted(dataset_path.iterdir()) if dataset_path.is_dir() else []:
             if version_path.is_dir():
                 dataset_config_registry.load(version_path / "tables")
                 mapping_paths.append(version_path / "mappings")
 
-    concepts = load_configs(
-        config_path / "concepts",
-        config_type=ConceptConfig,
-        dataset_paths=mapping_paths,
-    )
-    for concept in concepts:
-        concept_config_registry.register(concept)
+    # Attach this directory's mappings to concepts registered earlier, then load its
+    # own concepts against every mapping directory seen so far (earlier ones first).
+    concept_config_registry.add_mapping_paths(mapping_paths)
+    concepts_path = config_path / "concepts"
+    if concepts_path.is_dir():
+        concepts = load_configs(
+            concepts_path,
+            config_type=ConceptConfig,
+            dataset_paths=concept_config_registry.mapping_paths,
+        )
+        for concept in concepts:
+            concept_config_registry.register_or_merge(concept)
 
     _loaded = True
     return True

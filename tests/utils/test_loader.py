@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
 from weavehr.steps.concept.registry import concept_config_registry
 from weavehr.steps.extraction.registry import dataset_config_registry
 from weavehr.steps.sharding.step import ShardingStep
@@ -182,3 +183,98 @@ class TestLazyLoading:
             ShardingStep.load(project, config_file)
 
         assert len(calls) == 1
+
+
+HOSPITAL_HEART_RATE = """\
+type: simple
+mappings:
+  - pattern:
+      table: observations
+      event: OBS
+      code: ^HR//bpm$
+    columns:
+      numeric_value: col(numeric_value)
+"""
+
+
+def write_mapping(root: Path, dataset: str, version: str, name: str, content: str = HOSPITAL_HEART_RATE) -> Path:
+    """Write ``<root>/datasets/<dataset>/<version>/mappings/<name>.yml`` and return ``root``."""
+    path = root / "datasets" / dataset / version / "mappings" / f"{name}.yml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return root
+
+
+def mapping_tables(dataset: str, version: str) -> list[str | None]:
+    """The source tables of the registered heart rate concept's mappings for one dataset version."""
+    concept = concept_config_registry.get(HEART_RATE)
+    assert concept is not None
+    dataset_concepts = concept.get_dataset_concepts(dataset, version)
+    assert all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts)
+    return [
+        m.pattern.table for dc in dataset_concepts if isinstance(dc, SimpleDatasetConceptConfig) for m in dc.mappings
+    ]
+
+
+class TestLocalMappings:
+    """Mappings in another directory than their concept, e.g. for an institutional dataset."""
+
+    @pytest.mark.parametrize("local_first", [True, False], ids=["local-first", "bundled-first"])
+    def test_mapping_attaches_to_concept_defined_elsewhere(
+        self, config_root: Path, tmp_path: Path, local_first: bool
+    ) -> None:
+        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
+
+        for path in (local, config_root) if local_first else (config_root, local):
+            loader.auto_load_configs(path)
+
+        assert mapping_tables("my_hospital", "1.0") == ["observations"]
+        assert mapping_tables("mimic-iv", "2.2") == ["chartevents"]
+        assert concept_config_registry.keys() == [HEART_RATE]
+
+    def test_copied_concept_keeps_bundled_mappings(self, config_root: Path, tmp_path: Path) -> None:
+        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
+        concept_file = next(config_root.glob("concepts/*/heart_rate.yml"))
+        (local / "concepts").mkdir()
+        shutil.copy(concept_file, local / "concepts" / concept_file.name)
+
+        loader.auto_load_configs(local)
+        loader.auto_load_configs(config_root)
+
+        assert mapping_tables("my_hospital", "1.0") == ["observations"]
+        assert mapping_tables("mimic-iv", "2.2") == ["chartevents"]
+
+    @pytest.mark.parametrize(("local_first", "expected"), [(True, "observations"), (False, "chartevents")])
+    def test_first_loaded_mapping_of_a_dataset_version_wins(
+        self, config_root: Path, tmp_path: Path, local_first: bool, expected: str
+    ) -> None:
+        local = write_mapping(tmp_path / "local", "mimic-iv", "2.2", "heart_rate")
+
+        for path in (local, config_root) if local_first else (config_root, local):
+            loader.auto_load_configs(path)
+
+        assert mapping_tables("mimic-iv", "2.2") == [expected]
+
+    def test_reloading_a_directory_adds_nothing(self, config_root: Path) -> None:
+        loader.auto_load_configs(config_root)
+        loader.auto_load_configs(config_root)
+
+        assert mapping_tables("mimic-iv", "2.2") == ["chartevents"]
+
+    def test_mapping_without_concept_is_kept_until_the_concept_loads(self, config_root: Path, tmp_path: Path) -> None:
+        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
+
+        loader.auto_load_configs(local)
+        assert len(concept_config_registry) == 0
+
+        loader.auto_load_configs(config_root)
+        assert mapping_tables("my_hospital", "1.0") == ["observations"]
+
+    def test_clear_forgets_mapping_directories(self, config_root: Path, tmp_path: Path) -> None:
+        loader.auto_load_configs(write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate"))
+        concept_config_registry.clear()
+
+        loader.auto_load_configs(config_root)
+
+        assert concept_config_registry.mapping_paths == [config_root / "datasets" / "mimic-iv" / "2.2" / "mappings"]
+        assert mapping_tables("my_hospital", "1.0") == []
