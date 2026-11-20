@@ -128,7 +128,7 @@ The configuration-base rule follows each member's [`extends.yml` chain](versioni
 
 ### Config roots
 
-Loaded configurations do not record which version they extend, so the chain is resolved from configuration directories on disk. The step searches the directories in `config_roots` (each with the `datasets/<dataset>/<version>/` layout of the bundled `configs/` directory, the same directory `auto_load_configs(config_path)` takes) and then the bundled configurations:
+Loaded configurations do not record which version they extend, so the chain is resolved from configuration directories on disk. The step searches the directories in `config_roots` (each with the `datasets/<dataset>/<version>/` layout of the bundled `configs/` directory, the same layout `auto_load_configs(custom_config_path=...)` takes) and then the bundled configurations:
 
 ```yaml
 config:
