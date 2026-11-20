@@ -14,7 +14,7 @@ from weavehr.config.inheritance import (
     resolve_version_chain,
     set_search_roots,
 )
-from weavehr.config.registry import load_configs
+from weavehr.config.registry import _load_configs
 from weavehr.steps.extraction.config.table import TableConfig
 
 
@@ -245,7 +245,7 @@ class TestLoadConfigsWithInheritance:
         make_version(tmp_path, "db", "1.0", {"t": "path: t.csv\n"})
         version_dir = make_version(tmp_path, "db-demo", "2.0", {}, extends=("db", "1.0"))
 
-        configs = load_configs(version_dir / "tables", TableConfig)
+        configs = _load_configs(version_dir / "tables", TableConfig)
 
         assert len(configs) == 1
         assert configs[0].dataset == "db-demo"
@@ -258,10 +258,10 @@ class TestLoadConfigsWithInheritance:
         make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n", "b": "path: b.csv\n"})
         version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
 
-        configs = load_configs(version_dir / "tables", TableConfig, includes=["db-demo.1.0.a"])
+        configs = _load_configs(version_dir / "tables", TableConfig, includes=["db-demo.1.0.a"])
         assert [c.name for c in configs] == ["a"]
 
-        configs = load_configs(version_dir / "tables", TableConfig, excludes=["db-demo.1.0.a"])
+        configs = _load_configs(version_dir / "tables", TableConfig, excludes=["db-demo.1.0.a"])
         assert [c.name for c in configs] == ["b"]
 
     def test_invalid_inherited_config_is_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -269,7 +269,7 @@ class TestLoadConfigsWithInheritance:
         version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
 
         with caplog.at_level(logging.WARNING, logger="weavehr"):
-            configs = load_configs(version_dir / "tables", TableConfig)
+            configs = _load_configs(version_dir / "tables", TableConfig)
         assert [c.name for c in configs] == ["good"]
         # the warning names the config and the validation error
         assert "'bad'" in caplog.text
@@ -281,6 +281,6 @@ class TestLoadConfigsWithInheritance:
         version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
 
         with caplog.at_level(logging.WARNING, logger="weavehr"):
-            configs = load_configs(version_dir / "tables", TableConfig)
+            configs = _load_configs(version_dir / "tables", TableConfig)
         assert [c.name for c in configs] == ["good"]
         assert "'listed'" in caplog.text and "not a mapping" in caplog.text

@@ -13,7 +13,7 @@ from importlib.resources import files
 from pathlib import Path
 
 from weavehr.config.inheritance import set_search_roots
-from weavehr.config.registry import load_configs
+from weavehr.config.registry import _load_configs
 from weavehr.logging import get_logger
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.registry import concept_config_registry
@@ -54,7 +54,7 @@ def auto_load_enabled() -> bool:
     return os.environ.get(AUTO_LOAD_ENV_VAR, "1").strip().lower() not in _DISABLED_VALUES
 
 
-def auto_load_configs(
+def load_configs(
     load_bundled: bool = True,
     custom_config_path: Path | Sequence[Path] | None = None,
     dataset_filter: Sequence[str] | None = None,
@@ -150,7 +150,7 @@ def auto_load_configs(
     for root in roots:
         if not (root / "concepts").is_dir():
             continue
-        for concept in load_configs(root / "concepts", config_type=ConceptConfig, dataset_paths=mapping_paths):
+        for concept in _load_configs(root / "concepts", config_type=ConceptConfig, dataset_paths=mapping_paths):
             concept_config_registry.register(concept)
 
     _loaded = True
@@ -168,4 +168,4 @@ def ensure_configs_loaded() -> bool:
     """
     if _loaded or not auto_load_enabled():
         return False
-    return auto_load_configs()
+    return load_configs()
