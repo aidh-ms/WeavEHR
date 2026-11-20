@@ -181,6 +181,11 @@ class VentilationWindows(BaseConceptTransformer):
 
 `dependencies` holds each concept dependency's output under the concept name (`ventilation_start`) and each `events` input under its own name (`ventilator_mode`). An `events` input is selected by a pattern as in a simple mapping and holds the same columns as a `pattern` table of a derived concept, so a transformer can read source details that no concept carries, such as units or order identifiers. An `events` name must differ from the name of every concept in `concepts`, whether or not that concept has output (compared case-insensitively, like identifiers); otherwise the mapping is invalid and skipped with a warning when it is loaded. Without any selected event file, an `events` input is handled like a dependency without output: transformers with `strict_dependencies` fail, others receive it as absent.
 
+A transformer may declare `extension_columns` of its own, as expressions on its output, so
+that every concept it computes carries them without repeating them in each concept file; the
+concept's own `extension_columns` are added after these. A concept's `limits` apply to complex
+concepts as to the others: values outside them become null.
+
 Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
 
 ### Combining mappings

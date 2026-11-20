@@ -245,23 +245,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         return pl.read_parquet(codes_path)
 
     def apply_limits(self, concept: ConceptConfig, lf: pl.LazyFrame) -> pl.LazyFrame:
-        if concept.limits.min is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") < concept.limits.min)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        if concept.limits.max is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") > concept.limits.max)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        return lf
+        return concept.limits.apply(lf)
 
     @staticmethod
     def _code_matches(event_name: str, regex: str) -> pl.Expr:
