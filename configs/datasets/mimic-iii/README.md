@@ -58,7 +58,7 @@ Unmapped source items remain available in extraction.
 ## Coverage relative to IV
 
 III covers IV's concepts apart from the gaps below. III additionally maps
-recorded death, recorded GCS total, discharge notes and radiology notes.
+recorded GCS total, discharge notes and radiology notes.
 
 | IV concept not mapped | Reason |
 | --- | --- |
