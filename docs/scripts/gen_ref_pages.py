@@ -7,7 +7,7 @@ mkdocs-literate-nav.
 
 from pathlib import Path
 
-import mkdocs_gen_files  # ty: ignore[import-not-found]
+import mkdocs_gen_files
 
 nav = mkdocs_gen_files.Nav()
 
