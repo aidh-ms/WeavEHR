@@ -39,7 +39,8 @@ kwargs:
 `vasopressor_infusion` and the rate concepts are state streams, the form all stateful concepts
 share (see [State streams](concepts.md#state-streams)): an event's `numeric_value` is the rate
 from that time on, and 0 means off. A documented stop and a charted zero are both 0; a source's
-status, e.g. MetaVision's "Paused", stays in `text_value`.
+status, e.g. MetaVision's "Paused", stays in `text_value`. A null means the rate is unknown from
+that time on: it ends the rate before it without saying off.
 
 A rate averaged over an interval is dated at the interval's start, so that it, too, is the rate
 from that time on; its `available_time` is when the interval's end was documented. Dated at its
@@ -48,7 +49,7 @@ end, the average of an infusion's last interval would fall on the infusion's sto
 
 The interval of an averaged rate is not stored. A consumer that needs it, e.g. for a cumulative
 dose, takes the next event of the same infusion as its end. Where HiRID can't read a rate, the
-rate before it carries on to the next event.
+rate is unknown from that record on.
 
 The extension columns are kept to what the conversion, the SOFA consumer or a prediction
 model needs. `tests/test_shipped_configs.py` checks that every mapping gives a `rate_unit` and
@@ -77,7 +78,7 @@ parquet.
 | MIMIC-III MetaVision | All six | As MIMIC-IV, with `Changed` as the dose change. The table config already drops `Rewritten` rows. |
 | MIMIC-III CareVue | All six | Each row is a charted rate. A row flagged `Stopped` or `D/C'd` is a stop (0), even if it still carries a rate. Item IDs follow ricu without 30125, which D_ITEMS labels Milrinone. |
 | eICU | All six | Each `infusiondrug` row is a charted rate; the unit is the bracketed part of the drug name. There is no stop flag and no infusion identifier. |
-| HiRID | Norepinephrine, epinephrine, dobutamine, vasopressin | A record's `givendose` is the dose since the previous record of its infusion, so each record states the average rate from its time on: the next record's dose over the time until it (`next_record`). A stop flag (`recordstatus` bit 256) states 0. A record flagged invalidated or not administered (bits 2 and 32) states nothing, and no rate is read from a next record that was, or that starts an infusion (bit 4). Records without a timestamp, or sharing it, break the stream. ricu's single-dose items (norepinephrine 1000658, epinephrine 71, 1000655 and 1000750) are left out: each of their records starts and stops at once. |
+| HiRID | Norepinephrine, epinephrine, dobutamine, vasopressin | A record's `givendose` is the dose since the previous record of its infusion, so each record states the average rate from its time on: the next record's dose over the time until it (`next_record`). A stop flag (`recordstatus` bit 256) states 0. A record flagged invalidated or not administered (bits 2 and 32) states nothing. Where the next record was, starts an infusion (bit 4), or doesn't exist, the rate from the record on is unknown (null). Records without a timestamp, or sharing it, break the stream. ricu's single-dose items (norepinephrine 1000658, epinephrine 71, 1000655 and 1000750) are left out: each of their records starts and stops at once. |
 | AUMCdb (AMSTEL OMOP) | Norepinephrine, epinephrine, dopamine, dobutamine | Each syringe-pump segment's dose rate and unit are read from the free-text `drug_exposure.sig` (e.g. "4 mg @ 0.5 mg/uur = 6 ml/uur"; `uur` is hour). A segment's start is its rate and its end a stop (0); `drug_exposure_id` is the stream, as the export drops the order ID. Rates not per kg take the latest admission weight. |
 
 Item IDs and drug names follow ricu's concept dictionary, which has no HiRID dopamine or
@@ -116,9 +117,12 @@ is not known to `patient_weight`, so its effective time stands in for it.
 
 Units are recognised in the spellings the shipped sources use (`mcg/kg/min`, `mcgkgmin`,
 `mg/hr`, `µg/min`, `units/hour`, `Uhr`, ...). Positive volume rates (`ml/hr`) and rates in
-unknown units are dropped: no concentration, dilution or default weight is ever assumed.
+unknown units are dropped: no concentration, dilution or default weight is ever assumed. A
+dropped rate does not end the rate before it, as eICU, for example, charts one infusion both per
+volume and per dose. A null passes through as an unknown rate.
 
 The rate concepts declare `limits`; out-of-range values become null, as for every concept type.
+A nulled rate is an unknown rate, so it ends the rate before it.
 The upper limits catch mislabelled units, the main source of implausible values, rather than
 unusual dosing:
 
@@ -136,7 +140,8 @@ CareVue vasopressin charted as 1.2 `Umin`: the usual dose of 1.2 units per *hour
 ## Cardiovascular SOFA
 
 `sofa_cardiovascular` tracks each drug with `ActiveState`, keyed by subject, stay and
-`stream_id`; a zero stops the matching infusion. See
+`stream_id`; a zero stops the matching infusion, and an unknown rate ends its state like an
+expiry, counting neither as a rate nor as off. See
 [Cardiovascular SOFA](concepts.md#cardiovascular-sofa) for its expiry and overlap rules.
 HiRID's interval averages hold from the interval's start like charted rates. HiRID has no SOFA
 mapping yet; it records an infusion
@@ -147,7 +152,8 @@ about every 15 minutes, and almost every infusion has a stop, so its mapping can
 
 1. Make sure the extraction exposes the source facts a mapping needs (unit, status, identifiers).
 2. Add `mappings/vasopressor_infusion.yml` with one mapping per drug and event type; YAML anchors
-   (`<<: *setting`) keep shared columns in one place. A new drug also needs a level in the
+   (`<<: *setting`) keep shared columns in one place. Emit a null only for a rate known to be
+   unknown, and drop source rows that change no rate. A new drug also needs a level in the
    concept and a `<drug>_rate` concept.
 3. Add the small `<drug>_rate.yml` mappings shown above.
 4. Add a `run_concepts` test to `tests/datasets/test_<dataset>.py` for the rules the source
@@ -170,9 +176,9 @@ vasopressor work):
 | Vasopressin | 55 → 100 | 261 → 270 | 0 → 211 (29 nulled) |
 
 - **MIMIC-IV** catecholamine events equal the baseline except three norepinephrine settings above
-  3 mcg/kg/min (7.6, 7.2 and 3.2), now null. Vasopressin changes on purpose: the baseline took
-  the delivered rate at segment ends, now settings at starts and stops. Cardiovascular SOFA
-  (with MAP) differs in 4 of 15,060 assessments.
+  3 mcg/kg/min (7.6, 7.2 and 3.2), now null, that is, unknown. Vasopressin changes on purpose:
+  the baseline took the delivered rate at segment ends, now settings at starts and stops.
+  Cardiovascular SOFA (with MAP) differs in 5 of 15,060 assessments.
 - **eICU** gains the `mcg/min` rows, converted with the admission weight (positive
   norepinephrine rates: median 0.085, 95th percentile 0.50 mcg/kg/min). The baseline only read
   drug names ending in `(mcg/kg/min)`. A rate charted before the admission weight, or without

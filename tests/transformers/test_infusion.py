@@ -113,7 +113,6 @@ def run(
         (-1, "mcg/kg/min", None, "mcg/kg/min", None),
         (float("nan"), "mcg/kg/min", None, "mcg/kg/min", None),
         (float("inf"), "mcg/kg/min", None, "mcg/kg/min", None),
-        (None, "mcg/kg/min", None, "mcg/kg/min", None),
     ],
 )
 def test_units_are_converted_without_assumptions(
@@ -137,6 +136,13 @@ def test_a_zero_needs_no_weight(value: float, expected: list[float]) -> None:
 def test_a_zero_needs_no_known_unit(unit: str | None) -> None:
     """0 ml/hr is off as much as 0 mcg/kg/min: a stop never needs a conversion."""
     assert run(make(), events({"numeric_value": 0.0, "rate_unit": unit}))["numeric_value"].to_list() == [0.0]
+
+
+@pytest.mark.parametrize("unit", ["mcg/min", None])
+def test_a_null_is_an_unknown_state_and_stays_null(unit: str | None) -> None:
+    """The source does not know the rate from then on; dropping the row would carry the rate before it."""
+    result = run(make(), events({"numeric_value": None, "rate_unit": unit, "available_time": str(at(1))}))
+    assert result.select("numeric_value", "available_time").rows() == [(None, at(1))]
 
 
 def test_a_row_without_a_unit_takes_its_streams_unit() -> None:

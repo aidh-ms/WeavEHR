@@ -115,6 +115,11 @@ therapy. They share one form, so that one consumer, `ActiveState` in
 
 - `numeric_value` is the state from the event's time on: a rate, or 1 for "on". 0 means off,
   whether a documented stop or a charted zero.
+- A null `numeric_value` means the state is unknown from the event's time on, e.g. a HiRID
+  interval whose dose can't be read, or a value nulled by the concept's `limits`. It ends the
+  value before it without saying off; `ActiveState` treats the stream like an expired one. A
+  mapping emits a null only for a state it knows to be unknown, and drops source rows that
+  change no state, such as a CareVue row with only an amount.
 - `stream_id` links the events of one stream (one infusion, one ventilation run), prefixed
   with the source table; null where the source records none. Without it, a subject's events of
   one concept form one stream per stay.

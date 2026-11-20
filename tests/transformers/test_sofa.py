@@ -507,7 +507,8 @@ class TestCardiovascular:
         ) == [4.0, 4.0]
 
     @pytest.mark.parametrize("stopped", [False, True])
-    def test_null_does_not_refresh_and_expiry_is_distinct_from_a_recorded_stop(self, stopped: bool) -> None:
+    def test_null_marks_the_rate_unknown_and_differs_from_a_recorded_stop(self, stopped: bool) -> None:
+        """A null rate ends the known rate without saying off; a recorded zero is off."""
         out = (
             make(SofaCardiovascularTransformer, pressor_window="6h")
             .transform(
@@ -521,7 +522,8 @@ class TestCardiovascular:
             .collect()
         )
         assert out.rows() == (
-            [(1, T0, 4.0), (1, at(1), 0.0), (1, at(7), 0.0)] if stopped else [(1, T0, 4.0), (1, at(1), 4.0)]
+            # Unknown from 1 h, with no MAP either: no assessment there.
+            [(1, T0, 4.0), (1, at(1), 0.0), (1, at(7), 0.0)] if stopped else [(1, T0, 4.0)]
         )
 
     @pytest.mark.parametrize("reverse", [False, True])

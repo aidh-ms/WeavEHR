@@ -69,7 +69,8 @@ Norepinephrine, epinephrine, dobutamine and vasopressin rates come from the
 `pharma` records through `vasopressor_infusion` and the shared rate transformer.
 A record's `givendose` is the dose since the previous record of its infusion, so
 each record states the average rate from its time on: the next record's dose over
-the time until it. A recorded stop flag states 0. ricu's single-dose
+the time until it. A recorded stop flag states 0. Where the next record gives
+no rate, the rate from the record on is unknown (null). ricu's single-dose
 items (boluses and 1 mg epinephrine doses) are left out. The rules were checked
 against aggregate summaries of HiRID 1.1.1, not record by record. See
 [Vasopressor rates](../../../docs/user_guide/vasopressor_events.md).

@@ -25,6 +25,9 @@ mappings:
           stay_id: col(stay_id)
           stream_id: concat_str("inputevents:", linkorderid)
           available_time: col(available_time)
+      filters:
+        # A row without a rate changes no state; a null would mean an unknown state.
+        - drop_na(numeric_value)
   - level: norepinephrine
     pattern: {table: inputevents, event: INFUSION_END, code: '^221906(?:$|//)'}
     <<: &stop

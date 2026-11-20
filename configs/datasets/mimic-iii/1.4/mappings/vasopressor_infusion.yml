@@ -23,6 +23,9 @@ mappings:
           stay_id: col(stay_id)
           stream_id: concat_str("inputevents_mv:", linkorderid)
           available_time: col(available_time)
+      filters:
+        # A row without a rate changes no state; a null would mean an unknown state.
+        - drop_na(numeric_value)
   - level: norepinephrine
     pattern: {table: inputevents_mv, event: INFUSION_END, code: '^221906(?:$|//)'}
     <<: &mv_stop
@@ -81,6 +84,8 @@ mappings:
           available_time: col(available_time)
       filters:
         - text_value == None or not (text_value.str.contains("(?i)^(stopped|d/c.*)$"))
+        # A row with only an amount changes no rate; a null would mean an unknown state.
+        - drop_na(numeric_value)
   - level: norepinephrine
     pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30047|30120)(?:$|//)'}
     <<: &cv_stop

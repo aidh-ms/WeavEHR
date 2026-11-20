@@ -324,7 +324,8 @@ def test_each_record_states_the_rate_until_the_next_record_of_its_infusion(tmp_p
     no dose and stop records the last interval's dose. ``recordstatus`` is a bit field (2
     invalidated, 4 start, 8 record, 32 not administered, 256 stop, 512 report). So a record states
     the rate from its time on, the next record's dose over the time until it, and a stop states 0
-    at its own time, never sharing it with a rate. Single-dose items (status 780) are no infusions.
+    at its own time, never sharing it with a rate. Where the next record gives no rate, the rate is
+    unknown (null), which ends the rate before it. Single-dose items (status 780) are no infusions.
     """
     start = datetime(2024, 1, 1)
 
@@ -339,15 +340,15 @@ def test_each_record_states_the_rate_until_the_next_record_of_its_infusion(tmp_p
             (1000656, 9, 10, 80, 8),  # 160 µg until minute 20, 16 µg/min
             (1000656, 9, 20, 160, 520),  # 80 µg until the stop, 8 µg/min
             (1000656, 9, 30, 80, 776),  # stop
-            (1000656, 9, 35, 50, 8),  # charted after the stop: no rate up to the restart
+            (1000656, 9, 35, 50, 8),  # charted after the stop: unknown up to the restart
             (1000656, 9, 40, 0, 524),  # restart: 40 µg until minute 50, 4 µg/min
-            (1000656, 9, 50, 40, 8),  # no rate read from a record not administered
+            (1000656, 9, 50, 40, 8),  # unknown: no rate read from a record not administered
             (1000656, 9, 60, 0, 544),  # not administered: states nothing
-            (1000656, 9, 70, 80, 8),  # no rate read from an invalidated record
+            (1000656, 9, 70, 80, 8),  # unknown: no rate read from an invalidated record
             (1000656, 9, 75, 999, 522),  # invalidated: states nothing
             (1000656, 9, 80, 80, 8),  # 40 µg until the stop, 4 µg/min
             (1000656, 9, 90, 40, 776),  # stop
-            (1000656, 9, 100, 50, 8),  # the last record: nothing after it
+            (1000656, 9, 100, 50, 8),  # the last record: unknown from then on
             (1000658, 10, 45, 10, 780),  # a norepinephrine bolus
             (71, 11, 45, 1000, 780),  # a 1 mg epinephrine dose
         ]
@@ -393,9 +394,14 @@ def test_each_record_states_the_rate_until_the_next_record_of_its_infusion(tmp_p
             {"time": at(10), "numeric_value": 0.2, **stream},
             {"time": at(20), "numeric_value": 0.1, "available_time": at(32), **stream},
             {"time": at(30), "numeric_value": 0, "available_time": at(32), **stream},
+            # Unknown as soon as its own record is documented.
+            {"time": at(35), "numeric_value": None, "available_time": at(37), **stream},
             {"time": at(40), "numeric_value": 0.05, **stream},
+            {"time": at(50), "numeric_value": None, **stream},
+            {"time": at(70), "numeric_value": None, **stream},
             {"time": at(80), "numeric_value": 0.05, **stream},
             {"time": at(90), "numeric_value": 0, **stream},
+            {"time": at(100), "numeric_value": None, **stream},
         ],
         context="norepinephrine_rate",
     )  # fmt: skip

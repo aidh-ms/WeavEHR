@@ -111,8 +111,9 @@ class InfusionRateTransformer(BaseConceptTransformer):
        ``patient_weight`` at or before the event, within ``weight_tolerance`` if set,
        and within the event's stay with ``match_stay``. A later weight is never used.
     3. **Conversion**: a value becomes value × unit factor ÷ weight. A zero is off
-       whatever its unit or weight. Any other event that cannot be converted, for want
-       of a known unit or a weight, is dropped.
+       whatever its unit or weight. A null is an unknown state and stays null. Any
+       other event that cannot be converted, for want of a known unit or a weight, is
+       dropped; it does not end the state before it.
     4. **Availability**: a rate is not known before the weight it was divided by, so
        ``available_time`` becomes the later of the two. Unknown stays unknown.
 
@@ -231,8 +232,8 @@ class InfusionRateTransformer(BaseConceptTransformer):
     def _convert(self, events: pl.LazyFrame) -> pl.LazyFrame:
         """Convert each event to the target unit and adjust its availability; drop what cannot be converted."""
         value = pl.col("value")
-        # A zero is off whatever its unit or weight.
-        zero = value == 0
+        # A zero is off whatever its unit or weight; a null is an unknown state.
+        zero, unknown = value == 0, value.is_null()
         divides = pl.col("needs_weight") & ~zero
         weight = pl.when(divides).then(pl.col("weight"))
         rate = value * pl.col("factor") / pl.when(divides).then(weight).otherwise(1.0)
@@ -245,4 +246,4 @@ class InfusionRateTransformer(BaseConceptTransformer):
             available_time=pl.when(divides & known.is_not_null())
             .then(pl.max_horizontal(known, "weight_time"))
             .otherwise(known),
-        ).filter(pl.col("numeric_value").is_not_null())
+        ).filter(pl.col("numeric_value").is_not_null() | unknown)
