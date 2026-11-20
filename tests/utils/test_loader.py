@@ -89,13 +89,25 @@ class TestAutoLoadConfigs:
 
         assert set(dataset_config_registry.keys()) == {LABEVENTS, LABEVENTS.replace("labevents", "chartevents")}
         assert concept_config_registry.keys() == [HEART_RATE]
-        assert loader._loaded is True
 
     def test_defaults_to_bundled_configs(self, config_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(loader, "bundled_config_path", lambda: config_root)
 
         assert loader.auto_load_configs() is True
         assert LABEVENTS in dataset_config_registry
+        assert loader._loaded is True
+
+    def test_own_directory_does_not_mark_bundled_configs_loaded(
+        self, config_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(loader, "bundled_config_path", lambda: tmp_path / "bundled")
+        shutil.copytree(config_root, tmp_path / "bundled")
+
+        loader.auto_load_configs(config_root)
+        assert loader._loaded is False
+
+        loader.auto_load_configs(tmp_path / "bundled")
+        assert loader._loaded is True
 
     def test_registered_configs_take_precedence(self, config_root: Path) -> None:
         dataset_config_registry.load(config_root / "datasets" / "mimic-iv" / "2.2" / "tables")
@@ -254,6 +266,19 @@ class TestLocalMappings:
             loader.auto_load_configs(path)
 
         assert mapping_tables("mimic-iv", "2.2") == [expected]
+
+    def test_first_step_still_loads_bundled_configs(
+        self, config_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv(loader.AUTO_LOAD_ENV_VAR, "1")
+        monkeypatch.setattr(loader, "bundled_config_path", lambda: config_root)
+        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
+
+        loader.auto_load_configs(local)
+        assert loader.ensure_configs_loaded() is True
+
+        assert mapping_tables("my_hospital", "1.0") == ["observations"]
+        assert mapping_tables("mimic-iv", "2.2") == ["chartevents"]
 
     def test_reloading_a_directory_adds_nothing(self, config_root: Path) -> None:
         loader.auto_load_configs(config_root)

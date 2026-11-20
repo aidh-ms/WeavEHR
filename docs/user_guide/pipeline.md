@@ -125,7 +125,7 @@ my_configs/
 auto_load_configs(Path("my_configs"))  # before or after the bundled configs
 ```
 
-The loading order matters only where two directories configure the same thing. For a concept and dataset version, the mapping loaded first is kept; load your directory before the first step is created (or before `auto_load_configs()`) to replace a bundled mapping. A concept defined in two directories keeps its first definition and gains the mappings of the other.
+Loading your own directory does not count as loading the bundled configs: if it comes first, the first step still loads the bundled ones. The loading order matters only where two directories configure the same thing. For a concept and dataset version, the mapping loaded first is kept; load your directory before the first step is created (or before `auto_load_configs()`) to replace a bundled mapping. A concept defined in two directories keeps its first definition and gains the mappings of the other.
 
 Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call always loads.
 

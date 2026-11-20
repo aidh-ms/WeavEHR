@@ -68,6 +68,10 @@ def auto_load_configs(config_path: Path | None = None) -> bool:
     the bundled configurations can also replace a bundled mapping. A concept defined
     in two directories keeps its first definition and gains the other's mappings.
 
+    Only loading the bundled configurations marks them as loaded: a directory of
+    your own loaded first does not stop the first step from loading the bundled
+    ones lazily (set ``WEAVEHR_AUTO_LOAD_CONFIGS=0`` to use your configs alone).
+
     Args:
         config_path: Root directory of the configurations to load
 
@@ -76,7 +80,8 @@ def auto_load_configs(config_path: Path | None = None) -> bool:
     """
     global _loaded
 
-    config_path = config_path or bundled_config_path()
+    bundled = bundled_config_path()
+    config_path = config_path or bundled
     if config_path is None or not config_path.is_dir():
         logger.warning("No configuration directory found to load from: %s", config_path)
         return False
@@ -103,15 +108,17 @@ def auto_load_configs(config_path: Path | None = None) -> bool:
         for concept in concepts:
             concept_config_registry.register_or_merge(concept)
 
-    _loaded = True
+    if bundled is not None and config_path.resolve() == bundled.resolve():
+        _loaded = True
     return True
 
 
 def ensure_configs_loaded() -> bool:
     """Load the bundled configurations once, unless disabled.
 
-    Does nothing if the configurations were already loaded (explicitly or lazily)
-    or if ``WEAVEHR_AUTO_LOAD_CONFIGS`` disables lazy loading.
+    Does nothing if the bundled configurations were already loaded (explicitly or
+    lazily) or if ``WEAVEHR_AUTO_LOAD_CONFIGS`` disables lazy loading. Loading a
+    directory of your own does not count.
 
     Returns:
         True if this call loaded the configurations, False otherwise
