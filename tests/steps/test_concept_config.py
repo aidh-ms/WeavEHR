@@ -178,7 +178,7 @@ class TestComplexConcept:
         }
 
         config.build_transformer("test_step")()  # ty: ignore[invalid-argument-type]
-        import fake_transformers  # ty: ignore[unresolved-import]
+        import fake_transformers  # ty: ignore[import-not-found]
 
         assert fake_transformers.Recorder.calls == [{"window": "1h"}]
 
