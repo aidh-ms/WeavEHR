@@ -25,7 +25,14 @@ from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max, Min
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
 from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode, SliceStr, StrContains, StripStr, ZeroPadInt
-from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, ParseDateTime, SetTime, ToDatetime
+from weavehr.callbacks._callbacks.time import (
+    AddOffset,
+    CompletedYears,
+    DatetimeDiff,
+    ParseDateTime,
+    SetTime,
+    ToDatetime,
+)
 from weavehr.callbacks._callbacks.type import Cast
 from weavehr.callbacks.namespace import NamespaceCall
 from weavehr.callbacks.proto import CallbackProtocol, ColumnRef, OutputCallbackProtocol, UnknownColumnError, with_output
@@ -48,6 +55,7 @@ __all__ = [
     "AddOffset",
     "SetTime",
     "DatetimeDiff",
+    "CompletedYears",
     "FirstNotNull",
     "Max",
     "Min",
