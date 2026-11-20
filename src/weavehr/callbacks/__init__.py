@@ -24,6 +24,7 @@ from weavehr.callbacks._callbacks.logical import And, Not, Or
 from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max, Min
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
+from weavehr.callbacks._callbacks.stream import NextRecord, PreviousRecord
 from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode, SliceStr, StrContains, StripStr, ZeroPadInt
 from weavehr.callbacks._callbacks.time import (
     AddOffset,
@@ -39,6 +40,8 @@ from weavehr.callbacks.proto import CallbackProtocol, ColumnRef, OutputCallbackP
 from weavehr.callbacks.registry import register_callback_cls, registry
 
 __all__ = [
+    "NextRecord",
+    "PreviousRecord",
     "registry",
     "register_callback_cls",
     "CallbackProtocol",
