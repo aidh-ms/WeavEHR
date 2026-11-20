@@ -203,3 +203,46 @@ class DatetimeDiff(OutputCallbackProtocol):
         expr = duration_expr.dt.total_seconds() / self.SECONDS_PER_UNIT[self.unit]
 
         return with_output(expr, self.output)
+
+
+@register_callback_cls
+class CompletedYears(OutputCallbackProtocol):
+    """Count the calendar years completed from one date or datetime to another, such as an age.
+
+    A year is complete on the anniversary of ``start``: the same month and day in a later
+    year, whatever the time of day. The age therefore goes up on the birthday itself, whereas
+    ``datetime_diff(start, end, "years")`` counts years of 365.25 days and can be one year
+    short when ``end`` is on or shortly after a birthday. A ``start`` of 29 February
+    completes its years on 1 March in common years. Zoned datetimes count by their local date.
+
+    The count is the number of completed years from ``start`` to ``end``. It is negative
+    when ``end`` is before ``start`` and null when either value is null.
+
+    Attributes:
+        start: Column/expression for the start, e.g. the date of birth.
+        end: Column/expression for the date or datetime at which years are counted.
+        output: Output column name. If None, the expression is
+            returned unaliased.
+    """
+
+    def __init__(
+        self,
+        start: AstValue,
+        end: AstValue,
+        output: Optional[str] = None,
+    ) -> None:
+        self.start = start
+        self.end = end
+        self.output = output
+
+    def __call__(self, lf: LazyFrame) -> CallbackResult:
+        start = to_expr(lf, self.start)
+        end = to_expr(lf, self.end)
+
+        def month_day(expr: pl.Expr) -> pl.Expr:
+            # dt.month() is Int8, which overflows when multiplied by 100.
+            return expr.dt.month().cast(pl.Int32) * 100 + expr.dt.day()
+
+        expr = end.dt.year() - start.dt.year() - (month_day(end) < month_day(start)).cast(pl.Int32)
+
+        return with_output(expr, self.output)

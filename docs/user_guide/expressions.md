@@ -97,6 +97,7 @@ The methods are those of the installed Polars version, so their names and behavi
 | `add_offset(datetime, offset, offset_unit="minutes", output=...)` | Shift a timestamp by an offset column (`weeks` … `nanoseconds`) |
 | `set_time(datetime, hours, minutes, seconds, output=...)` | Replace the time-of-day of a timestamp |
 | `datetime_diff(start, end, unit="days", output=...)` | Fractional `end - start` in `years` (365.25 days), `weeks`, `days`, `hours`, `minutes` or `seconds` |
+| `completed_years(start, end, output=...)` | Whole calendar years from `start` to `end`, e.g. an age: a year is complete on the anniversary date of `start`, whatever the time of day (for 29 February, 1 March in common years) |
 
 ### Arithmetic
 

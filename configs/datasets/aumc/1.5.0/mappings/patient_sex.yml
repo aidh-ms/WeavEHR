@@ -1,0 +1,20 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- sex from person.gender_concept_id. AUMCdb
+# records gender per admission; AMSTEL (insert_person.sql) takes the patient's first
+# admission and maps Vrouw to 8532 (FEMALE), Man to 8507 (MALE) and anything else to 0,
+# as ricu maps Vrouw and Man. AMSTEL's apply_corrections.sql then sets 0 to 8532 when a
+# procedure on the female genital system is recorded; ricu leaves these patients missing.
+# Female or Male; no event when sex is unknown (concept 0).
+type: simple
+mappings:
+  - pattern:
+      table: person
+      event: GENDER
+      code: ^8532(//.*)?$
+    columns:
+      text_value: const("Female")
+  - pattern:
+      table: person
+      event: GENDER
+      code: ^8507(//.*)?$
+    columns:
+      text_value: const("Male")
