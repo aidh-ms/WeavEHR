@@ -86,6 +86,11 @@ event_defaults:
     orderid: col(orderid)
     linkorderid: col(linkorderid)
 
+# A Rewritten row was entered in error and replaced by a corrected one; it was never delivered.
+# As for MIMIC-III (and mimic-code there). The 2.2 demo contains none.
+filters:
+  - not (statusdescription == "Rewritten") or statusdescription == None
+
 events:
   - name: INFUSION_START
     columns:

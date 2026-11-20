@@ -903,6 +903,38 @@ def test_infusion_segments_last_from_start_to_end_and_are_known_once_stored_and_
     )
 
 
+@pytest.mark.parametrize(
+    ("table", "item", "events"),
+    [
+        ("inputevents", 221906, ["INFUSION_START", "INFUSION_END", "SUBJECT_WEIGHT_AT_INFUSION"]),
+        ("procedureevents", 225794, ["PROCEDURE_START", "PROCEDURE_END"]),
+    ],
+)
+def test_rewritten_rows_are_dropped_for_every_event(tmp_path: Path, table: str, item: int, events: list[str]) -> None:
+    """A Rewritten row was entered in error and replaced, so no concept may see it, as in MIMIC-III.
+
+    mimic-code drops them from MIMIC-III ("'Rewritten' orders are not delivered to the patient").
+    """
+    extracted = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table=table,
+        rows=[
+            {"subject_id": 1, "stay_id": STAY_ID, "itemid": item, "orderid": order, "statusdescription": status,
+             "starttime": "2150-01-01 10:00:00", "endtime": "2150-01-01 11:00:00",
+             "storetime": "2150-01-01 10:05:00", **({"patientweight": 80.0} if table == "inputevents" else {})}
+            for order, status in [(1, "Rewritten"), (2, "FinishedRunning"), (3, None)]
+        ],
+        joins=dictionary(D_ITEMS, item),
+    )  # fmt: skip
+    for event in events:
+        orders = extracted[event]["orderid"].to_list()
+        assert 1 not in orders, f"{table}/{event} keeps a Rewritten row"
+        if event != "SUBJECT_WEIGHT_AT_INFUSION":  # which keeps one weight per subject and time
+            assert sorted(orders) == [2, 3], event
+
+
 def test_one_weight_per_infusion_start_time_the_earliest_charted(tmp_path: Path) -> None:
     """Simultaneous infusion starts carry their own weights; the weight charted first is kept (header comment)."""
     events = extract_native(
