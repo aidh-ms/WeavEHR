@@ -1,0 +1,78 @@
+# MetaVision infusion segments (icu/inputevents) in source units; <drug>_rate converts them.
+# See docs/user_guide/vasopressor_events.md.
+#
+# Each drug has two mappings, sharing their columns through the anchors below:
+# - INFUSION_START: `originalrate` is the rate the clinician set, known once the segment is
+#   charted. `rate` is the average actually delivered, back-computed when the segment
+#   closes, so dating it at the start would import the segment's future.
+# - INFUSION_END: a segment end stops the infusion (a rate of 0) unless the dose changed
+#   (ChangeDose/Rate), in which case the next segment of the order starts at that time.
+#   Every other status is a stop, Flushed and ends that continue in the next department
+#   included: inputevents does not follow the infusion there. As at baseline, an end
+#   without a status is no stop.
+# The table config drops Rewritten segments.
+type: simple
+mappings:
+  - level: norepinephrine
+    pattern: {table: inputevents, event: INFUSION_START, code: '^221906(?:$|//)'}
+    <<: &setting
+      columns:
+        numeric_value: col(originalrate)
+        extension:
+          # mimic-code (norepinephrine.sql): mg/kg/min rows with the dummy weight 1 are
+          # mislabelled mcg/kg/min. Applied to every drug; concept limits catch other unit errors.
+          rate_unit: replace(rateuom == "mg/kg/min" and patientweight == 1, "mcg/kg/min", rateuom)
+          stay_id: col(stay_id)
+          stream_id: concat_str("inputevents:", linkorderid)
+          available_time: col(available_time)
+      filters:
+        # A row without a rate changes no state; a null would mean an unknown state.
+        - drop_na(numeric_value)
+  - level: norepinephrine
+    pattern: {table: inputevents, event: INFUSION_END, code: '^221906(?:$|//)'}
+    <<: &stop
+      columns:
+        numeric_value: const(0)
+        text_value: col(text_value)
+        extension:
+          rate_unit: col(rateuom)
+          stay_id: col(stay_id)
+          stream_id: concat_str("inputevents:", linkorderid)
+          available_time: col(available_time)
+      filters:
+        - text_value != "ChangeDose/Rate"
+
+  - level: epinephrine
+    pattern: {table: inputevents, event: INFUSION_START, code: '^221289(?:$|//)'}
+    <<: *setting
+  - level: epinephrine
+    pattern: {table: inputevents, event: INFUSION_END, code: '^221289(?:$|//)'}
+    <<: *stop
+
+  - level: dopamine
+    pattern: {table: inputevents, event: INFUSION_START, code: '^221662(?:$|//)'}
+    <<: *setting
+  - level: dopamine
+    pattern: {table: inputevents, event: INFUSION_END, code: '^221662(?:$|//)'}
+    <<: *stop
+
+  - level: dobutamine
+    pattern: {table: inputevents, event: INFUSION_START, code: '^221653(?:$|//)'}
+    <<: *setting
+  - level: dobutamine
+    pattern: {table: inputevents, event: INFUSION_END, code: '^221653(?:$|//)'}
+    <<: *stop
+
+  - level: phenylephrine
+    pattern: {table: inputevents, event: INFUSION_START, code: '^221749(?:$|//)'}
+    <<: *setting
+  - level: phenylephrine
+    pattern: {table: inputevents, event: INFUSION_END, code: '^221749(?:$|//)'}
+    <<: *stop
+
+  - level: vasopressin
+    pattern: {table: inputevents, event: INFUSION_START, code: '^222315(?:$|//)'}
+    <<: *setting
+  - level: vasopressin
+    pattern: {table: inputevents, event: INFUSION_END, code: '^222315(?:$|//)'}
+    <<: *stop

@@ -181,19 +181,22 @@ On AUMCdb 1.5.0 every syringe-pump segment of these four drugs gives a dose in
 mg per hour, not per kg, e.g. `4 mg @ 0.5 mg/uur = 6 ml/uur`.
 
 The OMOP `drug_exposure` table config therefore keeps `sig` as an extension,
-and the rate mappings are `derived`: they read the dose with `sig.str.extract(...)`,
-convert mg to µg and per hour (uur) to per minute, and divide a rate not per
-kg by the admission weight, as ricu (`aumc_rate_kg`) and AmsterdamUMCdb's own
-SOFA code do. `patient_weight` is that admission weight: AMSTEL's midpoint of
-the weight group (55 to 115 kg; ricu uses 50 and 120 kg for the open-ended
-groups), joined on the admission (`stay_id`). A segment without a dose rate,
-with another unit or, if not per kg, without a weight is dropped. On AUMCdb
-1.5.0 the admission weight is missing for 3 to 7% of the segments of each drug.
+and the `vasopressor_infusion` mapping reads the dose and its unit with
+`sig.str.extract(...)`. The rate concepts then convert it like every dataset's
+(see the [vasopressor guide](../../docs/user_guide/vasopressor_events.md)): mg to
+µg, per hour (uur) to per minute, and a rate not per kg divided by the admission
+weight, as ricu (`aumc_rate_kg`) and AmsterdamUMCdb's own SOFA code do.
+`patient_weight` is that admission weight: AMSTEL's midpoint of the weight group
+(55 to 115 kg; ricu uses 50 and 120 kg for the open-ended groups). A segment takes
+the latest admission weight before it, even that of an earlier admission. A
+segment without a dose rate or with another unit is dropped, and one not per kg
+without any earlier weight loses its rate but keeps its end. On AUMCdb 1.5.0 the
+admission weight is missing for 3 to 7% of the segments of each drug.
 
 Each drugitems row is one rate segment with its own start and stop. AMSTEL
 drops the source `orderid`, so `drug_exposure_id` identifies the segment: its
-start maps to the rate, its end to 0, and `sofa_cardiovascular` links them
-with `pressor_id_column: drug_exposure_id`. A rate change ends one segment
+start maps to the rate and its end to 0, with `drug_exposure_id` as their
+`stream_id`, which `sofa_cardiovascular` links. A rate change ends one segment
 and starts the next at the same time, which keeps the new rate; a second
 pump overlapping the first keeps counting after the first one stops.
 The vasopressor durations (`*_duration`) are not mapped.

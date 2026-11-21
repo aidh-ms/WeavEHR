@@ -324,6 +324,11 @@ class TestTime:
         lf = pl.LazyFrame({"start": [datetime(2024, 1, 1, 12)], "end": [datetime(2024, 1, 1)]})
         assert apply(lf, DatetimeDiff(C("start"), C("end"))) == [-0.5]
 
+    def test_datetime_diff_keeps_fractional_seconds(self) -> None:
+        # A short interval must not become a zero denominator through truncation.
+        lf = pl.LazyFrame({"start": [datetime(2024, 1, 1)], "end": [datetime(2024, 1, 1, 0, 0, 2, 500000)]})
+        assert apply(lf, DatetimeDiff(C("start"), C("end"), unit="minutes")) == [pytest.approx(2.5 / 60)]
+
     def test_datetime_diff_invalid_unit(self) -> None:
         with pytest.raises(ValueError, match="Unsupported unit"):
             DatetimeDiff(C("start"), C("end"), unit="decades")

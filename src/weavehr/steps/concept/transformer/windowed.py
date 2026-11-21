@@ -162,14 +162,18 @@ class ActiveState(Aggregation):
     updates up to that stop. Otherwise values expire after ``window``, inclusive;
     ``None`` disables fallback expiry.
     Missing identifiers form one observation stream per subject/stay, using
-    the configured fallback expiry. Coincident stops and updates use the update, irrespective
-    of its numeric value. Conflicting simultaneous updates use the largest value.
+    the configured fallback expiry. A null value that is not a stop marks the
+    state as unknown from that time on: it ends the preceding value, as an
+    expiry would, and adds nothing itself, neither a value nor a zero.
+    Coincident updates, stops and unknowns use the update, irrespective of its
+    numeric value, then the stop. Conflicting simultaneous updates use the
+    largest value.
 
     Args:
         window: Timeout since the latest numeric update when no identified
             matching stop is available; None carries values until a stop/update.
         id_column: Name of the input column linking one state's updates and
-            stop, e.g. ``linkorderid`` for an infusion across rate changes.
+            stop, e.g. ``stream_id`` for an infusion across rate changes.
             Its values need only be unique within the same subject and stay.
             Missing/null identifiers share one unidentified observation stream.
         stop_when: Boolean expression evaluated on the original input rows,
@@ -183,8 +187,8 @@ class ActiveState(Aggregation):
         aggregate: Polars expression reduction over current non-stop values
             from distinct states, including valid zeros and negatives. Defaults
             to ``pl.Expr.max``; use e.g. ``pl.Expr.sum`` to add concurrent values.
-            If only known stops remain, yields zero; without current observations,
-            yields null.
+            If only known stops remain, yields zero; without current observations
+            (unknown or expired states only), yields null.
     """
 
     def __init__(
@@ -216,11 +220,16 @@ class ActiveState(Aggregation):
                 _optional_string(self._id_column).alias("__state"),
                 self._stop_when.fill_null(False).alias("__is_stop"),
             )
-            .filter(pl.col("__value").is_not_null() | pl.col("__is_stop"))
             .group_by(*keys, _TIME)
             .agg(
-                pl.col("__value").filter(~pl.col("__is_stop")).max().fill_null(0),
-                pl.col("__is_stop").all(),
+                pl.col("__value").filter(~pl.col("__is_stop")).max(),
+                (~pl.col("__is_stop") & pl.col("__value").is_not_null()).any().alias("__update"),
+                pl.col("__is_stop").any().alias("__any_stop"),
+            )
+            # An update wins over a coincident stop, a stop over a coincident unknown.
+            .with_columns(
+                __is_stop=~pl.col("__update") & pl.col("__any_stop"),
+                __is_unknown=~pl.col("__update") & ~pl.col("__any_stop"),
             )
             .sort(*keys, _TIME)
             .with_columns(
@@ -240,6 +249,8 @@ class ActiveState(Aggregation):
             )
             .rename({_SUBJECT: "__subject", _TIME: "__start", "__stay": "__state_stay"})
         )
+        # An unknown state is current, so it ends the value before it, but adds nothing.
+        known = ~pl.col("__is_stop") & ~pl.col("__is_unknown")
         current = (
             lf.select(_SUBJECT, _TIME, _context(self._stay_column))
             .join_where(
@@ -253,9 +264,10 @@ class ActiveState(Aggregation):
             )
             .group_by(_SUBJECT, _TIME)
             .agg(
-                pl.when((~pl.col("__is_stop")).any())
-                .then(self._aggregate(pl.col("__value").filter(~pl.col("__is_stop"))))
-                .otherwise(0)
+                pl.when(known.any())
+                .then(self._aggregate(pl.col("__value").filter(known)))
+                .when(pl.col("__is_stop").any())
+                .then(0)
                 .alias(col)
             )
         )

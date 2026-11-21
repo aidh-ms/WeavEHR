@@ -1,6 +1,16 @@
+# Infusion rate in units/min, converted from vasopressor_infusion//vasopressin by InfusionRateTransformer,
+# which also adds the state-stream extension columns (stream_id, stay_id, available_time).
+# Each event is the rate from its time on; 0 means off.
+# See docs/user_guide/vasopressor_events.md.
 name: vasopressin_rate
 version: 1.0.0
 unit: units/min
+# ricu sets no upper limit for this drug; this one is WeavEHR's. 1 unit/min is 10x the US label
+# maximum (0.1 units/min) and below an hourly dose charted as per minute: MIMIC-III CareVue
+# charts the usual 1.2 units/hour under the unit Umin.
+limits:
+  min: 0
+  max: 1
 extension_columns:
   dataset: col("dataset")
   table: col("table")
