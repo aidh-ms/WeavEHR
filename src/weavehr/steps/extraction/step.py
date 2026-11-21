@@ -93,6 +93,8 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                     exc.add_note(f"While extracting {cfg.name}/{cfg.version}/{table.name}")
                     raise
 
+            self._progress.finish_dataset(f"{cfg.name}/{cfg.version} | {len(tables)}/{len(tables)} tables processed")
+
     def _extract(self, table: TableConfig, path: Path) -> None:
         try:
             lf = self.build_table_frame(table, lambda t: self._scan_table(t, path))

@@ -97,6 +97,10 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                     exc.add_note(f"While persisting {dataset.name}/{dataset.version}/{table_name}")
                     raise
 
+            self._progress.finish_dataset(
+                f"{dataset.name}/{dataset.version} | {len(sources)}/{len(sources)} sources processed"
+            )
+
     def _persist_table(
         self,
         source_file: Path,

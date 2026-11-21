@@ -135,6 +135,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 )
                 extract_mapped(concept)
 
+            self._progress.finish_dataset(f"{dataset}/{version} | {completed}/{mapped_count} concepts processed")
+
             if routed_cache_dir.exists():
                 shutil.rmtree(routed_cache_dir)
 

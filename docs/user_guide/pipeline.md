@@ -140,11 +140,21 @@ Each completed step reports its elapsed time and output directory. A reused step
 its existing output. Set `overwrite: true` in the step configuration to rerun it.
 Use `DEBUG` for individual tables, joins, events, and file writes.
 
-On an interactive terminal, `configure_logging()` also shows a single updating row
-with the step's elapsed time. Extraction and persistence show the current table or
-source and how many have been processed. Harmonisation counts only mapped concepts.
-Sharding shows its current phase. Warnings appear above the row, which disappears
-when the step finishes or raises an exception.
+At `INFO`, `configure_logging()` shows one updating row in an interactive terminal.
+It shows elapsed time, the current table, source, or concept, and how many have been
+processed. Harmonisation counts only mapped concepts. Sharding shows its current phase.
+The row clears on completion, failure, or interruption.
 
-Use `configure_logging(live_progress=False)` for plain output in a terminal.
-Redirected output, application-managed logging, and levels other than `INFO` use plain logs automatically.
+In a notebook, a redirected log, or a batch job such as Slurm, a running step instead
+emits its current status at `INFO` once per minute. This also works with application-managed
+INFO logging, including while one table takes several minutes. Short steps produce only
+the usual summaries. Use `configure_logging(live_progress=False)` to turn off both forms
+of progress reporting. At `DEBUG` the detailed trace already shows individual operations.
+At `WARNING` and higher only messages meeting the selected threshold appear.
+
+Python warnings and writes to `sys.stderr` appear above the live row when stderr shares
+the console terminal. Redirected stderr keeps its own destination. Application log handlers
+created earlier (for example by `logging.basicConfig()`) can keep a reference to the original
+stderr and write over the row. Native code writing directly to a file descriptor can do the same.
+If another writer uses the same terminal this way, use
+`live_progress=False` or send their output to a file.

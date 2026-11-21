@@ -19,17 +19,21 @@ Usage:
     configure_logging(level="INFO")
 """
 
+from __future__ import annotations
+
 import logging
+import os
 import sys
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import timedelta
+from threading import Event, Thread
 from time import perf_counter
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional, TextIO
 
-from rich.console import Console
-from rich.live import Live
-from rich.text import Text
+if TYPE_CHECKING:
+    from rich.console import Console
+    from rich.live import Live
 
 # Package logger name
 LOGGER_NAME = "weavehr"
@@ -42,62 +46,118 @@ DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
+_PROGRESS_INTERVAL = 60.0
+
+
 class _LiveConsoleHandler(logging.StreamHandler):
+    progress_enabled = True
     console: Console | None = None
 
     def emit(self, record: logging.LogRecord) -> None:
-        if self.console is None:
+        console = self.console
+        if console is None:
             super().emit(record)
             return
         # Use the same console as the live row so warnings stay above it.
         try:
-            self.console.print(Text.from_ansi(self.format(record)), soft_wrap=True, end=self.terminator)
+            from rich.text import Text
+
+            console.print(Text.from_ansi(self.format(record)), soft_wrap=True, end=self.terminator)
         except Exception:
             self.handleError(record)
 
 
-class StepProgress:
-    """Transient detail for one running step. Only WeavEHR's interactive INFO console renders it."""
+def _shares_terminal(stream: TextIO, other: TextIO | None) -> bool:
+    if other is None:
+        return False
+    try:
+        return other.isatty() and (stream is other or os.path.sameopenfile(stream.fileno(), other.fileno()))
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+@contextmanager
+def _log_periodically(status: Callable[[], str]) -> Generator[None]:
+    stop = Event()
+
+    def report() -> None:
+        while not stop.wait(_PROGRESS_INTERVAL):
+            logger.info("%s", status())
+
+    thread = Thread(target=report, name="weavehr-progress", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join()
+
+
+class _StepProgress:
+    """Report the current operation while a step is running."""
 
     detail: str = ""
+    _live: Live | None = None
+
+    def finish_dataset(self, detail: str) -> None:
+        """Render the final count before the next phase replaces it."""
+        self.detail = detail
+        if self._live is not None:
+            self._live.refresh()
 
     @contextmanager
     def display(self, step: str, started: float) -> Generator[None]:
         package = logging.getLogger(LOGGER_NAME)
         handler = next((h for h in package.handlers if isinstance(h, _LiveConsoleHandler)), None)
-        if handler is None or handler.level != logging.INFO or not package.isEnabledFor(logging.INFO):
-            yield
-            return
-
-        console = Console(file=handler.stream)
         if (
-            handler.console is not None
-            or not handler.stream.isatty()
-            or not console.is_interactive
-            or console.is_jupyter
+            package.getEffectiveLevel() != logging.INFO
+            or not package.isEnabledFor(logging.INFO)
+            or (
+                handler
+                and (not handler.progress_enabled or handler.level > logging.INFO or handler.console is not None)
+            )
         ):
             yield
             return
 
         self.detail = "Starting"
 
-        def row() -> Text:
+        def status() -> str:
             elapsed = timedelta(seconds=int(perf_counter() - started))
-            return Text(f"{step} | {elapsed} | {self.detail}", no_wrap=True, overflow="ellipsis")
+            return f"{step} | {elapsed} | {self.detail}"
 
-        with Live(
-            get_renderable=row,
-            console=console,
-            transient=True,
-            refresh_per_second=2,
-            redirect_stdout=handler.stream is sys.stdout,
-            redirect_stderr=False,
-        ):
-            handler.console = console
-            try:
-                yield
-            finally:
-                handler.console = None
+        if handler is not None and handler.stream.isatty():
+            from rich.console import Console
+
+            console = Console(file=handler.stream, markup=False, emoji=False, highlight=False)
+            if console.is_interactive and not console.is_jupyter:
+                from rich.live import Live
+                from rich.text import Text
+
+                stderr = sys.stderr
+                with Live(
+                    get_renderable=lambda: Text(status(), no_wrap=True, overflow="ellipsis"),
+                    console=console,
+                    transient=True,
+                    refresh_per_second=2,
+                    redirect_stdout=handler.stream is sys.stdout,
+                    redirect_stderr=_shares_terminal(handler.stream, stderr),
+                ) as live:
+                    live_stderr = sys.stderr
+                    handler.console = console
+                    self._live = live
+                    try:
+                        yield
+                    finally:
+                        self._live = None
+                        handler.console = None
+                        if live_stderr is not stderr:
+                            # Rich buffers writes without a trailing newline.
+                            live_stderr.flush()
+                return
+
+        with _log_periodically(status):
+            yield
 
 
 def configure_logging(
@@ -118,7 +178,7 @@ def configure_logging(
         level: Minimum log level to capture (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format: Custom format string for logs (uses DEFAULT_LOG_FORMAT if None)
         date_format: Date format for timestamps
-        live_progress: Show one updating status line at INFO on an interactive terminal.
+        live_progress: Show progress at INFO, using a live terminal row or a plain update once per minute.
 
     Example:
         >>> configure_logging(level="DEBUG")
@@ -138,7 +198,8 @@ def configure_logging(
     logger.propagate = False
 
     # Console handler
-    console_handler = _LiveConsoleHandler(sys.stdout) if live_progress else logging.StreamHandler(sys.stdout)
+    console_handler = _LiveConsoleHandler(sys.stdout)
+    console_handler.progress_enabled = live_progress
     console_handler.setLevel(level)
     console_formatter = logging.Formatter(format or DEFAULT_LOG_FORMAT, datefmt=date_format)
     console_handler.setFormatter(console_formatter)

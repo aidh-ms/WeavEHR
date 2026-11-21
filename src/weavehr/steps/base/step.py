@@ -12,7 +12,7 @@ from time import perf_counter
 
 from weavehr.config.base import BaseConfig
 from weavehr.config.registry import BaseConfigRegistry
-from weavehr.logging import StepProgress, get_logger
+from weavehr.logging import _StepProgress, get_logger
 from weavehr.steps.base.config import BaseStepConfig
 from weavehr.storage.project import WeavEHRProject
 from weavehr.storage.workspace import WorkspaceDir
@@ -68,7 +68,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         self._workspace_dir = None
         self._dataset = None
         self._step_name = self._config.name.lower()
-        self._progress = StepProgress()
+        self._progress = _StepProgress()
 
     @classmethod
     @abstractmethod
