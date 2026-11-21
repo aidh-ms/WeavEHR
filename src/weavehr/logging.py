@@ -21,7 +21,15 @@ Usage:
 
 import logging
 import sys
+from collections.abc import Generator
+from contextlib import contextmanager
+from datetime import timedelta
+from time import perf_counter
 from typing import Literal, Optional
+
+from rich.console import Console
+from rich.live import Live
+from rich.text import Text
 
 # Package logger name
 LOGGER_NAME = "weavehr"
@@ -34,10 +42,70 @@ DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
+class _LiveConsoleHandler(logging.StreamHandler):
+    console: Console | None = None
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.console is None:
+            super().emit(record)
+            return
+        # Use the same console as the live row so warnings stay above it.
+        try:
+            self.console.print(Text.from_ansi(self.format(record)), soft_wrap=True, end=self.terminator)
+        except Exception:
+            self.handleError(record)
+
+
+class StepProgress:
+    """Transient detail for one running step. Only WeavEHR's interactive INFO console renders it."""
+
+    detail: str = ""
+
+    @contextmanager
+    def display(self, step: str, started: float) -> Generator[None]:
+        package = logging.getLogger(LOGGER_NAME)
+        handler = next((h for h in package.handlers if isinstance(h, _LiveConsoleHandler)), None)
+        if handler is None or handler.level != logging.INFO or not package.isEnabledFor(logging.INFO):
+            yield
+            return
+
+        console = Console(file=handler.stream)
+        if (
+            handler.console is not None
+            or not handler.stream.isatty()
+            or not console.is_interactive
+            or console.is_jupyter
+        ):
+            yield
+            return
+
+        self.detail = "Starting"
+
+        def row() -> Text:
+            elapsed = timedelta(seconds=int(perf_counter() - started))
+            return Text(f"{step} | {elapsed} | {self.detail}", no_wrap=True, overflow="ellipsis")
+
+        with Live(
+            get_renderable=row,
+            console=console,
+            transient=True,
+            refresh_per_second=2,
+            redirect_stdout=handler.stream is sys.stdout,
+            redirect_stderr=False,
+        ):
+            handler.console = console
+            try:
+                yield
+            finally:
+                handler.console = None
+
+
 def configure_logging(
     level: LogLevel = DEFAULT_LOG_LEVEL,
     format: Optional[str] = None,
     date_format: str = DEFAULT_DATE_FORMAT,
+    *,
+    live_progress: bool = True,
 ) -> None:
     """Configure logging for the WeavEHR package.
 
@@ -50,6 +118,7 @@ def configure_logging(
         level: Minimum log level to capture (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format: Custom format string for logs (uses DEFAULT_LOG_FORMAT if None)
         date_format: Date format for timestamps
+        live_progress: Show one updating status line at INFO on an interactive terminal.
 
     Example:
         >>> configure_logging(level="DEBUG")
@@ -69,7 +138,7 @@ def configure_logging(
     logger.propagate = False
 
     # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = _LiveConsoleHandler(sys.stdout) if live_progress else logging.StreamHandler(sys.stdout)
     console_handler.setLevel(level)
     console_formatter = logging.Formatter(format or DEFAULT_LOG_FORMAT, datefmt=date_format)
     console_handler.setFormatter(console_formatter)

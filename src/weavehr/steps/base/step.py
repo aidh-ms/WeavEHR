@@ -12,7 +12,7 @@ from time import perf_counter
 
 from weavehr.config.base import BaseConfig
 from weavehr.config.registry import BaseConfigRegistry
-from weavehr.logging import get_logger
+from weavehr.logging import StepProgress, get_logger
 from weavehr.steps.base.config import BaseStepConfig
 from weavehr.storage.project import WeavEHRProject
 from weavehr.storage.workspace import WorkspaceDir
@@ -68,6 +68,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         self._workspace_dir = None
         self._dataset = None
         self._step_name = self._config.name.lower()
+        self._progress = StepProgress()
 
     @classmethod
     @abstractmethod
@@ -160,12 +161,15 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         logger.debug("Step '%s': setting up project", self._step_name)
         self.setup_project(reset=not skip)
         if not skip:
-            logger.debug("Step '%s': starting extraction", self._step_name)
-            self.extract()
-            logger.debug("Step '%s': running hooks", self._step_name)
-            self.hooks()
-            logger.debug("Step '%s': collecting results", self._step_name)
-            self.collect()
+            with self._progress.display(self._step_name, started):
+                logger.debug("Step '%s': starting extraction", self._step_name)
+                self.extract()
+                logger.debug("Step '%s': running hooks", self._step_name)
+                self._progress.detail = "Running hooks"
+                self.hooks()
+                logger.debug("Step '%s': collecting results", self._step_name)
+                self._progress.detail = "Collecting output"
+                self.collect()
             self.completion_marker.touch()
             logger.info(
                 "Finished step '%s' in %.1fs. Output: %s", self._step_name, perf_counter() - started, self.output_path

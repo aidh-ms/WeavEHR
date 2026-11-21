@@ -135,6 +135,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         assert self._workspace_dir is not None
         config = self._config.config
 
+        self._progress.detail = "Selecting input files"
         discovered = self._discover_input_files()
         if discovered is None:
             return
@@ -160,6 +161,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         # Subjects are keyed by (subject_namespace, subject_id): identical subject IDs from
         # different datasets are distinct subjects and must never be merged into one, unless
         # a subject group declares that its members share one subject-ID space.
+        self._progress.detail = f"Identifying subjects in {len(files)} files"
         subject_keys = self._subject_keys(files, datasets=datasets, namespaces=namespaces)
         if subject_keys.is_empty():
             logger.warning("Skipping sharding step: no subjects found in selected input files")
@@ -186,6 +188,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
             )
             for shard_idx in range(shard_count)
         ]
+        self._progress.detail = f"Writing {shard_count} shards for {subject_keys.height} subjects"
         pl.collect_all(sinks, engine="streaming")
 
     def _discover_input_files(self) -> tuple[Path, list[InputFile]] | None:

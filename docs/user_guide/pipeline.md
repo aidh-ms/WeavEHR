@@ -139,3 +139,12 @@ and extraction selections matching zero tables produce warnings.
 Each completed step reports its elapsed time and output directory. A reused step reports
 its existing output. Set `overwrite: true` in the step configuration to rerun it.
 Use `DEBUG` for individual tables, joins, events, and file writes.
+
+On an interactive terminal, `configure_logging()` also shows a single updating row
+with the step's elapsed time. Extraction and persistence show the current table or
+source and how many have been processed. Harmonisation counts only mapped concepts.
+Sharding shows its current phase. Warnings appear above the row, which disappears
+when the step finishes or raises an exception.
+
+Use `configure_logging(live_progress=False)` for plain output in a terminal.
+Redirected output, application-managed logging, and levels other than `INFO` use plain logs automatically.
