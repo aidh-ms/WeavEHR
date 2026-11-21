@@ -7,8 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from weavehr.steps.base.config import BaseStepConfig
 
-CORE_COLUMNS = ["subject_id", "time", "code", "numeric_value", "text_value"]
-"""Long-format MEDS columns every shard holds, in output order."""
+from weavehr.storage.events import CORE_COLUMNS
 
 DATASET_COLUMN = "dataset"
 """Provenance column holding the dataset name of every shard row."""

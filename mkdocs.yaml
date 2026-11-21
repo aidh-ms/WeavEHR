@@ -12,6 +12,7 @@ nav:
       - Extraction Configuration: "user_guide/extraction.md"
       - Dataset Versions and Variants: "user_guide/versioning.md"
       - Concept Configuration: "user_guide/concepts.md"
+      - Export: "user_guide/export.md"
       - Sharding Configuration: "user_guide/sharding.md"
       - Vasopressor Rates: "user_guide/vasopressor_events.md"
       - Expression Language: "user_guide/expressions.md"

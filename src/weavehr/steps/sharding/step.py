@@ -23,7 +23,6 @@ order are the same as when keying by ``(dataset, subject_id)``.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
@@ -40,6 +39,13 @@ from weavehr.steps.sharding.config.step import (
 )
 from weavehr.steps.sharding.groups import subject_namespaces, validate_subject_groups
 from weavehr.steps.sharding.registry import sharding_config_registry
+from weavehr.storage.events import (
+    InputFile,
+    concept_input_files,
+    extension_column_dtypes,
+    extraction_input_files,
+    scan_events,
+)
 from weavehr.storage.meds import MEDSDataset
 from weavehr.storage.project import WeavEHRProject
 
@@ -78,27 +84,6 @@ same rows into row groups of other sizes and the file differs byte for byte. Wit
 fixed boundaries the same input gives byte-identical shard files (with the same
 Polars version, which the files record as their writer).
 """
-
-
-@dataclass(frozen=True)
-class InputFile:
-    """A Parquet file of the sharding input with the identity taken from its path.
-
-    Attributes:
-        path: Location of the file
-        dataset: Dataset the file's events come from
-        version: Version of that dataset
-        concept: Relative concept path (``<concept path>``), for concept input only
-        table: Extraction table, for extraction input only
-        event: Extraction event name, for extraction input only
-    """
-
-    path: Path
-    dataset: str
-    version: str
-    concept: Path | None = None
-    table: str | None = None
-    event: str | None = None
 
 
 class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
@@ -148,7 +133,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         validate_subject_groups(config.subject_groups, selected_versions, config.config_roots)
 
         files = [input_file.path for input_file in selected_files]
-        extension_dtypes = self._extension_column_dtypes(files)
+        extension_dtypes = extension_column_dtypes(files, config.extension_columns)
 
         if not selected_files:
             logger.warning("Skipping sharding step: no input files selected below %s", data_path)
@@ -206,7 +191,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
             concept_dataset = self.concept_dataset
             if concept_dataset is None:
                 return None
-            return concept_dataset.data_path, self._concept_input_files(concept_dataset.data_path)
+            return concept_dataset.data_path, concept_input_files(concept_dataset.data_path)
 
         step_name = extraction_step.lower()
         extraction_dataset = self._project.datasets.get(step_name)
@@ -218,68 +203,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
                 f"Extraction step '{extraction_step}' has no completed output in {dataset_path} "
                 f"(missing {self.COMPLETION_MARKER}); run it first"
             )
-        return extraction_dataset.data_path, self._extraction_input_files(extraction_step, extraction_dataset.data_path)
-
-    @staticmethod
-    def _concept_input_files(concept_data_path: Path) -> list[InputFile]:
-        """List concept Parquet files with their dataset, version and concept path.
-
-        Concept files are laid out as
-        ``<concept path>/<concept version>/<dataset>/<dataset version>.parquet``;
-        files with fewer path parts are skipped with a warning.
-        """
-        input_files: list[InputFile] = []
-        for file_path in sorted(concept_data_path.rglob("*.parquet")):
-            relative_parts = file_path.relative_to(concept_data_path).parts
-
-            if len(relative_parts) < 4:
-                logger.warning(
-                    "Skipping concept file with unexpected path structure: %s",
-                    file_path,
-                )
-                continue
-
-            input_files.append(
-                InputFile(
-                    path=file_path,
-                    dataset=relative_parts[-2],
-                    version=file_path.stem,
-                    concept=Path(*relative_parts[:-3]),
-                )
-            )
-        return input_files
-
-    @staticmethod
-    def _extraction_input_files(step_name: str, extraction_data_path: Path) -> list[InputFile]:
-        """List extraction Parquet files with their dataset, version, table and event.
-
-        Extraction files are laid out as ``<dataset>/<version>/<table>/<event>.parquet``,
-        so the dataset is the first path part, not the file's parent directory (the table).
-
-        Raises:
-            ValueError: If a file is an unfinished extraction file or does not follow
-                the layout, i.e. the named step is not a completed extraction step
-        """
-        input_files: list[InputFile] = []
-        for file_path in sorted(extraction_data_path.rglob("*.parquet")):
-            relative_path = file_path.relative_to(extraction_data_path)
-            # The extraction appends through `<event>.tmp.parquet` and renames it before it
-            # completes, so such a file means the output is not what a completed run leaves.
-            if file_path.name.endswith(".tmp.parquet"):
-                raise ValueError(
-                    f"Sharding input '{step_name}' contains an unfinished extraction file {relative_path}; "
-                    "re-run the extraction step"
-                )
-            if len(relative_path.parts) != 4:
-                raise ValueError(
-                    f"Sharding input '{step_name}' is not an extraction output: unexpected file {relative_path} "
-                    "(expected <dataset>/<version>/<table>/<event>.parquet)"
-                )
-            dataset, version, table, _ = relative_path.parts
-            input_files.append(
-                InputFile(path=file_path, dataset=dataset, version=version, table=table, event=file_path.stem)
-            )
-        return input_files
+        return extraction_dataset.data_path, extraction_input_files(extraction_step, extraction_dataset.data_path)
 
     def _select_input_files(self, input_files: list[InputFile]) -> list[InputFile]:
         """Apply the dataset filter and the concept or event selection.
@@ -369,53 +293,6 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         concept_path_str = concept_path.as_posix().lower()
         concept_name = concept_path.name.lower()
         return concept_path_str in concept_filters or concept_name in concept_filters
-
-    def _extension_column_dtypes(self, files: list[Path]) -> dict[str, pl.DataType]:
-        """Determine the shard dtype of every configured extension column.
-
-        Reads only the Parquet schemas. A column missing from some files is filled with
-        nulls there, since tables carry different columns (``hadm_id`` exists on
-        admissions, not on patients). An all-null column (dtype ``Null``) fits any dtype.
-
-        Returns:
-            Mapping of extension column to dtype, in configured order
-
-        Raises:
-            ValueError: If a column is in none of the files (a typo or a missing
-                extraction config change, which would otherwise yield an all-null
-                column), or the files disagree on its dtype (a silent cast could
-                break joins on the column downstream)
-        """
-        columns = self._config.config.extension_columns
-        if not columns:
-            return {}
-
-        schemas = {file: pl.read_parquet_schema(file) for file in files}
-        dtypes: dict[str, pl.DataType] = {}
-        for column in columns:
-            present = False
-            files_by_dtype: dict[str, list[Path]] = {}
-            dtype_by_name: dict[str, pl.DataType] = {}
-            for file, schema in schemas.items():
-                if column not in schema:
-                    continue
-                present = True
-                dtype = schema[column]
-                if dtype == pl.Null:
-                    continue
-                files_by_dtype.setdefault(str(dtype), []).append(file)
-                dtype_by_name[str(dtype)] = dtype
-
-            if not present:
-                raise ValueError(f"extension column '{column}' is in none of the {len(files)} selected input files")
-            if len(files_by_dtype) > 1:
-                conflicts = ", ".join(
-                    f"{name} in {[str(file) for file in conflict_files]}"
-                    for name, conflict_files in files_by_dtype.items()
-                )
-                raise ValueError(f"extension column '{column}' has conflicting dtypes: {conflicts}")
-            dtypes[column] = next(iter(dtype_by_name.values()), pl.Null())
-        return dtypes
 
     def _subject_keys(
         self,
@@ -514,28 +391,17 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         if datasets is None:
             datasets = [file_path.parent.name for file_path in files]
 
-        lfs = []
-        for file_path, dataset in zip(files, datasets, strict=True):
-            lf = pl.scan_parquet(file_path)
-            present = set(lf.collect_schema().names()) if extension_columns else set()
-            lfs.append(
-                lf.select(
-                    [
-                        pl.col("subject_id").cast(pl.Int64),
-                        pl.col("time").cast(pl.Datetime(time_unit="us")),
-                        pl.col("code").cast(pl.String),
-                        pl.col("numeric_value").cast(pl.Float32),
-                        pl.col("text_value").cast(pl.String),
-                        pl.lit(dataset, dtype=pl.String).alias(DATASET_COLUMN),
-                        cls._namespace_column(dataset, namespaces),
-                        *(
-                            pl.col(column).cast(dtype) if column in present else pl.lit(None, dtype=dtype).alias(column)
-                            for column, dtype in extension_columns.items()
-                        ),
-                    ]
+        return pl.concat(
+            [
+                scan_events(
+                    file_path,
+                    extension_columns,
+                    pl.lit(dataset, dtype=pl.String).alias(DATASET_COLUMN),
+                    cls._namespace_column(dataset, namespaces),
                 )
-            )
-        return pl.concat(lfs, how="vertical")
+                for file_path, dataset in zip(files, datasets, strict=True)
+            ]
+        )
 
     @staticmethod
     def _sort_rows(lf: pl.LazyFrame, extension_columns: Iterable[str]) -> pl.LazyFrame:

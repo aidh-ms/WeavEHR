@@ -14,7 +14,8 @@ WeavEHR separates *what* to extract from *how* to extract it:
 - **A processing pipeline** of steps executes those configurations:
     1. The **extraction step** turns raw source tables into MEDS event streams, with codes that preserve full provenance (`mimic-iv//chartevents//220045//Heart Rate//bpm`).
     2. The **concept step** maps those dataset-specific codes onto shared clinical concepts (`heart_rate//bpm`), so downstream code is identical for every dataset.
-- **MEDS-compliant output**: every step writes a self-contained MEDS dataset (Parquet data plus `dataset.json` and `codes.parquet` metadata).
+    3. The **export phase** offers subject-oriented MEDS shards for batch processing or interactive queries over harmonised concepts and native events for a selected cohort.
+- **MEDS-compliant output.** Extraction, harmonisation and sharding write Parquet data and MEDS metadata.
 
 See the [user guide](../user_guide/pipeline.md) for a detailed walk through the pipeline.
 

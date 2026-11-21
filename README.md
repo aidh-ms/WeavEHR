@@ -32,17 +32,24 @@ WeavEHR is the spiritual successor to dataset-harmonisation tools like [`ricu`](
 WeavEHR organises processing as a pipeline of **steps** that operate inside a **project** directory:
 
 ```mermaid
-flowchart LR
-    A[Raw source data<br>Parquet / CSV / CSV.GZ] -->|ExtractionStep| B[Dataset-level MEDS events<br>e.g. mimic-iv//chartevents//220045//Heart Rate//bpm]
-    B -->|ConceptStep| C[Harmonised concepts<br>e.g. heart_rate//bpm]
-    C --> D[Your analysis /<br>MEDS ecosystem tools]
+flowchart TD
+    raw["Raw source tables"] -->|ExtractionStep| native["Native MEDS events"]
+    native -->|ConceptStep| concepts["Harmonised concepts"]
+    subgraph export["Export"]
+        shards["Subject-oriented MEDS shards"]
+        selection["Interactive cohort selection"]
+    end
+    native --> shards
+    concepts --> shards
+    native --> selection
+    concepts --> selection
 ```
 
 1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
 2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). A dataset's mapping file may contain several YAML documents separated by `---`, each defining a mapping of any type; their outputs are combined. Concept dependencies are resolved automatically.
-3. **Sharding step** *(in development)* — re-partitions concept or extraction output into subject-oriented, analysis-ready shards; datasets that share subject IDs can be merged per subject through opt-in subject groups.
+3. **Export phase** — use `ShardingStep` to write subject-oriented MEDS shards, or call `load_concepts()` to query selected concepts and native events for a cohort in Python. Both exporters read the collected outputs of earlier steps. [Export guide](docs/user_guide/export.md)
 
-Each step reads its inputs and writes its outputs as a self-contained MEDS dataset inside the project, so intermediate results are inspectable and individual steps can be re-run in isolation.
+Extraction and harmonisation each write a self-contained MEDS dataset. A later session can query these datasets directly.
 
 ## Supported datasets
 
@@ -165,14 +172,13 @@ output/project/
         └── metadata/{dataset.json, codes.parquet}
 ```
 
-Read it with any Parquet-capable tool, e.g.:
+For an interactive export, select the concepts and native events of interest:
 
 ```python
-import polars as pl
+from weavehr import load_concepts
 
-heart_rate = pl.scan_parquet(
-    project_path / "datasets" / "concept" / "data" / "heart_rate" / "1.0.0" / "mimic-iv.parquet"
-).collect()
+events = load_concepts(project_path, "heart_rate", events="MEDS_DEATH", dataset="mimic-iv/3.1")
+print(events.head(10).collect())
 ```
 
 A complete runnable example lives in [`example/pipeline.ipynb`](example/pipeline.ipynb).
@@ -268,7 +274,6 @@ WeavEHR is in active development (pre-1.0); configuration formats may still chan
 
 - Completing concept mappings for eICU-CRD, NWICU, AmsterdamUMCdb, HiRID, and SICdb
 
-- The sharding step for analysis-ready data partitioning
 - Additional datasets and broader OMOP CDM coverage
 
 Contributions of dataset configurations and concept definitions are especially welcome — they are pure YAML and require no changes to the framework itself.

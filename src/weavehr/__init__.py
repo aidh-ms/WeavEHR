@@ -16,6 +16,7 @@ Key Features:
 Main Modules:
 - callbacks: Data transformation callbacks for LazyFrames
 - config: Configuration management and registry system
+- export: Interactive concept and event selection or subject-oriented MEDS sharding
 - storage: Project, dataset, and workspace management
 - steps: Processing steps (extraction, concept, sharding)
 - utils: Utility functions and helpers
@@ -74,6 +75,7 @@ SOFTWARE.
 ```
 """
 
+from weavehr.export import load_concepts
 from weavehr.steps.concept.step import ConceptStep, concept_config_registry
 from weavehr.steps.extraction.step import ExtractionStep, dataset_config_registry
 from weavehr.steps.persistence.step import PersistenceStep
@@ -87,6 +89,7 @@ __all__ = [
     "ExtractionStep",
     "ConceptStep",
     "ShardingStep",
+    "load_concepts",
     "auto_load_configs",
     "dataset_config_registry",
     "concept_config_registry",
