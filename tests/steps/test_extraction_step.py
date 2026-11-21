@@ -343,6 +343,15 @@ config:
         data_path = project.datasets_path / "extraction" / "data"
         assert list(data_path.rglob("*.parquet")) == []
 
+    def test_schema_error_identifies_the_table(self, tmp_path: Path, data_dir: Path, extraction_config: Path) -> None:
+        source = data_dir / "measurements.csv"
+        source.write_text(source.read_text().replace("weight_kg", "renamed_weight", 1))
+
+        with pytest.raises(pl.exceptions.ColumnNotFoundError, match="weight_kg") as error:
+            run_extraction(tmp_path, extraction_config)
+
+        assert "While extracting testdb/1.0/measurements" in error.value.__notes__
+
     def test_missing_source_file_is_skipped(
         self, tmp_path: Path, data_dir: Path, extraction_config: Path, caplog: pytest.LogCaptureFixture
     ) -> None:

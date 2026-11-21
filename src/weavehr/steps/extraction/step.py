@@ -79,7 +79,11 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             logger.info("Extracting %s/%s (%d tables selected)", cfg.name, cfg.version, len(tables))
             for table in tables:
                 logger.debug("Extracting table %s/%s/%s", cfg.name, cfg.version, table.name)
-                self._extract(table, cfg.path)
+                try:
+                    self._extract(table, cfg.path)
+                except Exception as exc:
+                    exc.add_note(f"While extracting {cfg.name}/{cfg.version}/{table.name}")
+                    raise
 
     def _extract(self, table: TableConfig, path: Path) -> None:
         try:
