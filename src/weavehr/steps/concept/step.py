@@ -78,6 +78,18 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 routed_cache_dir,
             )
 
+            def extract_mapped(concept: ConceptConfig, mappings: list[DatasetConceptConfigUnion]) -> None:
+                try:
+                    self.extract_concept(
+                        concept,
+                        mappings,
+                        routed_sources=routed_sources,
+                        dataset_extension_columns=dataset_config.extension_columns,
+                    )
+                except Exception as exc:
+                    exc.add_note(f"While harmonising {concept.name}/{concept.version} for {dataset}/{version}")
+                    raise
+
             for concept in self._registry.values():
                 dataset_concepts = concept.get_dataset_concepts(dataset, version)
                 if not dataset_concepts:
@@ -91,12 +103,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     continue
 
                 if all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts):
-                    self.extract_concept(
-                        concept,
-                        dataset_concepts,
-                        routed_sources=routed_sources,
-                        dataset_extension_columns=dataset_config.extension_columns,
-                    )
+                    extract_mapped(concept, dataset_concepts)
                 else:
                     logger.debug(
                         "Registering dependent concept %s for dataset %s",
@@ -119,12 +126,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     concept_id,
                     dataset,
                 )
-                self.extract_concept(
-                    concept,
-                    dataset_concepts,
-                    routed_sources=routed_sources,
-                    dataset_extension_columns=dataset_config.extension_columns,
-                )
+                extract_mapped(concept, dataset_concepts)
 
             if routed_cache_dir.exists():
                 shutil.rmtree(routed_cache_dir)

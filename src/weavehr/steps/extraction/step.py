@@ -76,6 +76,11 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 includes=cfg.includes,
                 excludes=cfg.excludes,
             )
+            if not tables:
+                logger.warning(
+                    "No tables selected for %s/%s. Check the dataset version and table filters.", cfg.name, cfg.version
+                )
+                continue
             logger.info("Extracting %s/%s (%d tables selected)", cfg.name, cfg.version, len(tables))
             for table in tables:
                 logger.debug("Extracting table %s/%s/%s", cfg.name, cfg.version, table.name)

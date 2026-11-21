@@ -171,7 +171,11 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
                 "Finished step '%s' in %.1fs. Output: %s", self._step_name, perf_counter() - started, self.output_path
             )
         else:
-            logger.info("Reusing completed step '%s'. Output: %s", self._step_name, self.output_path)
+            logger.info(
+                "Reusing completed step '%s' (set overwrite: true to rerun). Output: %s",
+                self._step_name,
+                self.output_path,
+            )
 
         assert isinstance(self._workspace_dir, WorkspaceDir)
         return self._workspace_dir

@@ -80,14 +80,19 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                         dataset_path=dataset.path,
                     )
 
+            logger.info("Persisting %s/%s (%d source files selected)", dataset.name, dataset.version, len(sources))
             for source_file, (table_name, dtypes) in sources.items():
-                self._persist_table(
-                    source_file=source_file,
-                    table_name=table_name,
-                    dtypes=dtypes,
-                    dataset_name=dataset.name,
-                    dataset_version=dataset.version,
-                )
+                try:
+                    self._persist_table(
+                        source_file=source_file,
+                        table_name=table_name,
+                        dtypes=dtypes,
+                        dataset_name=dataset.name,
+                        dataset_version=dataset.version,
+                    )
+                except Exception as exc:
+                    exc.add_note(f"While persisting {dataset.name}/{dataset.version}/{table_name}")
+                    raise
 
     def _persist_table(
         self,

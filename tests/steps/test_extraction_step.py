@@ -321,7 +321,9 @@ class TestExtractionStep:
         dataset_output = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / "vitals" / "CHART.parquet"
         assert pl.read_parquet(dataset_output).height == 4
 
-    def test_missing_dataset_path_is_skipped(self, tmp_path: Path, table_config_dir: Path) -> None:
+    def test_no_matching_tables_warns_and_skips(
+        self, tmp_path: Path, table_config_dir: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         config_file = tmp_path / "extraction.yml"
         config_file.write_text(
             f"""\
@@ -340,6 +342,9 @@ config:
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
         ExtractionStep.load(project, config_file).run()  # must not raise
 
+        assert any(
+            r.levelno == logging.WARNING and "No tables selected for test/1.0" in r.getMessage() for r in caplog.records
+        )
         data_path = project.datasets_path / "extraction" / "data"
         assert list(data_path.rglob("*.parquet")) == []
 
@@ -398,7 +403,9 @@ config:
             step = ExtractionStep.load(project, extraction_config)
             step.run()
 
-        assert caplog.messages == [f"Reusing completed step 'extraction'. Output: {step.output_path}"]
+        assert caplog.messages == [
+            f"Reusing completed step 'extraction' (set overwrite: true to rerun). Output: {step.output_path}"
+        ]
         assert snapshot.read_text() == original
 
     def test_reads_parquet_source_with_native_types(self, tmp_path: Path) -> None:

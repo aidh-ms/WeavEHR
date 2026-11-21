@@ -7,8 +7,10 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+import yaml
 
 from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
+from weavehr.callbacks import UnknownColumnError
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import MappingConfig
@@ -42,20 +44,44 @@ def test_unmapped_concepts_are_summarised_once_per_dataset(
     tmp_path: Path, extraction_config: Path, concept_config: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     config = tmp_path / "config"
-    for name in ("unmapped_a", "unmapped_b"):
-        (config / "concepts" / f"{name}.yml").write_text(f"name: {name}\nversion: 1.0.0\n")
+    dictionary = tmp_path / "summary_concepts"
+    dictionary.mkdir()
+    for name in ("heart_rate", "unmapped_a", "unmapped_b"):
+        (dictionary / f"{name}.yml").write_text(f"name: {name}\nversion: 1.0.0\n")
     load_extracation_config(config / "testdb" / "1.0" / "tables")
-    load_concept_config(config / "concepts", [config / "testdb" / "1.0" / "mappings"])
+    load_concept_config(dictionary, [config / "testdb" / "1.0" / "mappings"])
     project = WeavEHRProject(tmp_path / "project")
     ExtractionStep.load(project, extraction_config).run()
     with caplog.at_level(logging.DEBUG, logger="weavehr"):
         ConceptStep.load(project, concept_config).run()
 
     progress = [r.getMessage() for r in caplog.records if r.levelno >= logging.INFO]
-    assert progress.count("Concept mappings for testdb/1.0: 4 mapped, 2 unmapped") == 1
+    assert progress.count("Concept mappings for testdb/1.0: 1 mapped, 2 unmapped") == 1
     for name in ("unmapped_a", "unmapped_b"):
         assert any(name in message for message in caplog.messages)
         assert all(name not in message for message in progress)
+
+
+@pytest.mark.parametrize("concept_name", ["heart_rate", "bmi"], ids=["simple", "derived"])
+def test_mapping_error_identifies_the_concept(
+    tmp_path: Path, extraction_config: Path, concept_config: Path, concept_name: str
+) -> None:
+    config = tmp_path / "config"
+    dataset = config / "testdb" / "1.0"
+    path = dataset / "mappings" / f"{concept_name}.yml"
+    mapping = yaml.safe_load(path.read_text())
+    columns = mapping["mappings"][0]["columns"] if mapping["type"] == "simple" else mapping["event"]
+    columns["numeric_value"] = "col(missing_column)"
+    path.write_text(yaml.safe_dump(mapping))
+
+    load_extracation_config(dataset / "tables")
+    load_concept_config(config / "concepts", [dataset / "mappings"])
+    project = WeavEHRProject(tmp_path / "project")
+    ExtractionStep.load(project, extraction_config).run()
+    with pytest.raises(UnknownColumnError, match="Unknown column 'missing_column'") as error:
+        ConceptStep.load(project, concept_config).run()
+
+    assert f"While harmonising {concept_name}/1.0.0 for testdb/1.0" in error.value.__notes__
 
 
 def test_gcs_unable_correction_reaches_cns_sofa(

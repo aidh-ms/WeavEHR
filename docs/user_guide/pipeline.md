@@ -131,7 +131,11 @@ configure_logging(level="INFO")  # console logging to stdout (stops propagation 
 set_log_level("DEBUG")  # change verbosity later
 ```
 
-`INFO` reports table and concept mapping counts by dataset, then the elapsed
-time and output directory when a step finishes. A reused step reports its existing output.
-Mapping counts describe configuration coverage. A missing source file still produces a
-warning. Use `DEBUG` for individual tables, joins, events, unmapped concept names, and file writes.
+For each dataset, `INFO` reports how many tables were selected for extraction, how many source
+files were selected for persistence, and how many concepts are mapped or unmapped. Mapping counts describe configuration
+coverage. Individual unmapped concept names appear at `DEBUG`. Missing source files
+and extraction selections matching zero tables produce warnings.
+
+Each completed step reports its elapsed time and output directory. A reused step reports
+its existing output. Set `overwrite: true` in the step configuration to rerun it.
+Use `DEBUG` for individual tables, joins, events, and file writes.
