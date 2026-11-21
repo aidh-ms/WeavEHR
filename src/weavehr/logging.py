@@ -27,6 +27,7 @@ import sys
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import timedelta
+from importlib.util import find_spec
 from threading import Event, Thread
 from time import perf_counter
 from typing import TYPE_CHECKING, Literal, Optional, TextIO
@@ -126,7 +127,7 @@ class _StepProgress:
             elapsed = timedelta(seconds=int(perf_counter() - started))
             return f"{step} | {elapsed} | {self.detail}"
 
-        if handler is not None and handler.stream.isatty():
+        if handler is not None and handler.stream.isatty() and find_spec("rich") is not None:
             from rich.console import Console
 
             console = Console(file=handler.stream, markup=False, emoji=False, highlight=False)
@@ -178,7 +179,7 @@ def configure_logging(
         level: Minimum log level to capture (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format: Custom format string for logs (uses DEFAULT_LOG_FORMAT if None)
         date_format: Date format for timestamps
-        live_progress: Show progress at INFO, using a live terminal row or a plain update once per minute.
+        live_progress: Show progress at INFO, using a live terminal row when Rich is available or a plain update once per minute.
 
     Example:
         >>> configure_logging(level="DEBUG")

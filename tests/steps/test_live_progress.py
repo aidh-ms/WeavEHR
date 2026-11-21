@@ -103,15 +103,17 @@ def test_stderr_may_be_a_second_descriptor_on_the_same_or_another_terminal() -> 
         assert not _shares_terminal(stdout, other)
 
 
-@pytest.mark.parametrize("application_logging", [False, True], ids=["configured", "application"])
-def test_batch_reports_a_long_operation(
-    terminal: Terminal, monkeypatch: pytest.MonkeyPatch, application_logging: bool
-) -> None:
+@pytest.mark.parametrize("mode", ["redirected", "application", "terminal-without-rich"])
+def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
     monkeypatch.setattr(sys, "stdout", terminal)
-    monkeypatch.setattr(terminal, "isatty", lambda: False)
+    if mode == "terminal-without-rich":
+        monkeypatch.setitem(sys.modules, "rich", None)
+        monkeypatch.setitem(sys.modules, "rich.console", None)
+    else:
+        monkeypatch.setattr(terminal, "isatty", lambda: False)
     monkeypatch.setattr("weavehr.logging._PROGRESS_INTERVAL", 0.01)
     package = logging.getLogger("weavehr")
-    if application_logging:
+    if mode == "application":
         package.addHandler(logging.StreamHandler(terminal))
         package.setLevel(logging.INFO)
     else:

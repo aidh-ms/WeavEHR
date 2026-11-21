@@ -140,15 +140,16 @@ Each completed step reports its elapsed time and output directory. A reused step
 its existing output. Set `overwrite: true` in the step configuration to rerun it.
 Use `DEBUG` for individual tables, joins, events, and file writes.
 
-At `INFO`, `configure_logging()` shows one updating row in an interactive terminal.
-It shows elapsed time, the current table, source, or concept, and how many have been
+When Rich is installed, `configure_logging()` shows one updating row at `INFO` in an
+interactive terminal. Install `weavehr[progress]` to include Rich.
+The row shows elapsed time, the current table, source, or concept, and how many have been
 processed. Harmonisation counts only mapped concepts. Sharding shows its current phase.
 The row clears on completion, failure, or interruption.
 
-In a notebook, a redirected log, or a batch job such as Slurm, a running step instead
-emits its current status at `INFO` once per minute. This also works with application-managed
-INFO logging, including while one table takes several minutes. Short steps produce only
-the usual summaries. Use `configure_logging(live_progress=False)` to turn off both forms
+Without Rich, a running step reports its current status at `INFO` once per minute.
+Notebooks, redirected logs, batch jobs such as Slurm, and application-managed INFO logging
+use the same plain updates, including while one table takes several minutes. Short steps
+produce only the usual summaries. Use `configure_logging(live_progress=False)` to turn off both forms
 of progress reporting. At `DEBUG` the detailed trace already shows individual operations.
 At `WARNING` and higher only messages meeting the selected threshold appear.
 

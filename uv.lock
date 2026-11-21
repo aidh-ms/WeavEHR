@@ -2311,6 +2311,10 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pydantic" },
     { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+progress = [
     { name = "rich" },
 ]
 
@@ -2323,6 +2327,7 @@ dev = [
     { name = "ruff" },
     { name = "ty" },
     { name = "types-pyyaml" },
+    { name = "weavehr", extra = ["progress"] },
 ]
 docs = [
     { name = "mkdocs" },
@@ -2341,8 +2346,9 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=24.0.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "rich", specifier = ">=14" },
+    { name = "rich", marker = "extra == 'progress'", specifier = ">=14" },
 ]
+provides-extras = ["progress"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -2353,6 +2359,7 @@ dev = [
     { name = "ruff", specifier = ">=0.15.17" },
     { name = "ty", specifier = ">=0.0.49" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260518" },
+    { name = "weavehr", extras = ["progress"] },
 ]
 docs = [
     { name = "mkdocs", specifier = ">=1.6.1" },

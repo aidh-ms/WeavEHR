@@ -19,6 +19,9 @@ pip install weavehr
 uv add weavehr
 ```
 
+For a live progress row in the terminal, install the optional extra with
+`pip install 'weavehr[progress]'` or `uv add 'weavehr[progress]'`.
+
 ### With GitHub
 ```bash
 # with pip
