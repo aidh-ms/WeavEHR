@@ -295,10 +295,10 @@ class TestAutoLoadConfigs:
 class TestLazyLoading:
     @pytest.fixture
     def calls(self, monkeypatch: pytest.MonkeyPatch) -> list[None]:
-        """Record calls to auto_load_configs instead of loading all bundled configs."""
+        """Record calls to load_configs instead of loading all bundled configs."""
         calls: list[None] = []
 
-        def fake_auto_load_configs(
+        def fake_load_configs(
             load_bundled: bool = True,
             custom_config_path: Path | Sequence[Path] | None = None,
             dataset_filter: Sequence[str] | None = None,
@@ -307,7 +307,7 @@ class TestLazyLoading:
             monkeypatch.setattr(loader, "_loaded", True)
             return True
 
-        monkeypatch.setattr(loader, "load_configs", fake_auto_load_configs)
+        monkeypatch.setattr(loader, "load_configs", fake_load_configs)
         return calls
 
     @pytest.mark.parametrize("value", ["1", "true", "yes", ""])

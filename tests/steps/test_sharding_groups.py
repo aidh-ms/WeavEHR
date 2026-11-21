@@ -8,8 +8,6 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from weavehr.config import inheritance
-from weavehr.steps.sharding.config.step import ShardingStepConfig
 from tests.steps.test_sharding_step import (
     T0,
     T1,
@@ -20,6 +18,8 @@ from tests.steps.test_sharding_step import (
     shard_extraction,
     write_step_config,
 )
+from weavehr.config import inheritance
+from weavehr.steps.sharding.config.step import ShardingStepConfig
 
 
 def config_root(tmp_path: Path, *versions: str, extends: dict[str, str] | None = None) -> Path:
@@ -289,8 +289,8 @@ def test_subject_groups_ambiguous_roots_fail(tmp_path: Path) -> None:
     assert_nothing_written(tmp_path)
 
 
-def test_subject_groups_use_roots_loaded_by_auto_load_configs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """The custom roots auto_load_configs loaded from resolve the chains without config_roots."""
+def test_subject_groups_use_roots_loaded_by_load_configs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The custom roots load_configs loaded from resolve the chains without config_roots."""
     root = config_root(tmp_path, "db_a/1.0", "db_b/1.0")
     monkeypatch.setattr(inheritance, "_search_roots", [root])
 

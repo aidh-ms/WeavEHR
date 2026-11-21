@@ -2,7 +2,7 @@
 
 Importing ``weavehr`` does not load any configuration. The bundled dataset and
 concept configurations, plus any custom ones, are loaded once, either explicitly
-with :func:`auto_load_configs` at startup or lazily (bundled only) with
+with :func:`load_configs` at startup or lazily (bundled only) with
 :func:`ensure_configs_loaded`, which the processing steps call when they are created. Lazy loading can be disabled by setting the environment variable
 ``WEAVEHR_AUTO_LOAD_CONFIGS`` to ``0``, ``false``, ``no`` or ``off``.
 """

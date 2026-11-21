@@ -39,7 +39,7 @@ with WeavEHRProject(project_path) as project:
 
 Importing the package has no side effects: the bundled dataset and concept
 configurations are loaded when the first step is created (or explicitly via
-`auto_load_configs()`), and no log handler is installed until the application
+`load_configs()`), and no log handler is installed until the application
 calls `weavehr.logging.configure_logging()`.
 
 Author:

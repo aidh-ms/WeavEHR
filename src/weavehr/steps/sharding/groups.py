@@ -64,7 +64,7 @@ def validate_subject_groups(
         if not root.is_dir():
             raise ValueError(f"config_roots entry {root} is not a directory")
 
-    # The roots auto_load_configs loaded from (custom roots, then bundled) follow config_roots.
+    # The roots load_configs loaded from (custom roots, then bundled) follow config_roots.
     roots = [*config_roots]
     for root in [*get_search_roots(), bundled_config_path()]:
         if root is not None and root not in roots:
