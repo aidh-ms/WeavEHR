@@ -41,13 +41,13 @@ TEMPERATURE_F = Case(
 )
 
 NOREPINEPHRINE = Case(
-    concept="norepinephrine_rate",
+    concept="vasopressor_infusion",
     table="inputevents",
     event="INFUSION_START",
     code="INFUSION_START//221906//Norepinephrine",
     extra={"originalrate": 0.2, "rateuom": "mcg/kg/min", "stay_id": 10},
-    expect=[{"numeric_value": 0.2, "stay_id": "10"}],
-    note="weight-based rates are kept",
+    expect=[{"code": "vasopressor_infusion//norepinephrine", "numeric_value": 0.2, "stay_id": "10"}],
+    note="a set rate keeps its source unit and the drug level",
 )
 
 
@@ -57,12 +57,6 @@ NOREPINEPHRINE = Case(
         pytest.param("mimic-iv", "2.2", TEMPERATURE_F, id=case_id(TEMPERATURE_F)),
         pytest.param("mimic-iv-demo", "2.2", TEMPERATURE_F, id=f"demo inherits {case_id(TEMPERATURE_F)}"),
         pytest.param("mimic-iv", "2.2", NOREPINEPHRINE, id=case_id(NOREPINEPHRINE)),
-        pytest.param(
-            "mimic-iv",
-            "2.2",
-            dataclasses.replace(NOREPINEPHRINE, extra={"originalrate": 16.0, "rateuom": "mcg/min"}, expect=NOTHING),
-            id="pattern.extensions excludes other rate units",
-        ),
         pytest.param(
             "eicu-crd",
             "2.0",
@@ -112,6 +106,20 @@ def test_check_case_fails_on_a_duplicate_row(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(AssertionError, match=r"expected 1 row\(s\), got 2"):
         check_case(TEMPERATURE_F, dataset="mimic-iv", version="2.2")
+
+
+@pytest.mark.parametrize(("unit", "emitted"), [("mcg/kg/min", True), ("mcg/min", False)])
+def test_map_rows_applies_pattern_extensions(monkeypatch: pytest.MonkeyPatch, unit: str, emitted: bool) -> None:
+    """A mapping's ``pattern.extensions`` regexes select rows like its code pattern does."""
+    concept = load_concept("vasopressor_infusion", "mimic-iv", "2.2")
+    [mapping] = concept.get_dataset_concepts("mimic-iv", "2.2")
+    assert isinstance(mapping, SimpleDatasetConceptConfig)
+    for m in mapping.mappings:
+        m.pattern.extensions = {"rateuom": "^mcg/kg/min$"}
+    monkeypatch.setattr(support, "load_concept", lambda *_: concept)
+
+    case = dataclasses.replace(NOREPINEPHRINE, extra={**NOREPINEPHRINE.extra, "rateuom": unit})
+    check_case(case if emitted else dataclasses.replace(case, expect=NOTHING), dataset="mimic-iv", version="2.2")
 
 
 def test_check_case_passes_within_the_case_tolerance() -> None:

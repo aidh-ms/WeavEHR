@@ -37,11 +37,20 @@ unit: bpm
 extension_columns:           # optional extra output columns
   dataset: col("dataset")    # provenance columns added automatically per row
   table: col("table")
+# limits: {min: 0, max: 3}   # optional; only to catch conversion errors, see below
 ```
 
 The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex`, binary markers such as `antibiotics` (values mapped to `1`/`"true"`), dimensionless values such as pH, file paths and free text. `unit: None` is rejected, because YAML reads it as the string `"None"`.
 
 A unitless concept can declare `levels`, the allowed sub-types of its events, e.g. `levels: [invasive, noninvasive]` for `ventilation_start`. A simple or derived mapping sets one with `level`, and its events get the code `<name>//<level>` (e.g. `ventilation_start//invasive`). Events without a level keep the code `<name>`, so matching the prefix `<name>` finds every level. Levels are not supported for concepts with a unit.
+
+A concept can declare `limits`, a `min` and/or a `max`. A value outside them becomes null; the
+event itself is kept. Limits apply to every concept type, and there is no option yet to switch
+them off. **Limits only catch conversion errors**, such as a rate charted in mg where mcg was
+meant, and are set well beyond any clinical value. They do not clean clinical outliers: concepts
+otherwise keep every source value, including implausible ones such as an SpO2 of 101, and leave
+plausibility filtering to the analysis. So far only the vasopressor rates declare limits; see
+[Vasopressor rates](vasopressor_events.md#weights-units-and-limits).
 
 During processing, each row is annotated with `dataset`, `version`, `table`, and `event` columns describing where it came from; `extension_columns` chooses which of these (or any other [expression](expressions.md)) to keep in the output.
 
@@ -72,37 +81,65 @@ mappings:
 - `columns.numeric_value` / `columns.text_value` are expressions evaluated on the matched rows; constants work too (`numeric_value: const(1)` for flag-style concepts).
 - `columns.extension` maps extra output column names to expressions evaluated on the source rows. Use it for dataset-specific metadata, such as an infusion identifier. These expressions override same-named concept and dataset-wide extension expressions. Extension values are written as strings; mappings without a particular extension produce null for that column when their outputs are combined.
 - `level` (optional) is one of the concept's `levels`, written as a literal, not an expression. It applies to every row of the mapping; source values with different levels need separate mappings, each selecting its rows with `pattern.code` or `filters`. A level that the concept doesn't declare skips that dataset's mapping with a warning; the other datasets keep the concept.
+- `callbacks` (optional) compute helper columns, in order, on every matched row before `columns` and `filters`; each names its result with `output=`, and none is written out. Use them for values from other rows, which `filters` would no longer see once an earlier filter has dropped rows, e.g. HiRID's `next_record(numeric_value, time, by=[subject_id, infusion_id, code], output=next_dose)`.
 - `filters` see the mapped timestamps, values and extensions while `code` still contains the source extraction code. After filtering, `code` is replaced with the harmonised concept code (`<name>//<unit>`, `<name>`, or `<name>//<level>`).
 
 A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions. To combine simple mappings with derived or complex ones, place each in its own YAML document in the mapping file (see [Combining mappings](#combining-mappings)).
 
-For example, the MIMIC-IV mappings for the four cardiovascular SOFA pressors
-preserve their source metadata on both infusion starts and retained ends:
+For example, the MIMIC-IV mapping of `vasopressor_infusion` keeps the unit and identifiers of an
+infusion segment start:
 
 ```yaml
-columns:
-  numeric_value: col(originalrate)   # the start mapping; ends still map to zero
-  extension:
-    stay_id: col(stay_id)
-    linkorderid: col(linkorderid)
+- level: norepinephrine
+  pattern: {table: inputevents, event: INFUSION_START, code: '^221906(?:$|//)'}
+  columns:
+    numeric_value: col(originalrate)
+    extension:
+      rate_unit: col(rateuom)
+      stay_id: col(stay_id)
+      stream_id: concat_str("inputevents:", linkorderid)
 ```
 
-The native `linkorderid` links an infusion across rate changes. Retained ends
-map to a zero rate, so no separate `event` column is needed for the rate state.
-Match identifiers within the relevant dataset, patient, stay and drug; an
-identifier is not evidence that the infusion was uninterrupted between records.
+The native `linkorderid` links an infusion across rate changes. Match identifiers within the
+relevant dataset, patient, stay and drug; an identifier is not evidence that the infusion was
+uninterrupted between records. eICU's `infusiondrug` supplies rate observations rather than
+paired start/end records, so its mapping does not invent an infusion identifier. The rate
+concepts convert these events with one shared transformer; see
+[Vasopressor rates](vasopressor_events.md).
 
-The corresponding eICU mappings preserve only `stay_id`. Their
-`infusiondrug` source supplies rate observations rather than paired start/end
-records, so these mappings do not invent an infusion identifier. The cardiovascular
-SOFA consumer applies the alignment and expiry policy described below.
+### State streams
 
-The AUMCdb mappings are `derived`: the OMOP export has no rate field, so they read
-the dose rate from the text in `drug_exposure.sig` and divide a rate not per kg by
-the admission weight (`patient_weight`, joined on `stay_id`). Each `drug_exposure`
-row is one rate segment; its start maps to the rate and its end to zero, both
-keeping `stay_id` and `drug_exposure_id`, which identifies the segment because the
-export drops the source order ID. See the AUMCdb README.
+Some concepts describe a state that holds until it changes: an infusion rate, ventilation, oxygen
+therapy. They share one form, so that one consumer, `ActiveState` in
+`steps/concept/transformer/windowed.py`, can rebuild the state of any of them:
+
+- `numeric_value` is the state from the event's time on: a rate, or 1 for "on". 0 means off,
+  whether a documented stop or a charted zero.
+- A null `numeric_value` means the state is unknown from the event's time on, e.g. a HiRID
+  interval whose dose can't be read, or a value nulled by the concept's `limits`. It ends the
+  value before it without saying off; `ActiveState` treats the stream like an expired one. A
+  mapping emits a null only for a state it knows to be unknown, and drops source rows that
+  change no state, such as a CareVue row with only an amount.
+- `stream_id` links the events of one stream (one infusion, one ventilation run), prefixed
+  with the source table; null where the source records none. Without it, a subject's events of
+  one concept form one stream per stay.
+- `stay_id` scopes streams to an ICU stay; `available_time` says when an event was documented.
+
+Nothing else is stored per event, besides the `dataset` and `table` every concept carries. A
+source-unit layer below a stream, such as `vasopressor_infusion`, may add what its conversion
+needs. Whether a value was set or charted follows from the source and is documented with its
+mapping. A value averaged over an interval is dated at the interval's start, with
+`available_time` when the interval's end was documented: dated at its end, an infusion's last
+average would fall on the infusion's stop, and `ActiveState` lets an update win over a stop at
+the same time. Carrying the last value
+forward therefore gives the state, also in tools that read only the core MEDS columns. The
+vasopressor rates follow this form; the ventilation start and end markers do not yet.
+
+AUMCdb's OMOP export has no rate field, so its `vasopressor_infusion` mapping reads
+the dose rate and its unit from the text in `drug_exposure.sig`. Each `drug_exposure`
+row is one rate segment: its start maps to the rate and its end to zero, with
+`drug_exposure_id` as `stream_id` because the export drops the source order ID. See
+the AUMCdb README.
 
 ### Derived concepts
 
@@ -180,6 +217,11 @@ class VentilationWindows(BaseConceptTransformer):
 ```
 
 `dependencies` holds each concept dependency's output under the concept name (`ventilation_start`) and each `events` input under its own name (`ventilator_mode`). An `events` input is selected by a pattern as in a simple mapping and holds the same columns as a `pattern` table of a derived concept, so a transformer can read source details that no concept carries, such as units or order identifiers. An `events` name must differ from the name of every concept in `concepts`, whether or not that concept has output (compared case-insensitively, like identifiers); otherwise the mapping is invalid and skipped with a warning when it is loaded. Without any selected event file, an `events` input is handled like a dependency without output: transformers with `strict_dependencies` fail, others receive it as absent.
+
+A transformer may declare `extension_columns` of its own, as expressions on its output, so
+that every concept it computes carries them without repeating them in each concept file; the
+concept's own `extension_columns` are added after these. A concept's `limits` apply to complex
+concepts as to the others: values outside them become null.
 
 Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
 
@@ -397,12 +439,12 @@ uses these windows as they are. See the AUMCdb README.
 recorded stops. It uses the **latest MAP within one hour**, rather than the
 worst MAP in that hour. The `window` mapping argument controls this lookback.
 
-Pressor rates have a separate `pressor_window` timeout. Within each dataset,
-patient, stay and drug, native `linkorderid` values identify independent
-infusions across rate changes; `kwargs.pressor_id_column` names another
-identifier column (AUMCdb uses `drug_exposure_id`, one per rate segment). A zero stops only its matching infusion. A
-subsequent positive rate restarts it; a positive rate at the same timestamp as
-a zero takes precedence. Concurrent infusions contribute their **maximum rate**,
+Pressor rates have a separate `pressor_window` timeout. The rate concepts are
+[state streams](#state-streams): within each dataset, patient, stay and drug, their
+`stream_id` values identify independent infusions across rate changes, and a zero
+stops only its matching infusion. A subsequent positive rate restarts it; a positive
+rate at the same timestamp as a zero takes precedence. Concurrent infusions contribute their
+**maximum rate**,
 not their sum, following the overlap aggregation in
 [ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L486)
 and [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/score/sofa.sql#L140).
@@ -415,12 +457,12 @@ the latest rate remains current through `last_record_time + pressor_window`,
 inclusive. Each new numeric rate refreshes its own stream's timeout; null rates
 and other drugs' events do not. Without an infusion identifier, observations
 form one stream per patient/stay/drug and always use the timeout, including when
-a later zero is recorded. A stop without identity cannot stop an identified
+a later stop is recorded. A stop without identity cannot stop an identified
 infusion. A newly observed stay prevents rates from the previous stay carrying
 into its assessments; this cannot detect a stay change absent from all inputs.
 
 Timeout makes a rate unknown at the next input event; it does not generate an
-event at the timeout itself. A recorded zero is observed cessation, whereas
+event at the timeout itself. A recorded stop or zero rate is observed, whereas
 expiry is missing information. No component score is emitted when all inputs
 are unknown. With a current normal MAP, an expired pressor can yield a component
 score of zero. Total SOFA still uses each component's worst emitted score over
@@ -443,7 +485,8 @@ ends (`statusdescription != "ChangeDose/Rate"`), with simultaneous stop/restart
 treated as continuation. There were 247 closed episodes. All linked streams
 had retained terminal stops, so this sample cannot validate missing-stop expiry.
 
-The eICU analysis used
+Both analyses predate the rate concepts' conversion from infusion events, which adds eICU's
+`mcg/min` rows and nulls rates above ricu's limits. The eICU analysis used
 [`infusiondrug.csv.gz` from demo 2.0](https://physionet.org/files/eicu-crd-demo/2.0/infusiondrug.csv.gz),
 restricted to the four current mappings' drug names ending in `(mcg/kg/min)`
 and numeric rates: 736 observations across 38 stays. Gaps were measured between

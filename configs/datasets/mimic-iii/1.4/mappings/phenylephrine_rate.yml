@@ -1,0 +1,11 @@
+# vasopressor_infusion//phenylephrine in the concept unit. The transformer is the same for every
+# dataset; see docs/user_guide/vasopressor_events.md.
+# CareVue rates per minute need a weight: the latest one charted before the rate, even from an
+# earlier admission.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.infusion.InfusionRateTransformer
+concepts:
+  - vasopressor_infusion.1.0.0
+  - patient_weight.1.0.0
+kwargs:
+  drug: phenylephrine

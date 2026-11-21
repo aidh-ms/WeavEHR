@@ -1,6 +1,15 @@
+# Infusion rate in mcg/kg/min, converted from vasopressor_infusion//phenylephrine by InfusionRateTransformer,
+# which also adds the state-stream extension columns (stream_id, stay_id, available_time).
+# Each event is the rate from its time on; 0 means off.
+# See docs/user_guide/vasopressor_events.md.
 name: phenylephrine_rate
 version: 1.0.0
 unit: mcg/kg/min
+# ricu sets no upper limit for this drug; this one is WeavEHR's. 20 mcg/kg/min is about twice the
+# highest ICU doses (9-10) and below most per-minute doses charted as per kg (20-200).
+limits:
+  min: 0
+  max: 20
 extension_columns:
   dataset: col("dataset")
   table: col("table")

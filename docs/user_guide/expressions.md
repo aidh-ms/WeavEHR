@@ -105,7 +105,14 @@ The methods are those of the installed Polars version, so their names and behavi
 
 ### Comparison and logic
 
-`equal`, `not_equal`, `greater_than`, `greater_equal`, `less_than`, `less_equal`, `and`, `or`, `not` — usually written with operators (`col(rate) > 0 and col(rate) < 100`).
+`equal`, `not_equal`, `greater_than`, `greater_equal`, `less_than`, `less_equal`, `and`, `or`, `not` — usually written with operators (`col(rate) > 0 and col(rate) < 100`). On integer columns, `&` and `|` are bitwise, which tests status flags: `(recordstatus & 256) != 0`.
+
+### Consecutive records
+
+| Callback | Description |
+| --- | --- |
+| `previous_record(value, time, by=[col_a, ...], output=...)` | The value of the previous record of the same stream (`by` columns), ordered by `time`. A record without timestamp or stream key, or sharing its timestamp with another record of the stream, takes no previous value and gives none to its neighbours. The stream is the frame the expression is evaluated on: in a list of filters, earlier filters have already dropped records, so compute it in a simple mapping's `callbacks`. |
+| `next_record(value, time, by=[col_a, ...], output=...)` | The value of the next record of the same stream; otherwise as `previous_record`. HiRID's rates read the next record's dose. |
 
 ### Filtering helpers
 

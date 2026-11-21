@@ -244,25 +244,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             return pl.DataFrame()
         return pl.read_parquet(codes_path)
 
-    def apply_limits(self, concept: ConceptConfig, lf: pl.LazyFrame) -> pl.LazyFrame:
-        if concept.limits.min is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") < concept.limits.min)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        if concept.limits.max is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") > concept.limits.max)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        return lf
-
     @staticmethod
     def _code_matches(event_name: str, regex: str) -> pl.Expr:
         """Whether ``regex`` is found in the code, with or without the event name in it.
@@ -599,7 +580,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     dataset_extension_columns=dataset_extension_columns,
                 )
 
-                lf = self.apply_limits(concept, lf)
+                lf = concept.limits.apply(lf)
 
                 tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
                 logger.debug(
@@ -666,6 +647,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         lf = lf.with_columns(pl.lit(version).alias("version"))
         lf = lf.with_columns(pl.lit(table).alias("table"))
         lf = lf.with_columns(pl.lit(event_name).alias("event"))
+
+        # Helper columns, on every matched row: no filter has dropped one yet. The final select drops them.
+        for expr in mapping.callbacks:
+            lf = lf.with_columns(parse_expr(lf, expr))
 
         extension_columns = concept.extension_columns.copy()
         extension_columns.update(dataset_extension_columns or {})
@@ -841,7 +826,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             )
             return
 
-        lf = self.apply_limits(concept, lf)
+        lf = concept.limits.apply(lf)
 
         output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
         output_file.parent.mkdir(parents=True, exist_ok=True)

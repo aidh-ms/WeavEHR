@@ -1,0 +1,64 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- vasopressor syringe pumps in source units; <drug>_rate
+# converts them. See docs/user_guide/vasopressor_events.md and the AUMCdb README.
+#
+# ricu's aumc items in ordercategory 2. Spuitpompen: norepinephrine 7229 (drug_concept_id
+# 2907531), epinephrine 6818 (19076867), dopamine 7179 (36411287), dobutamine 7178 (21088391).
+# Epinephrine injections (ordercategory Injecties Circulatie/Diuretica, concept 40038600) are
+# boluses without a rate and are not read.
+#
+# Each drugitems row is one rate segment, which AMSTEL writes to drug_exposure with its start
+# and stop. OMOP has no rate field, so AMSTEL writes the rate into sig:
+#   <amount> <unit> @ <dose> <doseunit>[/kg]/<min|uur> [= <pump rate> <unit>]
+# on AUMCdb 1.5.0 always a dose in mg per hour (uur), e.g. "4 mg @ 0.5 mg/uur = 6 ml/uur".
+# A segment's start carries its dose rate and its end a stop (0), in the same unit; AMSTEL
+# drops the source orderid, so drug_exposure_id links them. A segment without a dose rate has
+# no unit, so neither its start nor its end can be converted.
+type: simple
+mappings:
+  - level: norepinephrine
+    pattern: {table: drug_exposure, event: DRUG_START, code: '^2907531//'}
+    <<: &start
+      columns:
+        # The dose rate follows "@": a number and its unit, e.g. "0.1 µg/kg/min".
+        numeric_value: cast(sig.str.extract("@ ([0-9][0-9.e-]*) ", 1), "float64")
+        text_value: col(sig)
+        extension:
+          rate_unit: sig.str.extract("@ [^ ]+ ([^ ]+)", 1)
+          stay_id: cast(visit_occurrence_id, "string")
+          stream_id: concat_str("drug_exposure:", drug_exposure_id)
+      filters:
+        - drop_na(numeric_value)
+  - level: norepinephrine
+    pattern: {table: drug_exposure, event: DRUG_END, code: '^2907531//'}
+    <<: &stop
+      columns:
+        numeric_value: const(0)
+        text_value: col(sig)
+        extension:
+          rate_unit: sig.str.extract("@ [^ ]+ ([^ ]+)", 1)
+          stay_id: cast(visit_occurrence_id, "string")
+          stream_id: concat_str("drug_exposure:", drug_exposure_id)
+      filters:
+        # Only the end of a segment with a dose rate: a bolus or a pump rate alone started nothing.
+        - sig.str.contains("@ [0-9]")
+
+  - level: epinephrine
+    pattern: {table: drug_exposure, event: DRUG_START, code: '^19076867//'}
+    <<: *start
+  - level: epinephrine
+    pattern: {table: drug_exposure, event: DRUG_END, code: '^19076867//'}
+    <<: *stop
+
+  - level: dopamine
+    pattern: {table: drug_exposure, event: DRUG_START, code: '^36411287//'}
+    <<: *start
+  - level: dopamine
+    pattern: {table: drug_exposure, event: DRUG_END, code: '^36411287//'}
+    <<: *stop
+
+  - level: dobutamine
+    pattern: {table: drug_exposure, event: DRUG_START, code: '^21088391//'}
+    <<: *start
+  - level: dobutamine
+    pattern: {table: drug_exposure, event: DRUG_END, code: '^21088391//'}
+    <<: *stop

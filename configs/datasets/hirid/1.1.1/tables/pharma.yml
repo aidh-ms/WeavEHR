@@ -5,9 +5,10 @@
 # (the same reference table also covers pharma variables) and appended to the
 # code -> hirid//pharma//<pharmaid>//<Variable Name>//<doseunit>.
 #
-# NOTE: this table config is provided for completeness. The concept mappings for
-# drug rates/durations are deferred (they need `derived`/`complex` handling of
-# HiRID's per-record dosing), so no mappings key on this table yet.
+# Each record is one administration fact, kept as it is. A record's `givendose` is the dose
+# given since the previous record of its infusion: on HiRID 1.1.1 it equals the rise of
+# `cumulativedose` in over 99% of records, start records carry no dose, and stop records the
+# dose of the last interval.
 path: raw_stage/pharma_records/parquet/*.parquet
 
 columns:
@@ -62,6 +63,14 @@ event_defaults:
   extension:
     available_time: col(enteredentryat)
     infusion_id: col(infusionid)
+    # HiRID has one ICU stay per patient.
+    stay_id: col(patientid)
+    doseunit: col(doseunit)
+    # `recordstatus` is a bit field: 2 invalidated, 4 infusion start, 8 record, 32 not
+    # administered, 256 infusion stop, 512 report. A record without a status has no flags.
+    given: (recordstatus & 34) == 0
+    infusion_start: (recordstatus & 4) != 0
+    infusion_stop: (recordstatus & 256) != 0
 
 events:
   - name: PHARMA
