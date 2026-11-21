@@ -42,7 +42,7 @@ Two steps are currently available, with a third in development:
 | --- | --- | --- |
 | `ExtractionStep` | Raw source tables (CSV/CSV.GZ) | Dataset-level MEDS events |
 | `ConceptStep` | An extraction step's output | Harmonised, dataset-agnostic concept events |
-| `ShardingStep` *(in development)* | A concept step's output | Analysis-ready data shards |
+| `ShardingStep` *(in development)* | A concept or extraction step's output | Analysis-ready, subject-oriented data shards ([details](sharding.md)) |
 
 Every step's `run()` follows the same lifecycle:
 

@@ -8,19 +8,19 @@ mapping's header comment or ``docs/user_guide/concepts.md``; the case notes say 
 that an item ID is in a mapping's pattern would only restate the YAML, so there is none.
 
 - Behaviour cases: one extracted source row per :class:`Case`, grouped by rule (unit
-  conversions, rate units, saturation ranges, infusion durations, antibiotic exclusions, the
-  respiratory support and airway levels, ventilation markers, sex) and run through the shipped
-  simple mapping by one parametrised test. Item labels are the real dictionary labels.
+  conversions, rate units, saturations, infusion durations, antibiotic exclusions, the
+  respiratory support and airway levels, ventilation markers, sex, the heart rhythm, ectopy
+  and race levels) and run through the shipped simple mapping by one parametrised test. Item labels are the real dictionary labels.
 - Native extraction: synthetic rows written as the release ships them (gzip CSV, lower-case
   headers) and run through the shipped table configs: code assembly, death and age, optional
   admission events, culture times and results, order times, infusion durations and weights,
-  HCPCS dates, open ICU stays and ICD titles.
+  HCPCS, procedure and OMR dates, open ICU stays and their care units, and ICD titles.
 - Concept pipeline: a real concept step from prescription, infusion and culture rows to
-  suspected infection and Sepsis-3.
+  suspected infection and Sepsis-3, and from infusion segments and weights to vasopressor rates.
 
-Covered elsewhere: the GCS ETT correction, the ventilation markers of invasive ventilation and
-the pressor start, change and stop rules (``tests/steps/test_concept_step.py``), and the
-shared SOFA, sepsis, AKI and GCS calculations (``tests/transformers/``).
+Covered elsewhere: the GCS ETT correction and the ventilation markers of invasive ventilation
+(``tests/steps/test_concept_step.py``), and the shared SOFA, sepsis, AKI, GCS and infusion-rate
+calculations (``tests/transformers/``).
 """
 
 from collections.abc import Mapping, Sequence
@@ -39,7 +39,9 @@ from tests.datasets.support import (
     check_case,
     extract_native,
     map_rows,
+    SOFA_COMPONENTS,
     run_concepts,
+    sofa_component_stubs,
 )
 
 DATASET: Final = "mimic-iv"
@@ -51,10 +53,12 @@ ORDER_ID: Final = 20
 
 ITEMS: Final[Mapping[int, str]] = {
     # icu/d_items
+    220048: "Heart Rhythm",
     220227: "Arterial O2 Saturation",
     220277: "O2 saturation pulseoxymetry",
     220950: "Dextrose 10%",
     221289: "Epinephrine",
+    221749: "Phenylephrine",
     221906: "Norepinephrine",
     222315: "Vasopressin",
     223258: "Insulin - Regular",
@@ -63,10 +67,16 @@ ITEMS: Final[Mapping[int, str]] = {
     223835: "Inspired O2 Fraction",
     223849: "Ventilator Mode",
     224385: "Intubation",
+    224639: "Daily Weight",
+    224650: "Ectopy Type 1",
+    224651: "Ectopy Frequency 1",
     224829: "Trach Tube Type",
     225794: "Non-invasive Ventilation",
     225798: "Vancomycin",
     226237: "Open Tracheostomy",
+    226479: "Ectopy Type 2",
+    226480: "Ectopy Frequency 2",
+    226512: "Admission Weight (Kg)",
     226707: "Height",
     226732: "O2 Delivery Device(s)",
     227130: "Trach Care",
@@ -93,7 +103,7 @@ EVENT_TABLES: Final[Mapping[str, str]] = {
 }
 """Item table of each extracted event the behaviour cases read."""
 
-LABEL_COLUMNS: Final = ("rate", "rateuom", "originalrate", "duration_minutes")
+LABEL_COLUMNS: Final = ("rate", "rateuom", "originalrate", "patientweight", "duration_minutes")
 """Extracted infusion columns that distinguish cases of the same item in their pytest ids."""
 
 
@@ -192,22 +202,6 @@ def infusion_end(concept: str, item: int, *, expect: Sequence[Mapping[str, Any]]
 
 RATES = [
     infusion_end(
-        "vasopressin_rate",
-        222315,
-        rate=2.4,
-        rateuom="units/hour",
-        expect=[{"numeric_value": 0.04}],
-        note="units/hour are converted to the concept's units/min",
-    ),
-    infusion_end(
-        "vasopressin_rate",
-        222315,
-        rate=0.04,
-        rateuom="units/min",
-        expect=[{"numeric_value": 0.04}],
-        note="units/min is the concept unit and is not converted",
-    ),
-    infusion_end(
         "insulin",
         223258,
         rate=3,
@@ -233,13 +227,72 @@ RATES = [
         note="D10 is the reference solution",
     ),
     infusion_end("dextrose_as_D10", 228140, expect=NOTHING, note="a bolus has an amount but no rate"),
-    case(
-        "norepinephrine_rate",
+]
+
+
+def infusion(
+    event: str, item: int, *, expect: Sequence[Mapping[str, Any]], note: str, text: str | None = None, **columns: Any
+) -> Case:
+    """A behaviour case of the infusion-event concept for one MetaVision segment start or end."""
+    return case(
+        "vasopressor_infusion", event, item, text=text, extra={"stay_id": STAY_ID, **columns}, expect=expect, note=note
+    )
+
+
+STOP: Final = {"code": "vasopressor_infusion//norepinephrine", "numeric_value": 0}
+
+INFUSIONS = [
+    infusion(
         "INFUSION_START",
         221906,
-        extra={"originalrate": 16.0, "rateuom": "mcg/min", "stay_id": STAY_ID},
-        expect=NOTHING,
-        note="a rate per minute cannot become the concept's mcg/kg/min without a weight",
+        originalrate=0.2,
+        rateuom="mcg/kg/min",
+        linkorderid=7,
+        expect=[{"numeric_value": 0.2, "rate_unit": "mcg/kg/min", "stream_id": "inputevents:7"}],
+        note="the set rate: the delivered rate is only known when the segment ends",
+    ),
+    infusion(
+        "INFUSION_START",
+        221906,
+        originalrate=0.15,
+        rateuom="mg/kg/min",
+        patientweight=1.0,
+        expect=[{"numeric_value": 0.15, "rate_unit": "mcg/kg/min"}],
+        note="mg/kg/min with the dummy weight 1 is mislabelled mcg/kg/min (mimic-code norepinephrine.sql)",
+    ),
+    infusion(
+        "INFUSION_START",
+        221906,
+        originalrate=0.15,
+        rateuom="mg/kg/min",
+        patientweight=80.0,
+        expect=[{"numeric_value": 0.15, "rate_unit": "mg/kg/min"}],
+        note="with a real weight the unit is kept; the rate concept's limits judge the value",
+    ),
+    *[
+        infusion(
+            "INFUSION_END",
+            221906,
+            text=status,
+            expect=[STOP] if stop else NOTHING,
+            note=note,
+        )
+        for status, stop, note in [
+            ("ChangeDose/Rate", False, "a dose change starts the next segment of the order at the same time"),
+            ("Stopped", True, "a documented stop"),
+            ("Paused", True, "a pause stops the drug until a new segment starts"),
+            ("FinishedRunning", True, "the bag ran out"),
+            ("Flushed", True, "the line was flushed; no rate runs on"),
+            (None, False, "an end without a status is no evidence of a stop"),
+        ]
+    ],
+    infusion(
+        "INFUSION_END",
+        221906,
+        text="FinishedRunning",
+        continueinnextdept=1,
+        expect=[STOP],
+        note="inputevents does not follow an infusion into the next department, so its ICU record ends here",
     ),
 ]
 
@@ -255,12 +308,11 @@ DURATIONS = [
 SATURATIONS = [
     case(concept, event, item, unit="%", value=value, expect=expect, note=note)
     for concept, event, item, value, expect, note in [
-        ("oxygen_saturation", "CHART", 220277, 100, [{"numeric_value": 100}], "100% is the largest saturation"),
-        ("oxygen_saturation", "CHART", 220277, 101, NOTHING, "a saturation above 100% is impossible"),
-        ("oxygen_saturation", "CHART", 220277, -1, NOTHING, "a negative saturation is impossible"),
+        ("oxygen_saturation", "CHART", 220277, 101, [{"numeric_value": 101}], "no range filtering"),
+        ("oxygen_saturation", "CHART", 220277, -1, [{"numeric_value": -1}], "no range filtering"),
         ("oxygen_saturation", "CHART", 220277, None, NOTHING, "a saturation needs a number (mimic-code)"),
-        ("arterial_oxygen_saturation", "CHART", 220227, 101, NOTHING, "a saturation above 100% is impossible"),
-        ("arterial_oxygen_saturation", "LAB", 50817, 101, NOTHING, "mimic-code keeps blood-gas SO2 up to 100%"),
+        ("arterial_oxygen_saturation", "CHART", 220227, 101, [{"numeric_value": 101}], "no range filtering"),
+        ("arterial_oxygen_saturation", "LAB", 50817, 101, [{"numeric_value": 101}], "no range filtering"),
     ]
 ]
 
@@ -381,10 +433,114 @@ SEX = [
     for gender, sex in [("F", "Female"), ("M", "Male")]
 ]
 
+PAIRED: Final = frozenset({"ectopy_type", "ectopy_frequency"})
+"""Concepts that keep the source code, so that a type and a frequency charted together can be paired."""
+
+
+def leveled(concept: str, item: int, text: str, level: str | None, *, note: str) -> Case:
+    """A behaviour case for a charted label that the concept classifies into ``level`` (None: no event)."""
+    if level is None:
+        return case(concept, "CHART", item, text=text, expect=NOTHING, note=note)
+    row = {"code": f"{concept}//{level}", "text_value": text}
+    if concept in PAIRED:
+        row["source_code"] = code("CHART", item)
+    return case(concept, "CHART", item, text=text, expect=[row], note=note)
+
+
+# Rhythm labels of the MIMIC-IV demo, and labels in the same "<abbreviation> (<name>)" format for
+# rhythms the demo does not chart. Each label must land in exactly one level of the concept.
+HEART_RHYTHM = [
+    leveled("heart_rhythm", 220048, text, level, note=note)
+    for text, level, note in [
+        ("SR (Sinus Rhythm)", "sinus_rhythm", "sinus rhythm"),
+        ("SA (Sinus Arrhythmia)", "sinus_rhythm", "sinus arrhythmia is a normal variant of sinus rhythm"),
+        ("ST (Sinus Tachycardia)", "sinus_tachycardia", "sinus tachycardia"),
+        ("SB (Sinus Bradycardia)", "sinus_bradycardia", "sinus bradycardia"),
+        ("AF (Atrial Fibrillation)", "atrial_fibrillation", "atrial fibrillation"),
+        ("A Flut (Atrial Flutter)", "atrial_flutter", "atrial flutter is not fibrillation"),
+        ("SVT (Supra Ventricular Tachycardia)", "supraventricular_tachycardia", "not a sinus tachycardia"),
+        ("PAT (Paroxysmal Atrial Tachycardia)", "supraventricular_tachycardia", "an atrial tachycardia"),
+        ("JR (Junctional Rhythm)", "junctional", "a junctional rhythm"),
+        ("1st AV (First degree AV Block)", "first_degree_av_block", "first-degree AV block"),
+        ("3rd AV (Complete Heart Block)", "third_degree_av_block", "complete heart block"),
+        ("A Paced", "paced", "atrial pacing is not atrial flutter or fibrillation"),
+        ("AV Paced", "paced", "dual-chamber pacing"),
+        ("VT (Ventricular Tachycardia)", "ventricular_tachycardia", "ventricular tachycardia"),
+        ("VF (Ventricular Fibrillation)", "ventricular_fibrillation", "ventricular fibrillation"),
+        ("Asystole", "asystole", "asystole has no abbreviation"),
+        ("LBBB (Left Bundle Branch Block)", "other", "a label outside the groups is kept as other"),
+    ]
+]
+
+# Ectopy labels of the MIMIC-IV demo; mimic-code's rhythm.sql charts a first and a second type and frequency.
+ECTOPY = [
+    leveled("ectopy_type", item, text, level, note=note)
+    for item, text, level, note in [
+        (224650, "None", "none", "an assessment that found no ectopy"),
+        (224650, "PVC's", "ventricular", "premature ventricular contractions"),
+        (224650, "Vent. Bigeminy", "ventricular", "ventricular bigeminy"),
+        (224650, "PAC's", "atrial", "premature atrial contractions"),
+        (224650, "Atrial Bigeminy", "atrial", "atrial bigeminy"),
+        (224650, "Nod/Junc Escape", "junctional", "junctional escape beats"),
+        (224650, "Nodal Bigeminy", "junctional", "nodal bigeminy is junctional, not atrial or ventricular"),
+        (224650, "Fusion Beats", "other", "a label outside the groups is kept as other"),
+        (226479, "PAC's", "atrial", "a second type keeps its own source code"),
+        (226479, "None", None, "no second type is no assessment of the first"),
+    ]
+] + [
+    leveled("ectopy_frequency", item, text, level, note=note)
+    for item, text, level, note in [
+        (224651, "None", "none", "no ectopy"),
+        (224651, "Rare", "rare", "rare ectopy"),
+        (224651, "Occasional", "occasional", "occasional ectopy"),
+        (224651, "Frequent", "frequent", "frequent ectopy"),
+        (224651, "Runs Vtach", "runs", "runs of ventricular tachycardia"),
+        (226480, "Occasional", "occasional", "a second frequency keeps its own source code"),
+        (226480, "None", None, "no second frequency belongs to no second type"),
+    ]
+]
+
+
+def admitted_as(race: str | None, level: str | None, *, note: str) -> Case:
+    """A behaviour case for an admission recording ``race`` (None: no race recorded)."""
+    return Case(
+        concept="patient_race",
+        table="admissions",
+        event="ETHNICITY",
+        code="ETHNICITY" if race is None else f"ETHNICITY//{race}",
+        expect=NOTHING if level is None else [{"code": f"patient_race//{level}", "text_value": race}],
+        note=note,
+    )
+
+
+# Values of admissions.race in MIMIC-IV, grouped as the mapping's header states.
+RACE = [
+    admitted_as(race, level, note=note)
+    for race, level, note in [
+        ("WHITE", "white", "white"),
+        ("WHITE - BRAZILIAN", "white", "a subgroup is grouped by its leading category"),
+        ("PORTUGUESE", "white", "Portuguese is white"),
+        ("BLACK/CAPE VERDEAN", "black", "black or African American"),
+        ("HISPANIC/LATINO - CUBAN", "hispanic", "Hispanic or Latino, whatever the origin"),
+        ("HISPANIC OR LATINO", "hispanic", "Hispanic or Latino"),
+        ("SOUTH AMERICAN", "hispanic", "South American is Hispanic or Latino"),
+        ("ASIAN - CHINESE", "asian", "Asian"),
+        ("AMERICAN INDIAN/ALASKA NATIVE", "american_indian", "American Indian or Alaska Native"),
+        ("NATIVE HAWAIIAN OR OTHER PACIFIC ISLANDER", "pacific_islander", "Native Hawaiian or Pacific Islander"),
+        ("MULTIPLE RACE/ETHNICITY", "multiple", "more than one race"),
+        ("OTHER", "other", "a race outside the groups"),
+        ("UNKNOWN", None, "an unknown race is no event"),
+        ("UNABLE TO OBTAIN", None, "a race that was not obtained is no event"),
+        ("PATIENT DECLINED TO ANSWER", None, "a declined answer is no event"),
+        (None, None, "an admission without a race is coded by the event name alone"),
+    ]
+]
+
 CASES = [
     *CONVERSIONS,
     *FIO2,
     *RATES,
+    *INFUSIONS,
     *DURATIONS,
     *SATURATIONS,
     *ANTIBIOTICS,
@@ -392,6 +548,9 @@ CASES = [
     *AIRWAYS,
     *VENTILATION,
     *SEX,
+    *HEART_RHYTHM,
+    *ECTOPY,
+    *RACE,
 ]
 
 
@@ -505,6 +664,26 @@ def test_death_is_the_in_hospital_death_time_else_the_end_of_the_date_of_death(t
         patients["GENDER"],
         [{"subject_id": 1, "code": "GENDER//F"}, {"subject_id": 2, "code": "GENDER//M"}, {"subject_id": 3}],
     )
+
+
+def test_the_earliest_of_several_in_hospital_death_times_is_the_death(tmp_path: Path) -> None:
+    """A subject can have a deathtime on more than one admission; the earliest counts, whatever the file's row order."""
+    patients = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="patients",
+        rows=[{"subject_id": 1, "gender": "F", "anchor_age": 50, "anchor_year": 2150, "dod": "2152-05-01"}],
+        joins={
+            "hosp/admissions.csv.gz": [
+                # The later deathtime comes first in the file.
+                {"subject_id": 1, "deathtime": "2152-05-01 08:00:00"},
+                {"subject_id": 1, "deathtime": "2152-03-04 15:30:00"},
+            ]
+        },
+    )
+
+    assert_rows(patients["MEDS_DEATH"], [{"subject_id": 1, "time": datetime(2152, 3, 4, 15, 30)}])
 
 
 def test_birth_is_anchor_age_years_before_the_anchor_year(tmp_path: Path) -> None:
@@ -774,6 +953,38 @@ def test_infusion_segments_last_from_start_to_end_and_are_known_once_stored_and_
     )
 
 
+@pytest.mark.parametrize(
+    ("table", "item", "events"),
+    [
+        ("inputevents", 221906, ["INFUSION_START", "INFUSION_END", "SUBJECT_WEIGHT_AT_INFUSION"]),
+        ("procedureevents", 225794, ["PROCEDURE_START", "PROCEDURE_END"]),
+    ],
+)
+def test_rewritten_rows_are_dropped_for_every_event(tmp_path: Path, table: str, item: int, events: list[str]) -> None:
+    """A Rewritten row was entered in error and replaced, so no concept may see it, as in MIMIC-III.
+
+    mimic-code drops them from MIMIC-III ("'Rewritten' orders are not delivered to the patient").
+    """
+    extracted = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table=table,
+        rows=[
+            {"subject_id": 1, "stay_id": STAY_ID, "itemid": item, "orderid": order, "statusdescription": status,
+             "starttime": "2150-01-01 10:00:00", "endtime": "2150-01-01 11:00:00",
+             "storetime": "2150-01-01 10:05:00", **({"patientweight": 80.0} if table == "inputevents" else {})}
+            for order, status in [(1, "Rewritten"), (2, "FinishedRunning"), (3, None)]
+        ],
+        joins=dictionary(D_ITEMS, item),
+    )  # fmt: skip
+    for event in events:
+        orders = extracted[event]["orderid"].to_list()
+        assert 1 not in orders, f"{table}/{event} keeps a Rewritten row"
+        if event != "SUBJECT_WEIGHT_AT_INFUSION":  # which keeps one weight per subject and time
+            assert sorted(orders) == [2, 3], event
+
+
 def test_one_weight_per_infusion_start_time_the_earliest_charted(tmp_path: Path) -> None:
     """Simultaneous infusion starts carry their own weights; the weight charted first is kept (header comment)."""
     events = extract_native(
@@ -826,6 +1037,115 @@ def test_hcpcs_codes_are_dated_at_the_end_of_their_date_and_known_at_discharge(t
 
     assert_rows(hcpcs, [{"code": "HCPCS//93454//Coronary angiography", "available_time": at(4 * 24 + 12)}])
     assert_end_of_day(hcpcs["time"][0], date(2150, 1, 2), context="HCPCS chart date")
+    # The row's own short description is kept, as d_hcpcs lacks the long description of many codes.
+    assert hcpcs["short_description"].to_list() == ["Cardiovascular"]
+
+
+PROCEDURE_TITLE: Final = "Extracorporeal circulation auxiliary to open heart surgery"
+PROCEDURE_CODE: Final = f"PROCEDURE//ICD//9//3961//{PROCEDURE_TITLE}"
+
+
+def extract_procedure(tmp_path: Path, *, chartdate: str, dischtime: str | None) -> pl.DataFrame:
+    """Extract one ICD procedure of admission 100 through the shipped ``procedures_icd`` config.
+
+    Args:
+        tmp_path: Directory for the native source files and the extraction project
+        chartdate: The procedure's ``chartdate`` as the release writes it (``YYYY-MM-DD``)
+        dischtime: The ``dischtime`` of admission 100, or None when ``admissions`` has no row
+            for it (it then holds only another admission, so the join still has a file to read)
+
+    Returns:
+        The extracted ``PROCEDURE`` events
+    """
+    admission = (
+        {"hadm_id": 100, "dischtime": dischtime} if dischtime else {"hadm_id": 999, "dischtime": "2150-01-01 00:00:00"}
+    )
+    return extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="procedures_icd",
+        rows=[
+            {
+                "subject_id": 1,
+                "hadm_id": 100,
+                "seq_num": 1,
+                "chartdate": chartdate,
+                "icd_code": "3961",
+                "icd_version": 9,
+            }
+        ],
+        joins={
+            "hosp/d_icd_procedures.csv.gz": [{"icd_code": "3961", "icd_version": 9, "long_title": PROCEDURE_TITLE}],
+            "hosp/admissions.csv.gz": [admission],
+        },
+    )["PROCEDURE"]
+
+
+def test_a_procedure_charted_before_the_discharge_date_is_dated_at_the_end_of_its_chart_date(tmp_path: Path) -> None:
+    """ICD procedures have a chart date only and are billing codes of the admission, known at discharge."""
+    procedures = extract_procedure(tmp_path, chartdate="2150-01-02", dischtime="2150-01-05 12:00:00")
+
+    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "available_time": datetime(2150, 1, 5, 12)}])
+    assert_end_of_day(procedures["time"][0], date(2150, 1, 2), context="procedure chart date")
+
+
+def test_a_procedure_charted_on_the_discharge_date_is_dated_at_discharge(tmp_path: Path) -> None:
+    """The end of the discharge day lies after the discharge, by which the admission's procedures have been done."""
+    procedures = extract_procedure(tmp_path, chartdate="2151-03-01", dischtime="2151-03-01 09:30:00")
+
+    discharge = datetime(2151, 3, 1, 9, 30)
+    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}])
+
+
+def test_a_procedure_charted_after_the_discharge_date_is_dated_at_discharge(tmp_path: Path) -> None:
+    """A chart date after the discharge still belongs to a procedure of the admission, so it moves to an earlier date."""
+    procedures = extract_procedure(tmp_path, chartdate="2152-06-03", dischtime="2152-06-02 18:00:00")
+
+    discharge = datetime(2152, 6, 2, 18)
+    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}])
+
+
+def test_a_procedure_without_an_admission_is_dated_at_the_end_of_its_chart_date(tmp_path: Path) -> None:
+    """Without a discharge time there is nothing to cap the end of the chart date at, nor a time it is known."""
+    procedures = extract_procedure(tmp_path, chartdate="2153-02-10", dischtime=None)
+
+    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "available_time": None}])
+    assert_end_of_day(procedures["time"][0], date(2153, 2, 10), context="procedure without an admission")
+
+
+def test_omr_records_are_dated_and_known_at_the_end_of_their_chart_date(tmp_path: Path) -> None:
+    """OMR records carry a chart date only, so both their time and their availability are the end of that day."""
+    omr = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="omr",
+        rows=[
+            {
+                "subject_id": 1,
+                "chartdate": "2150-01-02",
+                "seq_num": 1,
+                "result_name": "Weight (Lbs)",
+                "result_value": "135",
+            },
+            {
+                "subject_id": 1,
+                "chartdate": "2150-01-02",
+                "seq_num": 1,
+                "result_name": "Blood Pressure",
+                "result_value": "120/80",
+            },
+        ],
+    )["OMR"]
+
+    assert_rows(
+        omr,
+        [{"code": "OMR//Weight (Lbs)", "text_value": "135"}, {"code": "OMR//Blood Pressure", "text_value": "120/80"}],
+    )
+    for row in omr.to_dicts():
+        assert_end_of_day(row["time"], date(2150, 1, 2), context=f"OMR {row['code']} time")
+        assert_end_of_day(row["available_time"], date(2150, 1, 2), context=f"OMR {row['code']} available_time")
 
 
 def test_an_open_icu_stay_has_an_admission_but_no_discharge_or_length_of_stay(tmp_path: Path) -> None:
@@ -850,6 +1170,51 @@ def test_an_open_icu_stay_has_an_admission_but_no_discharge_or_length_of_stay(tm
     assert_rows(stays["icu_admission"], [{"stay_id": 10, "time": at(10)}, {"stay_id": 20, "time": at(10)}])
     assert_rows(stays["icu_discharge"], [{"stay_id": 10, "time": at(58)}])
     assert_rows(stays["icu_length_of_stay"], [{"stay_id": 10, "time": at(58), "numeric_value": 2.0}])
+
+
+def test_every_icu_stay_event_carries_the_first_and_last_care_unit_of_the_stay(tmp_path: Path) -> None:
+    """The care units describe the whole ICU stay; a stay can move between units, and a missing unit stays missing."""
+    micu, sicu, cvicu = (
+        "Medical Intensive Care Unit (MICU)",
+        "Surgical Intensive Care Unit (SICU)",
+        "Cardiac Vascular Intensive Care Unit (CVICU)",
+    )
+    stays = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="icustay",
+        rows=[
+            {
+                "subject_id": 1,
+                "stay_id": 10,
+                "intime": "2150-01-01 10:00:00",
+                "outtime": "2150-01-03 10:00:00",
+                "first_careunit": micu,
+                "last_careunit": sicu,
+                "los": 2.0,
+            },
+            {
+                "subject_id": 2,
+                "stay_id": 20,
+                "intime": "2150-01-01 10:00:00",
+                "outtime": "2150-01-02 10:00:00",
+                "first_careunit": cvicu,
+                "last_careunit": None,
+                "los": 1.0,
+            },
+        ],
+    )
+
+    for event in ("icu_admission", "icu_discharge", "icu_length_of_stay"):
+        assert_rows(
+            stays[event],
+            [
+                {"stay_id": 10, "first_careunit": micu, "last_careunit": sicu},
+                {"stay_id": 20, "first_careunit": cvicu, "last_careunit": None},
+            ],
+            context=event,
+        )
 
 
 def test_diagnoses_are_dated_at_discharge_and_titled_by_their_icd_version(tmp_path: Path) -> None:
@@ -889,18 +1254,6 @@ def test_diagnoses_are_dated_at_discharge_and_titled_by_their_icd_version(tmp_pa
 
 # --- Concept pipeline -----------------------------------------------------------------------------
 
-# Stands in for the expensive shipped sofa chain: SOFA scores straight from synthetic rows.
-SOFA_STUB: Final = """\
-type: simple
-mappings:
-  - pattern:
-      table: assessments
-      event: SOFA
-      code: SOFA
-    columns:
-      numeric_value: col(numeric_value)
-"""
-
 
 def test_suspected_infection_pairs_prescription_starts_and_infusions_with_cultures(tmp_path: Path) -> None:
     """Shipped mappings carry prescriptions, infusions and specimens into suspected infection and Sepsis-3.
@@ -917,8 +1270,8 @@ def test_suspected_infection_pairs_prescription_starts_and_infusions_with_cultur
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["antibiotics", "body_fluid_sampling", "suspected_infection", "sofa", "sepsis3"],
-        mapping_overrides={"sofa": SOFA_STUB},
+        concepts=["antibiotics", "body_fluid_sampling", "suspected_infection", *SOFA_COMPONENTS, "sepsis3"],
+        mapping_overrides=sofa_component_stubs(),
         sources={
             "prescriptions/MEDICATION_ORDER": [
                 {"subject_id": 1, "time": at(0), "prescribed_start": at(40), "route": "IV", **order},
@@ -957,3 +1310,70 @@ def test_suspected_infection_pairs_prescription_starts_and_infusions_with_cultur
         context="suspected_infection",
     )
     assert_rows(outputs["sepsis3"], [{"subject_id": 1, "time": at(45)}], context="sepsis3")
+
+
+def test_infusion_rates_take_patient_weight_and_apply_limits(tmp_path: Path) -> None:
+    """MetaVision segments through vasopressor_infusion, patient_weight and the rate concepts.
+
+    The rate concepts' units and limits are their YAML's (ricu's norepinephrine limit of 3 mcg/kg/min);
+    the weight rules are InfusionRateTransformer's: the latest patient_weight at or before the
+    rate, a charted admission or daily weight. The weight entered with the infusion is not a
+    patient_weight, and a weight charted later is never used.
+    """
+    start = {"stay_id": STAY_ID, "available_time": at(0)}
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["vasopressor_infusion", "patient_weight", "norepinephrine_rate", "phenylephrine_rate", "vasopressin_rate"],
+        sources={
+            "inputevents/INFUSION_START": [
+                {**start, "subject_id": 1, "time": at(0), "code": code("INFUSION_START", 221906), "linkorderid": 1,
+                 "orderid": 1, "originalrate": 0.2, "rateuom": "mcg/kg/min", "patientweight": 80.0},
+                # 150 mcg/kg/min: above the limit, so the event keeps no value.
+                {**start, "subject_id": 1, "time": at(1), "code": code("INFUSION_START", 221906), "linkorderid": 1,
+                 "orderid": 2, "originalrate": 0.15, "rateuom": "mg/kg/min", "patientweight": 80.0},
+                {**start, "subject_id": 1, "time": at(0), "code": code("INFUSION_START", 221749), "linkorderid": 3,
+                 "orderid": 3, "originalrate": 40.0, "rateuom": "mcg/min", "patientweight": 50.0},
+                {**start, "subject_id": 2, "time": at(0), "code": code("INFUSION_START", 221749), "linkorderid": 4,
+                 "orderid": 4, "originalrate": 40.0, "rateuom": "mcg/min"},
+                {**start, "subject_id": 1, "time": at(0), "code": code("INFUSION_START", 222315), "linkorderid": 5,
+                 "orderid": 5, "originalrate": 2.4, "rateuom": "units/hour", "patientweight": 80.0},
+            ],
+            "inputevents/INFUSION_END": [
+                {"subject_id": 1, "time": at(1), "code": code("INFUSION_END", 221906), "stay_id": STAY_ID,
+                 "linkorderid": 1, "orderid": 1, "text_value": "ChangeDose/Rate"},
+                {"subject_id": 1, "time": at(2), "code": code("INFUSION_END", 221906), "stay_id": STAY_ID,
+                 "linkorderid": 1, "orderid": 2, "text_value": "Stopped"},
+            ],
+            "chartevents/CHART": [
+                {"subject_id": 1, "time": at(0), "code": code("CHART", 224639), "numeric_value": 80.0},
+                {"subject_id": 2, "time": at(2), "code": code("CHART", 226512), "numeric_value": 50.0},
+            ],
+        },
+    )  # fmt: skip
+
+    linked = {"stream_id": "inputevents:1", "stay_id": str(STAY_ID)}
+    assert_rows(
+        outputs["norepinephrine_rate"],
+        [
+            {"time": at(0), "numeric_value": 0.2, **linked},
+            {"time": at(1), "numeric_value": None, **linked},
+            {"time": at(2), "numeric_value": 0, "text_value": "Stopped", **linked},
+        ],
+        context="norepinephrine_rate",
+    )
+    assert_rows(
+        outputs["phenylephrine_rate"],
+        [
+            # 40 mcg/min with the charted daily weight of 80 kg, not the 50 kg entered with the infusion.
+            {"subject_id": 1, "numeric_value": 0.5, "available_time": at(0)},
+            # Subject 2's only weight is charted later: its rate cannot be converted.
+        ],
+        context="phenylephrine_rate",
+    )
+    assert_rows(
+        outputs["vasopressin_rate"],
+        [{"numeric_value": 0.04, "code": "vasopressin_rate//units/min"}],
+        context="vasopressin_rate",
+    )

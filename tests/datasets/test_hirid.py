@@ -19,6 +19,9 @@ variable ID and copy its value, so a test of them would only restate the YAML.
   urine output from the charted running total (complex, ricu's ``hirid_urine``), each run
   through a real concept step (`run_concepts`).
 
+- Concept pipeline: native pharma records through the rate each record states until the next
+  one to a vasopressor rate concept, with weights from ``patient_weight``.
+
 No HiRID data or variable reference is available to check codes against: variable names are a
 placeholder, and the units in codes are the SI units that ricu's conversions to the
 concept units imply, spelled in ASCII; neither claims the reference table's spelling.
@@ -408,3 +411,92 @@ def test_urine_output_is_the_increase_of_the_charted_running_total_per_patient(t
         [{"numeric_value": total} for _, _, total in totals],
         context="urine_output_cumulative",
     )
+def test_each_record_states_the_rate_until_the_next_record_of_its_infusion(tmp_path: Path) -> None:
+    """Native pharma records through vasopressor_infusion and norepinephrine_rate.
+
+    Aggregates of HiRID 1.1.1 show that a record's ``givendose`` is the dose given since the
+    previous record of its infusion: it equals the rise of ``cumulativedose``, start records carry
+    no dose and stop records the last interval's dose. ``recordstatus`` is a bit field (2
+    invalidated, 4 start, 8 record, 32 not administered, 256 stop, 512 report). So a record states
+    the rate from its time on, the next record's dose over the time until it, and a stop states 0
+    at its own time, never sharing it with a rate. Where the next record gives no rate, the rate is
+    unknown (null), which ends the rate before it. Single-dose items (status 780) are no infusions.
+    """
+    start = datetime(2024, 1, 1)
+
+    def at(minutes: int) -> datetime:
+        return start + timedelta(minutes=minutes)
+
+    rows = [
+        {"patientid": 1, "pharmaid": pharmaid, "infusionid": infusion, "givenat": at(m),
+         "enteredentryat": at(m + 2), "givendose": dose, "doseunit": "µg", "recordstatus": status}
+        for pharmaid, infusion, m, dose, status in [
+            (1000656, 9, 0, 0, 524),  # start: 80 µg until minute 10, 8 µg/min
+            (1000656, 9, 10, 80, 8),  # 160 µg until minute 20, 16 µg/min
+            (1000656, 9, 20, 160, 520),  # 80 µg until the stop, 8 µg/min
+            (1000656, 9, 30, 80, 776),  # stop
+            (1000656, 9, 35, 50, 8),  # charted after the stop: unknown up to the restart
+            (1000656, 9, 40, 0, 524),  # restart: 40 µg until minute 50, 4 µg/min
+            (1000656, 9, 50, 40, 8),  # unknown: no rate read from a record not administered
+            (1000656, 9, 60, 0, 544),  # not administered: states nothing
+            (1000656, 9, 70, 80, 8),  # unknown: no rate read from an invalidated record
+            (1000656, 9, 75, 999, 522),  # invalidated: states nothing
+            (1000656, 9, 80, 80, 8),  # 40 µg until the stop, 4 µg/min
+            (1000656, 9, 90, 40, 776),  # stop
+            (1000656, 9, 100, 50, 8),  # the last record: unknown from then on
+            (1000658, 10, 45, 10, 780),  # a norepinephrine bolus
+            (71, 11, 45, 1000, 780),  # a 1 mg epinephrine dose
+        ]
+    ]  # fmt: skip
+    extracted = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="pharma",
+        rows=rows,
+        joins={
+            REFERENCE: [
+                {"Source Table": "Pharma", "ID": pharmaid, "Variable Name": VARIABLE}
+                for pharmaid in (1000656, 1000658, 71)
+            ]
+        },
+    )
+    # Extraction keeps the records as they are; the rates are read in the mapping.
+    assert set(extracted) == {"PHARMA"}
+    assert extracted["PHARMA"].height == len(rows)
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["vasopressor_infusion", "patient_weight", "norepinephrine_rate"],
+        sources={
+            "pharma/PHARMA": extracted["PHARMA"],
+            "observations/OBSERVATION": [
+                {"subject_id": 1, "time": start, "code": observation_code(10000400, "kg"), "numeric_value": 80.0}
+            ],
+        },
+    )
+    # The bolus and the 1 mg dose give no events, not even stops.
+    assert outputs["vasopressor_infusion"]["stream_id"].unique().to_list() == ["pharma:9"]
+
+    stream = {"stream_id": "pharma:9"}
+    assert_rows(
+        outputs["norepinephrine_rate"],
+        [
+            # Known when the next record is documented.
+            {"time": at(0), "numeric_value": 0.1, "available_time": at(12), **stream},
+            {"time": at(10), "numeric_value": 0.2, **stream},
+            {"time": at(20), "numeric_value": 0.1, "available_time": at(32), **stream},
+            {"time": at(30), "numeric_value": 0, "available_time": at(32), **stream},
+            # Unknown as soon as its own record is documented.
+            {"time": at(35), "numeric_value": None, "available_time": at(37), **stream},
+            {"time": at(40), "numeric_value": 0.05, **stream},
+            {"time": at(50), "numeric_value": None, **stream},
+            {"time": at(70), "numeric_value": None, **stream},
+            {"time": at(80), "numeric_value": 0.05, **stream},
+            {"time": at(90), "numeric_value": 0, **stream},
+            {"time": at(100), "numeric_value": None, **stream},
+        ],
+        context="norepinephrine_rate",
+    )  # fmt: skip

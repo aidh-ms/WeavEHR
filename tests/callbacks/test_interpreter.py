@@ -1,5 +1,8 @@
 """Tests for the expression DSL interpreter (weavehr.callbacks.interpreter)."""
 
+from collections.abc import Callable
+from datetime import date, datetime
+
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
@@ -159,9 +162,102 @@ class TestCalls:
         with pytest.raises(TypeError, match="Bad arguments"):
             ExprInterpreter().eval("add(1, 2, 3, 4, 5)")
 
-    def test_method_calls_are_rejected(self) -> None:
-        with pytest.raises(ValueError, match="Only simple calls allowed"):
-            ExprInterpreter().eval("col(a).alias('b')")
+    @pytest.mark.parametrize("expr", ["col(a).alias('b')", "label.upper()"])
+    def test_methods_outside_a_namespace_are_rejected(self, expr: str) -> None:
+        with pytest.raises(ValueError, match="Method calls need a Polars namespace"):
+            ExprInterpreter().eval(expr)
+
+
+class TestNamespaceMethods:
+    """``<value>.<namespace>.<method>(...)`` calls the method of a Polars expression namespace."""
+
+    @pytest.fixture
+    def text(self) -> pl.LazyFrame:
+        return pl.LazyFrame(
+            {
+                "sig": ["4 mg @ 0.1 µg/kg/min", " x-ray ", None],
+                "prefix": ["4 mg", "x", "x"],
+                "x": ["4", "-", "-"],  # a column named like the literals below
+                "t": [datetime(2150, 3, 4, 5, 6), datetime(2201, 12, 31, 23, 59), None],
+            }
+        )
+
+    def test_a_string_method_is_the_polars_method(self, text: pl.LazyFrame) -> None:
+        result = evaluate(text, 'sig.str.extract("@ ([0-9.]+) ", 1)')
+        assert result.to_list() == collect(text.select(pl.col("sig").str.extract("@ ([0-9.]+) ", 1)))["sig"].to_list()
+        assert result.to_list() == ["0.1", None, None]
+
+    def test_a_datetime_method_is_the_polars_method(self, text: pl.LazyFrame) -> None:
+        assert evaluate(text, "t.dt.year()").to_list() == [2150, 2201, None]
+
+    def test_methods_chain_left_to_right(self, text: pl.LazyFrame) -> None:
+        assert evaluate(text, 'sig.str.strip_chars().str.contains("^x-ray$")').to_list() == [False, True, None]
+
+    def test_method_calls_nest_in_callbacks_and_operators(self, text: pl.LazyFrame) -> None:
+        dose = 'cast(sig.str.extract("@ ([0-9.]+) ", 1), "float64") * 1000'
+        assert evaluate(text, dose).to_list() == [100.0, None, None]
+        assert evaluate(text, 'replace(sig.str.contains("@"), 1, 0)').to_list() == [1, 0, 0]
+
+    def test_output_names_the_result(self, text: pl.LazyFrame) -> None:
+        out = collect(text.with_columns(parse_expr(text, 'sig.str.extract("@ ([0-9.]+) ", 1, output=dose)')))
+        assert out["dose"].to_list() == ["0.1", None, None]
+        assert out["sig"].to_list() == collect(text)["sig"].to_list()
+
+    def test_without_output_the_result_replaces_the_receiver(self, text: pl.LazyFrame) -> None:
+        # Polars names an expression after its first column, as for every unnamed callback.
+        out = collect(text.with_columns(parse_expr(text, "sig.str.strip_chars()")))
+        assert out["sig"].to_list() == ["4 mg @ 0.1 µg/kg/min", "x-ray", None]
+
+    def test_a_bare_name_argument_is_a_column(self, text: pl.LazyFrame) -> None:
+        assert evaluate(text, "sig.str.starts_with(prefix)").to_list() == [True, False, None]
+
+    @pytest.mark.parametrize(
+        ("expr", "polars"),
+        [
+            ('sig.str.contains("x")', lambda c: c.str.contains("x")),
+            ('sig.str.starts_with("x")', lambda c: c.str.starts_with("x")),
+            ('sig.str.ends_with("x")', lambda c: c.str.ends_with("x")),
+            ('sig.str.replace("x", "y")', lambda c: c.str.replace("x", "y")),
+            ('sig.str.replace_all("x", "y")', lambda c: c.str.replace_all("x", "y")),
+            ('sig.str.strip_chars(" x")', lambda c: c.str.strip_chars(" x")),
+            ('sig.str.strip_prefix("x")', lambda c: c.str.strip_prefix("x")),
+            ('sig.str.extract("(x)", 1)', lambda c: c.str.extract("(x)", 1)),
+            ('sig.str.count_matches("x")', lambda c: c.str.count_matches("x")),
+            ('sig.str.find("x")', lambda c: c.str.find("x")),
+            ('sig.str.split("x")', lambda c: c.str.split("x")),
+            ('sig.str.pad_start(12, "x")', lambda c: c.str.pad_start(12, "x")),
+            ('sig.str.contains_any(["x", "@"])', lambda c: c.str.contains_any(["x", "@"])),
+        ],
+        ids=lambda v: v if isinstance(v, str) else "",
+    )
+    def test_quoted_arguments_are_literals_even_if_a_column_has_that_name(
+        self, text: pl.LazyFrame, expr: str, polars: Callable[[pl.Expr], pl.Expr]
+    ) -> None:
+        # The frame has a column "x"; Polars receives the text "x", never that column.
+        expected = collect(text.select(polars(pl.col("sig")).alias("result")))["result"].to_list()
+        assert evaluate(text, expr).to_list() == expected
+
+    def test_a_literal_receiver(self, text: pl.LazyFrame) -> None:
+        assert evaluate(text, '"2024-01-02".str.to_date("%Y-%m-%d")').to_list() == [date(2024, 1, 2)] * 3
+
+    def test_an_unknown_receiver_column_raises(self, text: pl.LazyFrame) -> None:
+        with pytest.raises(UnknownColumnError, match="'sgi'"):
+            parse_expr(text, "sgi.str.to_uppercase()")
+
+    @pytest.mark.parametrize(
+        ("expr", "error", "message"),
+        [
+            ('sig.str.extrct("(x)")', ValueError, r"Polars has no expression method \.str\.extrct\(\)"),
+            ("sig.str._private()", ValueError, "Polars has no expression method"),
+            ("sig.list.len()", ValueError, "Unsupported namespace 'list'"),
+            ("sig.str.extract()", TypeError, "missing a required argument: 'pattern'"),
+            ('sig.str.contains("x", flags=1)', TypeError, "unexpected keyword argument 'flags'"),
+            ("sig.str.to_uppercase(output=1)", TypeError, "output= takes a column name"),
+        ],
+    )
+    def test_mistakes_fail_when_parsed(self, expr: str, error: type[Exception], message: str) -> None:
+        with pytest.raises(error, match=message):
+            ExprInterpreter().eval(expr)
 
 
 class TestUnsupportedSyntax:

@@ -1,0 +1,24 @@
+# AUMCdb (OMOP CDM 5.4 via AMSTEL) -- the admission weight. AMSTEL writes
+# admissions.weightgroup to measurement, one row per admission at its start,
+# with measurement_source_value "weight" and unit "kg":
+#   3013762 = Body weight Measured   (weightsource Gemeten)
+#   3026600 = Body weight Estimated  (Geschat)
+#   3023166 = Body weight Stated     (Anamnestisch)
+#   3025315 = Body weight            (no source)
+# The value is AMSTEL's midpoint of the weight group (59- = 55 ... 110+ = 115 kg,
+# as in AmsterdamUMCdb's own SOFA code; ricu uses 50 and 120 kg for the open
+# groups). Other body weight items are not read. stay_id is the admission, so
+# the AUMCdb vasopressor rates can join it.
+type: simple
+mappings:
+  - pattern:
+      table: measurement
+      event: MEASUREMENT
+      code: ^(3013762|3023166|3025315|3026600)//weight//kg$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+      extension:
+        stay_id: col(visit_occurrence_id)
+    filters:
+      - drop_na(numeric_value)

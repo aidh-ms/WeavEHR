@@ -1,6 +1,15 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3009094 = Glasgow coma score verbal
-#   3013144 = Glasgow coma score verbal at First encounter
+#   3009094 = Glasgow coma score verbal                     (item 6735)
+#   3013144 = Glasgow coma score verbal at First encounter  (item 13066)
+# GCS items are list items: AMSTEL leaves value_as_number empty and stores the
+# answer as a LOINC value_as_concept_id (the Dutch label is in text_value). The
+# score follows ricu's vgcs labels; both items share these answer concepts:
+#   45877602 = Oriented (Helder en adequaat, Georiënteerd)                     -> 5
+#   45883906 = Confused (Verwarde conversatie, Verwarde taal)                  -> 4
+#   45877601 = Inappropriate words (Onduidelijke woorden, Onjuiste woorden)    -> 3
+#   45883352 = Incomprehensible sounds (Onbegrijpelijke geluiden, Onverstaanbare woorden) -> 2
+#   45877384 = No verbal response (Geen reactie, Geen geluid)                  -> 1
+# 36311192 = Intubated (Geïntubeerd) is no verbal score; it sets gcs_unable.
 type: simple
 mappings:
   - pattern:
@@ -8,5 +17,12 @@ mappings:
       event: MEASUREMENT
       code: "^(3009094|3013144)(//.*)?$"
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: >-
+        replace(value_as_concept_id == 45877602, 5,
+        replace(value_as_concept_id == 45883906, 4,
+        replace(value_as_concept_id == 45877601, 3,
+        replace(value_as_concept_id == 45883352, 2,
+        replace(value_as_concept_id == 45877384, 1, None)))))
       text_value: col(text_value)
+    filters:
+      - drop_na(numeric_value)

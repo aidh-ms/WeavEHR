@@ -1,0 +1,92 @@
+# mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
+# mimic-iv/concepts/measurement/rhythm.sql (Heart Rhythm, 220048).
+# Labels read "<abbreviation> (<name>)", e.g. "SR (Sinus Rhythm)", and are grouped by
+# their abbreviation after trimming spaces. Each charted row is kept with its label;
+# mimic-code joins labels charted at the same time into one string instead.
+type: simple
+mappings:
+  - pattern: &rhythm
+      table: chartevents
+      event: CHART
+      code: ^(?:CHART//)?(?:220048)(?:$|//)
+    level: sinus_rhythm
+    columns: &columns
+      text_value: col(text_value)
+    filters:
+      # sinus arrhythmia is a normal variant of sinus rhythm
+      - str_contains(strip_str(text_value), "(?i)^(SR|SA)( |$)")
+  - pattern: *rhythm
+    level: sinus_tachycardia
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^ST( |$)")
+  - pattern: *rhythm
+    level: sinus_bradycardia
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^SB( |$)")
+  - pattern: *rhythm
+    level: atrial_fibrillation
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^AF( |$)")
+  - pattern: *rhythm
+    level: atrial_flutter
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^A ?Flut")
+  - pattern: *rhythm
+    level: supraventricular_tachycardia
+    columns: *columns
+    filters:
+      # supraventricular, paroxysmal atrial, multifocal atrial and atrial tachycardia
+      - str_contains(strip_str(text_value), "(?i)^(SVT|PAT|MAT|AT)( |$)")
+  - pattern: *rhythm
+    level: junctional
+    columns: *columns
+    filters:
+      # junctional rhythm and junctional tachycardia
+      - str_contains(strip_str(text_value), "(?i)^(JR|JT)( |$)|^junctional")
+  - pattern: *rhythm
+    level: first_degree_av_block
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^1st AV")
+  - pattern: *rhythm
+    level: second_degree_av_block
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^2nd AV")
+  - pattern: *rhythm
+    level: third_degree_av_block
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^3rd AV|complete heart block")
+  - pattern: *rhythm
+    level: paced
+    columns: *columns
+    filters:
+      # atrial, ventricular and dual-chamber pacing
+      - str_contains(strip_str(text_value), "(?i)^(A|V|AV) ?paced")
+  - pattern: *rhythm
+    level: ventricular_tachycardia
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^VT( |$)|torsade")
+  - pattern: *rhythm
+    level: ventricular_fibrillation
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^VF( |$)")
+  - pattern: *rhythm
+    level: asystole
+    columns: *columns
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^asystole")
+  # Every other label, so that no charted rhythm is lost: the union of the patterns above.
+  - pattern: *rhythm
+    level: other
+    columns: *columns
+    filters:
+      - strip_str(text_value) != ""
+      - not str_contains(strip_str(text_value), "(?i)^(SR|SA|ST|SB|AF|SVT|PAT|MAT|AT|JR|JT|VT|VF)( |$)|^A ?Flut|^junctional|^(1st|2nd|3rd) AV|complete heart block|^(A|V|AV) ?paced|torsade|^asystole")

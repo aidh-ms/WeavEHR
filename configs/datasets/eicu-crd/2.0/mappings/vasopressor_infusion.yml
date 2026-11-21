@@ -1,0 +1,37 @@
+# eICU infusiondrug rows in source units; <drug>_rate converts them.
+# See docs/user_guide/vasopressor_events.md.
+#
+# A drugname carries its unit in brackets, e.g. "Norepinephrine (mcg/min)", which the table
+# config extracts as `rateuom`. Each row is a charted rate; a zero means off. eICU records no
+# infusion identifier.
+# Volume rates (ml/hr) and unknown units are dropped by <drug>_rate: no concentration is assumed.
+# Weights come from patient_weight, the admission weight; the weight on infusion rows is not
+# mapped to it, so it is not used.
+# Drug name regexes follow ricu's concept dictionary.
+type: simple
+mappings:
+  - level: norepinephrine
+    pattern: {table: infusiondrug, event: INFUSION, code: '(?i)^norepi.*\([^()]*\)$'}
+    <<: &rate
+      columns:
+        numeric_value: col(numeric_value)
+        extension:
+          rate_unit: col(rateuom)
+          stay_id: col(stay_id)
+      filters:
+        - drop_na(numeric_value)
+  - level: epinephrine
+    pattern: {table: infusiondrug, event: INFUSION, code: '(?i)^epi(?:nephrine| |n).*\([^()]*\)$'}
+    <<: *rate
+  - level: dopamine
+    pattern: {table: infusiondrug, event: INFUSION, code: '(?i)^dopamine.*\([^()]*\)$'}
+    <<: *rate
+  - level: dobutamine
+    pattern: {table: infusiondrug, event: INFUSION, code: '(?i)^dobutamine.*\([^()]*\)$'}
+    <<: *rate
+  - level: phenylephrine
+    pattern: {table: infusiondrug, event: INFUSION, code: '(?i)^phenylephrine.*\([^()]*\)$'}
+    <<: *rate
+  - level: vasopressin
+    pattern: {table: infusiondrug, event: INFUSION, code: '(?i)^vasopressin.*\([^()]*\)$'}
+    <<: *rate

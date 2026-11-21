@@ -160,10 +160,10 @@ class SofaCnsTransformer(SofaComponent):
 class SofaCardiovascularTransformer(SofaComponent):
     """Cardiovascular sub-score from MAP (mmHg) and vasopressor rates (mcg/kg/min).
 
-    MAP uses the latest measurement within ``window`` (default: 1h). Rates
-    are tracked separately by patient, stay and native ``linkorderid``. A
-    zero stops only its matching infusion; simultaneous infusions contribute
-    their maximum rate, not their sum.
+    MAP uses the latest measurement within ``window`` (default: 1h). The rate
+    concepts are state streams: rates are tracked separately by patient, stay and
+    ``stream_id``, and a zero stops only its matching infusion. Simultaneous
+    infusions contribute their maximum rate, not their sum.
 
     A linked infusion with a recorded stop remains known until that stop.
     Otherwise ``pressor_window`` (default: 48h) limits carry-forward from the
@@ -185,7 +185,7 @@ class SofaCardiovascularTransformer(SofaComponent):
             **{
                 name: ActiveState(
                     pressor_window,
-                    id_column="linkorderid",
+                    id_column="stream_id",
                     stop_when=pl.col("numeric_value") == 0,
                     aggregate=pl.Expr.max,
                 )
@@ -306,7 +306,22 @@ class SofaTransformer(WindowedSumTransformer):
     """
 
     def transform(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        self._declare_terms(dependencies)
+        return super().transform(_finite_inputs(dependencies))
+
+    def component_scores(self, dependencies: dict[str, pl.LazyFrame]) -> pl.LazyFrame:
+        """The component scores the total sums, at the times it is evaluated.
+
+        ``subject_id``, ``time`` and a column per component holding its worst
+        score in ``[t - window, t]``, null where it has none (the total counts
+        that as 0). One row per subject and component event timestamp, sorted.
+        """
+        self._declare_terms(dependencies)
+        return self.align(_finite_inputs(dependencies)).select(
+            pl.col("subject_id"), pl.col("time"), *[pl.col(name) for name in self.inputs]
+        )
+
+    def _declare_terms(self, dependencies: dict[str, pl.LazyFrame]) -> None:
         if not self.inputs:
             terms = self._kwargs.get("terms") or list(dependencies)
             self.inputs = {name: RollingMax(self.window, closed="both") for name in terms}
-        return super().transform(_finite_inputs(dependencies))

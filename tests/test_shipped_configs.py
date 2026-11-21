@@ -67,11 +67,21 @@ def effective_table_cases() -> list[Any]:
     return cases
 
 
-def concept_output_schema(concept_reference: str) -> pl.Schema:
-    """Output schema of a concept referenced as ``<name>.<version>`` by a derived mapping."""
+def concept_output_schema(concept_reference: str, dataset: str, version: str) -> pl.Schema:
+    """Output schema of a concept referenced as ``<name>.<version>`` by a derived mapping of a dataset version.
+
+    Besides the concept's own extension columns, a simple mapping writes the extension columns
+    its ``columns.extension`` adds for that dataset version (e.g. a ``stay_id`` to join on).
+    """
     name = concept_reference.split(".", 1)[0]
     (concept_file,) = CONFIG_ROOT.glob(f"concepts/*/{name}.yml")
-    extension_columns = yaml.safe_load(concept_file.read_text()).get("extension_columns") or {}
+    extension_columns = list(yaml.safe_load(concept_file.read_text()).get("extension_columns") or {})
+    dataset_concepts = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS).get_dataset_concepts(
+        dataset, version
+    )
+    for dataset_concept in dataset_concepts:
+        if isinstance(dataset_concept, SimpleDatasetConceptConfig):
+            extension_columns += [column for m in dataset_concept.mappings for column in m.columns.extension]
     return pl.Schema(MEDS_SCHEMA | {column: pl.String() for column in extension_columns})
 
 
@@ -239,7 +249,7 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
                 if table.pattern is not None:
                     return empty_event_input(dataset, version, table.pattern, source)
                 assert table.concept is not None
-                return pl.LazyFrame(schema=concept_output_schema(table.concept))
+                return pl.LazyFrame(schema=concept_output_schema(table.concept, dataset, version))
 
             assert_resolves(lambda: ConceptStep.build_derived_frame(concept, dataset_concept, scan), source)
 
@@ -338,13 +348,15 @@ def test_mimic_versions_inherit_reference_configs() -> None:
 
     # the demo overrides exactly one table: the procedureevents column casing
     assert {name for name in reference if demo[name] != reference[name]} == {"procedureevents"}
-    demo_columns = {c["name"] for c in demo["procedureevents"]["columns"]}
+    demo_table, reference_table = demo["procedureevents"], reference["procedureevents"]
+    assert isinstance(demo_table, dict) and isinstance(reference_table, dict)
+    demo_columns = {c["name"] for c in demo_table["columns"]}
     assert {"ORIGINALAMOUNT", "ORIGINALRATE"} <= demo_columns
-    reference_columns = {c["name"] for c in reference["procedureevents"]["columns"]}
+    reference_columns = {c["name"] for c in reference_table["columns"]}
     assert {"originalamount", "originalrate"} <= reference_columns
     # everything but the columns is inherited
-    assert demo["procedureevents"]["events"] == reference["procedureevents"]["events"]
-    assert demo["procedureevents"]["join"] == reference["procedureevents"]["join"]
+    assert demo_table["events"] == reference_table["events"]
+    assert demo_table["join"] == reference_table["join"]
 
     # identity comes from the version dir, not from where the files live
     labevents = load_effective_table(CONFIG_ROOT / "datasets" / "mimic-iv" / "3.1" / "tables", "labevents")
@@ -357,13 +369,33 @@ def test_mimic_versions_inherit_reference_configs() -> None:
     assert demo_labevents.version == "2.2"
 
 
+def test_mimic_ed_demo_inherits_reference_configs() -> None:
+    """The MIMIC-IV-ED demo must inherit the mimic-iv-ed 2.2 reference configs unchanged.
+
+    The demo ships all six ED tables with the same schema and the same ``ed/`` file
+    names as the full v2.2 release, so it has no table overrides: any override would
+    make demo and full-release extraction differ. Identity still comes from the demo's
+    own version dir.
+    """
+    reference = resolve_effective_configs(CONFIG_ROOT / "datasets" / "mimic-iv-ed" / "2.2" / "tables")
+    demo = resolve_effective_configs(CONFIG_ROOT / "datasets" / "mimic-iv-ed-demo" / "2.2" / "tables")
+    assert set(reference) == {"edstays", "diagnosis", "medrecon", "pyxis", "triage", "vitalsign"}
+
+    assert demo == reference
+
+    triage = load_effective_table(CONFIG_ROOT / "datasets" / "mimic-iv-ed-demo" / "2.2" / "tables", "triage")
+    assert triage.dataset == "mimic-iv-ed-demo"
+    assert triage.version == "2.2"
+    assert triage.identifier == "weavehr.config.table.mimic-iv-ed-demo.2.2.triage"
+
+
 def test_mimic_demo_inherits_concept_mappings() -> None:
     """Concept mappings must resolve for the demo through the marker-only mappings dir."""
     concept = ConceptConfig.load(
         CONFIG_ROOT / "concepts" / "vitals" / "heart_rate.yml",
         dataset_paths=[CONFIG_ROOT / "datasets" / "mimic-iv-demo" / "2.2" / "mappings"],
     )
-    dataset_concept = concept.get_dataset_concept("mimic-iv-demo", "2.2")
+    [dataset_concept] = concept.get_dataset_concepts("mimic-iv-demo", "2.2")
     assert isinstance(dataset_concept, SimpleDatasetConceptConfig)
     assert dataset_concept.version == "2.2"
     assert dataset_concept.mappings
@@ -380,6 +412,60 @@ def test_every_dataset_mapping_has_a_concept_definition() -> None:
         if Path(name).name not in concept_names
     }
     assert not missing, f"dataset mappings without a concept definition: {sorted(missing)}"
+
+
+INFUSION_CONCEPT = CONFIG_ROOT / "concepts" / "medications" / "vasopressor_infusion.yml"
+INFUSION_TRANSFORMER = "weavehr.steps.concept.transformer.infusion.InfusionRateTransformer"
+
+
+@pytest.mark.parametrize("concept_dir", DATASET_CONCEPT_DIRS, ids=relative_id)
+def test_infusion_events_follow_the_state_stream_contract(concept_dir: Path) -> None:
+    """Every mapping of the infusion-event concept feeds one lean state stream.
+
+    It names its drug and the source unit its rate converts from, and adds no extension column
+    beyond the concept's own: whatever a consumer needs is in the value and the shared columns.
+    """
+    concept = ConceptConfig.load(INFUSION_CONCEPT, dataset_paths=[concept_dir])
+    dataset, version = concept_dir.parent.parent.name, concept_dir.parent.name
+    dataset_concepts = concept.get_dataset_concepts(dataset, version)
+    if not dataset_concepts:
+        pytest.skip(f"{dataset} {version} has no vasopressor_infusion mapping")
+    assert all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts)
+    mappings = [m for dc in dataset_concepts if isinstance(dc, SimpleDatasetConceptConfig) for m in dc.mappings]
+    for i, mapping in enumerate(mappings):
+        where = f"{relative_id(concept_dir)} mapping {i} ({mapping.level})"
+        extension = mapping.columns.extension
+        assert mapping.level is not None, f"{where}: needs a drug level"
+        assert extension.get("rate_unit"), f"{where}: a rate needs its source unit"
+        extra = sorted(set(extension) - set(concept.extension_columns))
+        assert not extra, f"{where}: extension columns outside the concept's contract: {extra}"
+
+
+@pytest.mark.parametrize("concept_dir", DATASET_CONCEPT_DIRS, ids=relative_id)
+def test_rate_concepts_convert_their_own_drug_with_the_shared_transformer(concept_dir: Path) -> None:
+    """A rate mapping reads its own drug's infusion events, so no dataset converts units on its own."""
+    dataset, version = concept_dir.parent.parent.name, concept_dir.parent.name
+    infusion = ConceptConfig.load(INFUSION_CONCEPT, dataset_paths=[concept_dir])
+    for drug in infusion.levels:
+        concept = ConceptConfig.load(CONFIG_ROOT / "concepts" / "medications" / f"{drug}_rate.yml", [concept_dir])
+        dataset_concepts = concept.get_dataset_concepts(dataset, version)
+        if not dataset_concepts:
+            continue
+        where = f"{relative_id(concept_dir)}/{drug}_rate"
+        assert len(dataset_concepts) == 1, f"{where}: one conversion per dataset"
+        [mapping] = dataset_concepts
+        assert concept.limits.max is not None, f"{where}: an upper limit catches mislabelled units"
+        assert isinstance(mapping, ComplexDatasetConceptConfig), where
+        assert mapping.concept_transformer == INFUSION_TRANSFORMER, where
+        assert mapping.kwargs.get("drug") == drug, where
+        assert infusion.identifier in mapping.dependencies, where
+        levels = {
+            m.level
+            for dc in infusion.get_dataset_concepts(dataset, version)
+            if isinstance(dc, SimpleDatasetConceptConfig)
+            for m in dc.mappings
+        }
+        assert drug in levels, f"{where}: no {drug} infusion events to read"
 
 
 def test_config_inventory_is_nonempty() -> None:
@@ -632,16 +718,25 @@ def invariant_cases(invariant: Invariant) -> list[Any]:
 
 
 def simple_dataset_concepts(mapping_dir: Path) -> list[SimpleDatasetConceptConfig]:
-    """The effective simple dataset concepts of a dataset version, validated as `ConceptConfig.load` does."""
+    """The effective simple dataset concepts of a dataset version, validated as `ConceptConfig.load` does.
+
+    A concept whose mapping file contains several simple mapping documents is returned as one, holding all
+    their mappings, so the invariants hold across them.
+    """
     adapter = TypeAdapter(DatasetConceptConfigUnion)
     dataset, version = mapping_dir.parent.parent.name, mapping_dir.parent.name
     concepts = []
     for name, data in sorted(resolve_effective_configs(mapping_dir).items()):
-        dataset_concept = adapter.validate_python(
-            {**data, "dataset": dataset, "version": version, "name": Path(name).name}
-        )
-        if isinstance(dataset_concept, SimpleDatasetConceptConfig):
-            concepts.append(dataset_concept)
+        identity = {"dataset": dataset, "version": version, "name": Path(name).name}
+        entries = data if isinstance(data, list) else [data]
+        simple = [
+            dataset_concept
+            for dataset_concept in (adapter.validate_python({**entry, **identity}) for entry in entries)
+            if isinstance(dataset_concept, SimpleDatasetConceptConfig)
+        ]
+        if simple:
+            mappings = [mapping for dataset_concept in simple for mapping in dataset_concept.mappings]
+            concepts.append(simple[0].model_copy(update={"mappings": mappings}))
     return concepts
 
 

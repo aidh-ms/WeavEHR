@@ -37,17 +37,26 @@ unit: bpm
 extension_columns:           # optional extra output columns
   dataset: col("dataset")    # provenance columns added automatically per row
   table: col("table")
+# limits: {min: 0, max: 3}   # optional; only to catch conversion errors, see below
 ```
 
 The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex`, binary markers such as `antibiotics` (values mapped to `1`/`"true"`), dimensionless values such as pH, file paths and free text. `unit: None` is rejected, because YAML reads it as the string `"None"`.
 
 A unitless concept can declare `levels`, the allowed sub-types of its events, e.g. `levels: [invasive, noninvasive]` for `ventilation_start`. A simple or derived mapping sets one with `level`, and its events get the code `<name>//<level>` (e.g. `ventilation_start//invasive`). Events without a level keep the code `<name>`, so matching the prefix `<name>` finds every level. Levels are not supported for concepts with a unit.
 
+A concept can declare `limits`, a `min` and/or a `max`. A value outside them becomes null; the
+event itself is kept. Limits apply to every concept type, and there is no option yet to switch
+them off. **Limits only catch conversion errors**, such as a rate charted in mg where mcg was
+meant, and are set well beyond any clinical value. They do not clean clinical outliers: concepts
+otherwise keep every source value, including implausible ones such as an SpO2 of 101, and leave
+plausibility filtering to the analysis. So far only the vasopressor rates declare limits; see
+[Vasopressor rates](vasopressor_events.md#weights-units-and-limits).
+
 During processing, each row is annotated with `dataset`, `version`, `table`, and `event` columns describing where it came from; `extension_columns` chooses which of these (or any other [expression](expressions.md)) to keep in the output.
 
 ## Concept mappings
 
-A mapping file declares its `type` — `simple`, `derived`, or `complex`.
+A mapping file declares its `type` — `simple`, `derived`, or `complex`. A file may also hold several YAML documents separated by `---`, whose mappings are [combined](#combining-mappings).
 
 ### Simple concepts
 
@@ -72,30 +81,65 @@ mappings:
 - `columns.numeric_value` / `columns.text_value` are expressions evaluated on the matched rows; constants work too (`numeric_value: const(1)` for flag-style concepts).
 - `columns.extension` maps extra output column names to expressions evaluated on the source rows. Use it for dataset-specific metadata, such as an infusion identifier. These expressions override same-named concept and dataset-wide extension expressions. Extension values are written as strings; mappings without a particular extension produce null for that column when their outputs are combined.
 - `level` (optional) is one of the concept's `levels`, written as a literal, not an expression. It applies to every row of the mapping; source values with different levels need separate mappings, each selecting its rows with `pattern.code` or `filters`. A level that the concept doesn't declare skips that dataset's mapping with a warning; the other datasets keep the concept.
+- `callbacks` (optional) compute helper columns, in order, on every matched row before `columns` and `filters`; each names its result with `output=`, and none is written out. Use them for values from other rows, which `filters` would no longer see once an earlier filter has dropped rows, e.g. HiRID's `next_record(numeric_value, time, by=[subject_id, infusion_id, code], output=next_dose)`.
 - `filters` see the mapped timestamps, values and extensions while `code` still contains the source extraction code. After filtering, `code` is replaced with the harmonised concept code (`<name>//<unit>`, `<name>`, or `<name>//<level>`).
 
-A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions.
+A concept may have any number of mappings; their results are concatenated. See the bundled `antibiotics.yml` mappings for a larger real-world example combining prescriptions and infusions. To combine simple mappings with derived or complex ones, place each in its own YAML document in the mapping file (see [Combining mappings](#combining-mappings)).
 
-For example, the MIMIC-IV mappings for the four cardiovascular SOFA pressors
-preserve their source metadata on both infusion starts and retained ends:
+For example, the MIMIC-IV mapping of `vasopressor_infusion` keeps the unit and identifiers of an
+infusion segment start:
 
 ```yaml
-columns:
-  numeric_value: col(originalrate)   # the start mapping; ends still map to zero
-  extension:
-    stay_id: col(stay_id)
-    linkorderid: col(linkorderid)
+- level: norepinephrine
+  pattern: {table: inputevents, event: INFUSION_START, code: '^221906(?:$|//)'}
+  columns:
+    numeric_value: col(originalrate)
+    extension:
+      rate_unit: col(rateuom)
+      stay_id: col(stay_id)
+      stream_id: concat_str("inputevents:", linkorderid)
 ```
 
-The native `linkorderid` links an infusion across rate changes. Retained ends
-map to a zero rate, so no separate `event` column is needed for the rate state.
-Match identifiers within the relevant dataset, patient, stay and drug; an
-identifier is not evidence that the infusion was uninterrupted between records.
+The native `linkorderid` links an infusion across rate changes. Match identifiers within the
+relevant dataset, patient, stay and drug; an identifier is not evidence that the infusion was
+uninterrupted between records. eICU's `infusiondrug` supplies rate observations rather than
+paired start/end records, so its mapping does not invent an infusion identifier. The rate
+concepts convert these events with one shared transformer; see
+[Vasopressor rates](vasopressor_events.md).
 
-The corresponding eICU mappings preserve only `stay_id`. Their
-`infusiondrug` source supplies rate observations rather than paired start/end
-records, so these mappings do not invent an infusion identifier. The cardiovascular
-SOFA consumer applies the alignment and expiry policy described below.
+### State streams
+
+Some concepts describe a state that holds until it changes: an infusion rate, ventilation, oxygen
+therapy. They share one form, so that one consumer, `ActiveState` in
+`steps/concept/transformer/windowed.py`, can rebuild the state of any of them:
+
+- `numeric_value` is the state from the event's time on: a rate, or 1 for "on". 0 means off,
+  whether a documented stop or a charted zero.
+- A null `numeric_value` means the state is unknown from the event's time on, e.g. a HiRID
+  interval whose dose can't be read, or a value nulled by the concept's `limits`. It ends the
+  value before it without saying off; `ActiveState` treats the stream like an expired one. A
+  mapping emits a null only for a state it knows to be unknown, and drops source rows that
+  change no state, such as a CareVue row with only an amount.
+- `stream_id` links the events of one stream (one infusion, one ventilation run), prefixed
+  with the source table; null where the source records none. Without it, a subject's events of
+  one concept form one stream per stay.
+- `stay_id` scopes streams to an ICU stay; `available_time` says when an event was documented.
+
+Nothing else is stored per event, besides the `dataset` and `table` every concept carries. A
+source-unit layer below a stream, such as `vasopressor_infusion`, may add what its conversion
+needs. Whether a value was set or charted follows from the source and is documented with its
+mapping. A value averaged over an interval is dated at the interval's start, with
+`available_time` when the interval's end was documented: dated at its end, an infusion's last
+average would fall on the infusion's stop, and `ActiveState` lets an update win over a stop at
+the same time. Carrying the last value
+forward therefore gives the state, also in tools that read only the core MEDS columns. The
+vasopressor rates follow this form; the ventilation start and end markers do not yet.
+
+AUMCdb's OMOP export has no rate field, so its `vasopressor_infusion` mapping reads
+the dose rate and its unit from the text in `drug_exposure.sig`. Each `drug_exposure`
+row is one rate segment: its start maps to the rate and its end to zero, with
+`drug_exposure_id` as `stream_id` because the export drops the source order ID. See
+the AUMCdb README.
 
 ### Derived concepts
 
@@ -127,7 +171,7 @@ This is how composite scores or ratios (e.g. concepts that combine two measureme
 
 #### Reading extracted events
 
-A table or join can read extracted events instead of a concept: replace `concept` with a `pattern`, written exactly as in a simple mapping. This combines source events without wrapping each one in a concept of its own. For example, the time since birth (in Julian years) at each OMOP visit:
+A table or join can read extracted events instead of a concept: replace `concept` with a `pattern`, written exactly as in a simple mapping. This combines source events without wrapping each one in a concept of its own. For example, the age in completed years at each OMOP visit:
 
 ```yaml
 type: derived
@@ -140,8 +184,10 @@ join:
     both_on: [subject_id]
     how: left
 event:
-  numeric_value: datetime_diff(time_right, time, "years")
+  numeric_value: completed_years(time_right, time)
 ```
+
+`completed_years` counts whole years up to the birthday itself; `datetime_diff(..., "years")` divides by 365.25-day years and can be one year short on or shortly after a birthday. The AUMCdb age mapping (`configs/datasets/aumc/1.5.0/mappings/patient_age.yml`) is built this way.
 
 Each table reads exactly one of `concept` and `pattern`. A `pattern` table holds the matching rows of the extracted event files with all their columns (`subject_id`, `time`, `code`, `numeric_value`, `text_value` and the extension columns of the event), plus `dataset`, `version`, `table` and `event` as simple mapping expressions see them; as for concept tables, `columns` selects the ones to keep. Select the columns that the concept's extension expressions use, such as `dataset` and `table`. `pattern` tables are not dependencies, because extraction finishes before any concept runs. If none of the selected event files was extracted, the derived concept is skipped with a warning, as when an input concept has no output.
 
@@ -172,7 +218,50 @@ class VentilationWindows(BaseConceptTransformer):
 
 `dependencies` holds each concept dependency's output under the concept name (`ventilation_start`) and each `events` input under its own name (`ventilator_mode`). An `events` input is selected by a pattern as in a simple mapping and holds the same columns as a `pattern` table of a derived concept, so a transformer can read source details that no concept carries, such as units or order identifiers. An `events` name must differ from the name of every concept in `concepts`, whether or not that concept has output (compared case-insensitively, like identifiers); otherwise the mapping is invalid and skipped with a warning when it is loaded. Without any selected event file, an `events` input is handled like a dependency without output: transformers with `strict_dependencies` fail, others receive it as absent.
 
+A transformer may declare `extension_columns` of its own, as expressions on its output, so
+that every concept it computes carries them without repeating them in each concept file; the
+concept's own `extension_columns` are added after these. A concept's `limits` apply to complex
+concepts as to the others: values outside them become null.
+
 Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
+
+### Combining mappings
+
+When one mapping cannot express a concept in a dataset, for example because some values are recorded directly and others must be calculated, the mapping file contains several YAML documents separated by `---`. Each document follows the syntax above, including its `type`, and their outputs are combined (a union of rows):
+
+```yaml
+---
+type: simple                      # measured anion gap
+mappings:
+  - pattern:
+      table: labevents
+      event: LAB
+      code: ^(?:LAB//)?(?:50868)(?:$|//)
+    columns:
+      numeric_value: col(numeric_value)
+---
+type: derived                     # calculated from its components
+table:
+  concept: sodium.1.0.0
+  columns: [subject_id, time, numeric_value, dataset, table]
+join:
+  - concept: chloride.1.0.0
+    columns: [subject_id, time, numeric_value]
+    how: inner
+    suffix: _chloride
+  - concept: bicarbonate.1.0.0
+    columns: [subject_id, time, numeric_value]
+    how: inner
+    suffix: _bicarbonate
+event:
+  numeric_value: col(numeric_value) - col(numeric_value_chloride) - col(numeric_value_bicarbonate)
+```
+
+- Each document runs as if it were the dataset's only mapping; their rows are concatenated, without deduplication. A column that only some documents produce is null in the others' rows.
+- The concept waits for the dependencies of all its documents, and dependent concepts see the combined output.
+- Every document must contain a mapping. An empty document, a YAML list, an invalid mapping or an undeclared level skips the dataset's whole mapping, with a warning naming the document (`document 2: ...`).
+- The first `---` is optional. Existing single-document files continue to work unchanged.
+- With [inheritance](versioning.md), multiple documents replace the inherited file as a whole. A single document overriding another single document still deep-merges. Use a standalone `deleted: true` document to remove an inherited file.
 
 ### GCS
 
@@ -208,8 +297,12 @@ MIMIC-IV maps verbal item 223900 to 1 for `No Response-ETT`, including entries
 without a numeric verbal value, and to 0 for other numeric verbal assessments.
 Other null-valued entries produce no flag. `gcs_verbal` keeps the original
 numeric value and text, including verbal 1 or null. MIMIC-IV 3.1 and the 2.2
-demo inherit this mapping. No correction mapping is currently supplied for
-eICU; RASS and ventilation status are not interpreted by `GcsTransformer`.
+demo inherit this mapping. AUMCdb maps the verbal answer "Geïntubeerd" to 1
+and every verbal score to 0; there, `gcs_eye`, `gcs_motor` and `gcs_verbal`
+score the list answers from their OMOP answer concepts, because the OMOP
+export carries no numeric GCS value. No correction mapping is currently
+supplied for eICU; RASS and ventilation status are not interpreted by
+`GcsTransformer`.
 
 Only numeric GCS components or recorded totals generate assessments. Flags
 and expiry alone create no assessment; they take effect at the next numeric
@@ -333,17 +426,25 @@ markers within a stay is 1.0 hours, the 95th percentile is 4.9 hours, and 3.5% o
 20,240 gaps exceed six hours. The MIMIC-IV mappings keep the default, because
 their procedure episodes are linked by `orderid`.
 
+The AUMCdb mappings select ricu's `mech_vent` process items: Beademen and
+Tracheostoma (invasive) and Beademen non-invasief (noninvasive), each record
+with its own start and stop. The markers carry `record_id`, the record's
+`procedure_occurrence_id` or `device_exposure_id`, and the AUMCdb mapping
+sets `ventilation_id_column: record_id` with no fallback expiry, as ricu
+uses these windows as they are. See the AUMCdb README.
+
 ### Cardiovascular SOFA
 
 `sofa_cardiovascular` reassesses at every MAP or pressor input event, including
 recorded stops. It uses the **latest MAP within one hour**, rather than the
 worst MAP in that hour. The `window` mapping argument controls this lookback.
 
-Pressor rates have a separate `pressor_window` timeout. Within each dataset,
-patient, stay and drug, native `linkorderid` values identify independent
-infusions across rate changes. A zero stops only its matching infusion. A
-subsequent positive rate restarts it; a positive rate at the same timestamp as
-a zero takes precedence. Concurrent infusions contribute their **maximum rate**,
+Pressor rates have a separate `pressor_window` timeout. The rate concepts are
+[state streams](#state-streams): within each dataset, patient, stay and drug, their
+`stream_id` values identify independent infusions across rate changes, and a zero
+stops only its matching infusion. A subsequent positive rate restarts it; a positive
+rate at the same timestamp as a zero takes precedence. Concurrent infusions contribute their
+**maximum rate**,
 not their sum, following the overlap aggregation in
 [ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-cncpt.R#L486)
 and [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/score/sofa.sql#L140).
@@ -356,12 +457,12 @@ the latest rate remains current through `last_record_time + pressor_window`,
 inclusive. Each new numeric rate refreshes its own stream's timeout; null rates
 and other drugs' events do not. Without an infusion identifier, observations
 form one stream per patient/stay/drug and always use the timeout, including when
-a later zero is recorded. A stop without identity cannot stop an identified
+a later stop is recorded. A stop without identity cannot stop an identified
 infusion. A newly observed stay prevents rates from the previous stay carrying
 into its assessments; this cannot detect a stay change absent from all inputs.
 
 Timeout makes a rate unknown at the next input event; it does not generate an
-event at the timeout itself. A recorded zero is observed cessation, whereas
+event at the timeout itself. A recorded stop or zero rate is observed, whereas
 expiry is missing information. No component score is emitted when all inputs
 are unknown. With a current normal MAP, an expired pressor can yield a component
 score of zero. Total SOFA still uses each component's worst emitted score over
@@ -374,6 +475,7 @@ distributions**, not validated as clinical cutoffs:
 | --- | --- | --- | --- |
 | MIMIC-IV 2.2 | `1h` | `48h` | Among 1,055 mapped rate segments, the longest was 31.9 h; the longest reconstructed linked start/stop episode was 40.57 h. The fallback rounds above both observed maxima. |
 | eICU-CRD 2.0 | `1h` | `6h` | Among 666 gaps after positive mapped rate observations, the median was 1 h and the 95th percentile was 5.99 h. Thirty-two gaps (4.8%) exceeded 6 h. |
+| AUMCdb 1.5.0 | `1h` | `48h` | Not measured (no AUMCdb data was available). Every rate segment carries its recorded stop, which ends it regardless of the timeout; the MIMIC-IV value only bounds a segment without one. |
 
 The MIMIC analysis used
 [`inputevents.csv.gz` from demo 2.2](https://physionet.org/files/mimic-iv-demo/2.2/icu/inputevents.csv.gz),
@@ -383,7 +485,8 @@ ends (`statusdescription != "ChangeDose/Rate"`), with simultaneous stop/restart
 treated as continuation. There were 247 closed episodes. All linked streams
 had retained terminal stops, so this sample cannot validate missing-stop expiry.
 
-The eICU analysis used
+Both analyses predate the rate concepts' conversion from infusion events, which adds eICU's
+`mcg/min` rows and nulls rates above ricu's limits. The eICU analysis used
 [`infusiondrug.csv.gz` from demo 2.0](https://physionet.org/files/eicu-crd-demo/2.0/infusiondrug.csv.gz),
 restricted to the four current mappings' drug names ending in `(mcg/kg/min)`
 and numeric rates: 736 observations across 38 stays. Gaps were measured between
@@ -401,13 +504,22 @@ validation and assessment on representative data.
 
 `suspected_infection` is the shared output concept. Each dataset's
 `suspected_infection.yml` selects its evidence rule: antibiotic/culture pairing
-for MIMIC-IV, or sustained antibiotic treatment for eICU.
+for MIMIC-IV and AUMCdb, or sustained antibiotic treatment for eICU.
 
 `AntibioticsWithCultureTransformer` pairs antibiotic treatment with body-fluid sampling:
 sampling follows antibiotics within 24 hours, or antibiotics follow sampling
 within 72 hours. The earlier event dates the suspicion. Both boundaries are
 inclusive; neither positive culture results nor a sustained antibiotic course
 are required.
+
+`body_fluid_sampling` can tell cultures taken on suspicion of infection
+(`diagnostic`) from cultures taken by protocol (`screening`, e.g. surveillance
+or research cultures); a mapping that does not tell them apart sets no level.
+`kwargs.sampling_levels` keeps only the cultures with one of the listed levels;
+by default every culture counts, as in ricu. The AUMCdb mapping sets
+`sampling_levels: [diagnostic]`, leaving out its selective digestive
+decontamination (SDD) surveillance, MRSA screening and research cultures; see
+the AUMCdb README.
 
 `sepsis3` assesses **every** suspected-infection window independently. Within
 the inclusive interval from 48 hours before suspicion to 24 hours after it,
@@ -426,6 +538,48 @@ first infection window.
 Pairing, window lengths and the cumulative-minimum baseline follow
 [ricu at c0efac7](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-sep3.R).
 
+`kwargs.rise` sets what the rise is measured on:
+
+- `total` (the transformer's default): the `sofa` total, as in ricu. A component without a score
+  in its 24-hour SOFA window counts 0 in the total, so the total also rises
+  when a component is scored for the first time, or scored again after its
+  score expired. Cardiovascular SOFA 0 at minute 5 and respiratory SOFA 2 at
+  minute 10 are a rise of 2. ricu adds the components per hour, so it counts
+  the same rise when the two scores fall in different hours.
+- `components`: the SOFA components. The mapping lists them instead of `sofa`
+  (by default every dependency but `suspected_infection` and `sofa` is a
+  component; `kwargs.terms` names them instead). Each takes its worst score in
+  `[t - kwargs.sofa_window, t]` (default 24 hours) at the times the total is
+  evaluated. Within each infection window, a component takes its first score
+  in the window at the times before it and keeps its last score where it has
+  none in its SOFA window; a component never scored in the window counts 0.
+  The rise is measured on their sum, so only a change in a scored component
+  raises it, and an expired score cannot hide a rise in another component. A
+  component first scored late in the window at a high value raises nothing,
+  even where the measurement was ordered because the patient got worse.
+
+```yaml
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer
+concepts:
+  - suspected_infection.1.0.0
+  - sofa_respiratory.1.0.0
+  - sofa_coagulation.1.0.0
+  - sofa_liver.1.0.0
+  - sofa_cardiovascular.1.0.0
+  - sofa_cns.1.0.0
+  - sofa_renal.1.0.0
+kwargs:
+  rise: components
+```
+
+The shipped mappings (MIMIC-IV, eICU-CRD, AUMCdb and the demos that inherit
+them) use `components`, which departs from ricu; a mapping with `sofa` and
+`rise: total` reproduces ricu's rule. Use one setting for every dataset that
+is compared. On MIMIC-IV demo 2.2, `components` finds Sepsis-3 in 49 of the
+73 patients with a suspected infection, `total` in 56; the onsets it drops
+come from components scored for the first time.
+
 The MIMIC-IV antibiotic mapping extends ricu's prescription regex with
 ceftriaxone, meropenem and linezolid, which also appear in
 [mimic-code at 303d26c](https://github.com/MIT-LCP/mimic-code/blob/303d26c623dcc9c49cc0f204468d4acc2f063797/mimic-iv/concepts/medication/antibiotic.sql),
@@ -436,6 +590,14 @@ without a recorded route or drug type do not qualify. Drug-name exclusions inspe
 the original prescription code. Prescription markers use the prescribed treatment
 start; infusion markers use the infusion start. MIMIC-IV 3.1 and demo 2.2 inherit
 these mappings.
+
+The AUMCdb antibiotic mapping selects ricu's aumc antibiotic items by their OMOP
+drug concepts, adds the antibacterials of the MIMIC-IV list that ricu lacks for
+AUMCdb (meropenem, imipenem, ceftazidime, clarithromycin, chloramphenicol,
+nitrofurantoin) and, like the MIMIC-IV mapping, excludes eye and skin products.
+Markers use the administration start. Body-fluid sampling is ricu's culture
+orders, dated at their registration. As in ricu, SDD surveillance cultures and the
+intravenous cefotaxime of the SDD regimen count; see the AUMCdb README.
 
 The eICU antibiotic inputs follow the drug selection and binary markers in
 [YAIB-cohorts at 74ac699](https://github.com/rvandewater/YAIB-cohorts/blob/74ac699f5d4117613f9c48bdc4e0852099c42e19/ricu-extensions/configs/medications/concept-dict.json).
@@ -580,6 +742,39 @@ value are skipped. HiRID's `urine_output` is computed this way from
 outputs as cumulative over 12-hour periods), the amount of the first reading
 after a restart is not counted; this follows ricu.
 
+### Heart rhythm and ectopy
+
+`heart_rhythm` records each charted rhythm, grouped into the levels
+`sinus_rhythm` (including sinus arrhythmia), `sinus_tachycardia`,
+`sinus_bradycardia`, `atrial_fibrillation`, `atrial_flutter`,
+`supraventricular_tachycardia`, `junctional`, `first_degree_av_block`,
+`second_degree_av_block`, `third_degree_av_block`, `paced`,
+`ventricular_tachycardia`, `ventricular_fibrillation` and `asystole`. Every
+other label, such as a bundle branch block, is `other`, so no charted rhythm is
+lost. `ectopy_type` groups ectopic beats by origin (`ventricular`, `atrial`,
+`junctional`, `other`), and `ectopy_frequency` records how often they occur
+(`rare`, `occasional`, `frequent`, or `runs` of ventricular tachycardia). Both
+use `none` for an assessment that found no ectopy. Every row keeps the charted
+label in `text_value`.
+
+The MIMIC-IV mappings read Heart Rhythm and the first and second ectopy type
+and frequency fields, which mimic-code's `rhythm.sql` reads too. A second type
+or frequency of "None" means only that there is no second type, so it gives no
+event. Ectopy rows keep `source_code`, the charted field, so a type can be
+paired with the frequency charted alongside it. Unlike mimic-code, labels
+charted at the same time are not joined into one value.
+
+### Race
+
+`patient_race` records race and ethnicity as the hospital recorded them,
+grouped into the levels `white`, `black`, `hispanic`, `asian`,
+`american_indian`, `pacific_islander`, `multiple` and `other`, with the recorded
+value in `text_value`. An unknown, unobtained or declined value gives no event.
+MIMIC-IV records race per hospital admission, at the admission time, so it can
+differ between a patient's admissions. Its subgroups take their leading
+category (`HISPANIC/LATINO - CUBAN` is `hispanic`); `PORTUGUESE` is `white` and
+`SOUTH AMERICAN` is `hispanic`.
+
 ## Output layout
 
 Each concept is written per dataset and dataset version:
@@ -595,5 +790,5 @@ with the standard MEDS columns (`subject_id`, `time`, `code`, `numeric_value`, `
 ## Adding a new concept
 
 1. Define it in `configs/concepts/<category>/<your_concept>.yml` (name, version, and unit if it has one).
-2. For each dataset, find the relevant source codes — `datasets/extraction/metadata/codes.parquet` is your friend — and write a mapping in `configs/datasets/<dataset>/<version>/mappings/<your_concept>.yml`.
+2. For each dataset, find the relevant source codes — `datasets/extraction/metadata/codes.parquet` is your friend — and write a mapping (or several mapping documents separated by `---`) in `configs/datasets/<dataset>/<version>/mappings/<your_concept>.yml`.
 3. Re-run the concept step (with `overwrite: true`, or `includes` limited to your concept while iterating).

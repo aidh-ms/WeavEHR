@@ -1,0 +1,11 @@
+# The kind of ectopic beats charted, grouped by origin; the charted label stays in
+# text_value. `none` is an assessment that found no ectopy. A dataset may chart
+# more than one type at a time; source_code tells the charted fields apart, so a
+# type can be paired with the frequency charted alongside it.
+name: ectopy_type
+version: 1.0.0
+levels: [none, ventricular, atrial, junctional, other]
+extension_columns:
+  dataset: col("dataset")
+  table: col("table")
+  source_code: col("code")

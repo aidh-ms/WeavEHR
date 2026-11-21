@@ -30,6 +30,10 @@ event_defaults:
   extension:
     hadm_id: col(hadm_id)
     stay_id: col(stay_id)
+    # The first and last care unit describe the whole ICU stay, so every event of
+    # the stay carries both as extension columns; the event codes stay unchanged.
+    first_careunit: col(first_careunit)
+    last_careunit: col(last_careunit)
 
 events:
   - name: icu_admission

@@ -1,0 +1,10 @@
+# AUMCdb: vasopressor_infusion//norepinephrine (syringe-pump segments read from drug_exposure.sig) in the
+# concept unit. The transformer is the same for every dataset; see docs/user_guide/vasopressor_events.md.
+# A rate not per kg takes the latest admission weight before it, even from an earlier admission.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.infusion.InfusionRateTransformer
+concepts:
+  - vasopressor_infusion.1.0.0
+  - patient_weight.1.0.0
+kwargs:
+  drug: norepinephrine

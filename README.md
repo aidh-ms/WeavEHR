@@ -39,8 +39,8 @@ flowchart LR
 ```
 
 1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
-2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). Concept dependencies are resolved automatically.
-3. **Sharding step** *(in development)* — re-partitions harmonised data into analysis-ready shards.
+2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). A dataset's mapping file may contain several YAML documents separated by `---`, each defining a mapping of any type; their outputs are combined. Concept dependencies are resolved automatically.
+3. **Sharding step** *(in development)* — re-partitions concept or extraction output into subject-oriented, analysis-ready shards; datasets that share subject IDs can be merged per subject through opt-in subject groups.
 
 Each step reads its inputs and writes its outputs as a self-contained MEDS dataset inside the project, so intermediate results are inspectable and individual steps can be re-run in isolation.
 
@@ -55,6 +55,8 @@ WeavEHR ships with ready-to-use extraction and concept configurations under [`co
 | [MIMIC-III CareVue subset](https://physionet.org/content/mimic3-carevue/1.4/) | 1.4 | inherited from MIMIC-III | inherited |
 | [MIMIC-IV](https://physionet.org/content/mimiciv/3.1/) | 3.1, 2.2 | 19 tables (ICU + hosp) | ~80 concepts |
 | [MIMIC-IV demo](https://physionet.org/content/mimic-iv-demo/2.2/) | 2.2 | inherited from MIMIC-IV via `extends` | inherited |
+| [MIMIC-IV-ED](https://physionet.org/content/mimic-iv-ed/2.2/) | 2.2 | 6 tables | — |
+| [MIMIC-IV-ED demo](https://physionet.org/content/mimic-iv-ed-demo/2.2/) | 2.2 | inherited from MIMIC-IV-ED via `extends` | — |
 | [eICU-CRD](https://physionet.org/content/eicu-crd/2.0/) | 2.0 | 14 tables | in progress |
 | [eICU-CRD demo](https://physionet.org/content/eicu-crd-demo/2.0/) | 2.0 | inherited from eICU-CRD via `extends` | inherited |
 | [NWICU](https://physionet.org/content/nwicu/0.1.0/) | 0.1.0 | 9 tables | in progress |
@@ -248,7 +250,7 @@ post_join_callbacks:
   - add_offset(admission_timestamp, labresultoffset, output=event_timestamp)
 ```
 
-Arithmetic, comparisons, and boolean logic work as ordinary expressions (`col(weight) / (col(height) * col(height))`), and custom callbacks can be registered from Python.
+Arithmetic, comparisons, and boolean logic work as ordinary expressions (`col(weight) / (col(height) * col(height))`), Polars' string and datetime methods are available directly (`text_value.str.to_lowercase()`, `admittime.dt.year()`), and custom callbacks can be registered from Python.
 
 ## Documentation
 

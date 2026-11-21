@@ -1,6 +1,6 @@
 """Golden input/output tests for the built-in callback classes."""
 
-from datetime import datetime
+from datetime import date, datetime
 
 import polars as pl
 import pytest
@@ -23,7 +23,7 @@ from weavehr.callbacks._callbacks.reshape import SplitExplode
 from weavehr.callbacks._callbacks.selector import FirstNotNull, Max, Min
 from weavehr.callbacks._callbacks.shortcuts import Col, Const
 from weavehr.callbacks._callbacks.string import ConcatStr, HashEncode
-from weavehr.callbacks._callbacks.time import AddOffset, DatetimeDiff, SetTime, ToDatetime
+from weavehr.callbacks._callbacks.time import AddOffset, CompletedYears, DatetimeDiff, SetTime, ToDatetime
 from weavehr.callbacks._callbacks.type import Cast
 from weavehr.callbacks.interpreter import parse_expr
 from weavehr.callbacks.proto import AstValue, CallbackProtocol, UnknownColumnError
@@ -324,9 +324,48 @@ class TestTime:
         lf = pl.LazyFrame({"start": [datetime(2024, 1, 1, 12)], "end": [datetime(2024, 1, 1)]})
         assert apply(lf, DatetimeDiff(C("start"), C("end"))) == [-0.5]
 
+    def test_datetime_diff_keeps_fractional_seconds(self) -> None:
+        # A short interval must not become a zero denominator through truncation.
+        lf = pl.LazyFrame({"start": [datetime(2024, 1, 1)], "end": [datetime(2024, 1, 1, 0, 0, 2, 500000)]})
+        assert apply(lf, DatetimeDiff(C("start"), C("end"), unit="minutes")) == [pytest.approx(2.5 / 60)]
+
     def test_datetime_diff_invalid_unit(self) -> None:
         with pytest.raises(ValueError, match="Unsupported unit"):
             DatetimeDiff(C("start"), C("end"), unit="decades")
+
+    @pytest.mark.parametrize(
+        ("start", "end", "expected"),
+        [
+            pytest.param(datetime(1961, 1, 1), datetime(2005, 12, 31), 44, id="the day before the 45th birthday"),
+            pytest.param(datetime(1961, 1, 1), datetime(2006, 1, 1), 45, id="on the birthday at the time of birth"),
+            pytest.param(datetime(1961, 1, 1, 12), datetime(2006, 1, 1, 8), 45, id="birthday before the birth hour"),
+            pytest.param(datetime(1961, 6, 15), datetime(2006, 3, 1), 44, id="a later birthday in the year"),
+            pytest.param(datetime(1961, 6, 15), datetime(2006, 7, 1), 45, id="an earlier birthday in the year"),
+            pytest.param(datetime(2000, 2, 29), datetime(2001, 2, 28), 0, id="29 February: not on 28 February"),
+            pytest.param(datetime(2000, 2, 29), datetime(2001, 3, 1), 1, id="29 February: on 1 March"),
+            pytest.param(datetime(2000, 2, 29), datetime(2004, 2, 29), 4, id="29 February in a leap year"),
+            pytest.param(datetime(2000, 6, 1), datetime(1999, 7, 1), -1, id="end before start"),
+            pytest.param(None, datetime(2006, 1, 1), None, id="no start"),
+        ],
+    )
+    def test_completed_years(self, start: datetime | None, end: datetime, expected: int | None) -> None:
+        lf = pl.LazyFrame({"start": [start], "end": [end]}, schema={"start": pl.Datetime("us"), "end": pl.Datetime})
+        assert apply(lf, CompletedYears(C("start"), C("end"))) == [expected]
+
+    def test_completed_years_counts_a_birthday_that_365_25_day_years_miss(self) -> None:
+        """45 years from 1 January 1961 hold 11 leap days: 16,436 days, a quarter day short of 45 x 365.25."""
+        lf = pl.LazyFrame({"born": [datetime(1961, 1, 1)], "admitted": [datetime(2006, 1, 1)]})
+        assert apply(lf, DatetimeDiff(C("born"), C("admitted"), unit="years")) == [pytest.approx(16436 / 365.25)]
+        out = collect(lf.with_columns(parse_expr(lf, "completed_years(born, admitted, output=age)")))
+        assert out["age"].to_list() == [45]
+
+    def test_completed_years_of_dates_and_zoned_datetimes(self) -> None:
+        """A zoned datetime counts by its local date: 2005-12-31 in UTC, but already 2006-01-01 in Amsterdam."""
+        lf = pl.LazyFrame(
+            {"born": [date(1961, 1, 1)], "admitted": [datetime(2006, 1, 1, 0, 30)]},
+            schema={"born": pl.Date, "admitted": pl.Datetime("us", "Europe/Amsterdam")},
+        )
+        assert apply(lf, CompletedYears(C("born"), C("admitted"))) == [45]
 
     def test_set_time(self) -> None:
         lf = pl.LazyFrame({"dt": [datetime(2024, 5, 6, 1, 2, 3)]})

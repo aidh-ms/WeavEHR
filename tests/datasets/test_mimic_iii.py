@@ -8,6 +8,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
+from tests.datasets.support import assert_rows, run_concepts
 from weavehr.config.registry import load_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
@@ -23,7 +24,7 @@ START = datetime(2140, 1, 1)
 def mapped(name: str, table: str, item: int, value: float | None, text: str | None = None) -> pl.DataFrame:
     concept_file = next(CONFIGS.glob(f"concepts/*/{name}.yml"))
     concept = ConceptConfig.load(concept_file, dataset_paths=[DATASET / "mappings"])
-    config = concept.get_dataset_concept("mimic-iii", "1.4")
+    [config] = concept.get_dataset_concepts("mimic-iii", "1.4")
     assert isinstance(config, SimpleDatasetConceptConfig)
     source = pl.LazyFrame(
         {
@@ -373,20 +374,21 @@ def test_culture_results_do_not_claim_specimen_time_availability(tmp_path: Path)
             assert frame["available_time"].null_count() == 1
 
 
-# Infusions are deferred until CareVue and MetaVision infusions are harmonised without a
-# dataset-specific transformer; cardiovascular SOFA, and so SOFA and Sepsis-3, need them.
+# Rate events are mapped declaratively. Duration/state consumers remain separate work.
 DEFERRED_INFUSIONS = {
     *(
         f"{drug}_{kind}"
         for drug in ["norepinephrine", "epinephrine", "dopamine", "dobutamine"]
-        for kind in ["rate", "duration"]
+        for kind in ["duration"]
     ),
-    "phenylephrine_rate",
-    "vasopressin_rate",
     "sofa_cardiovascular",
     "sofa",
     "sepsis3",
 }
+
+# Mapped for MIMIC-IV first; MIMIC-III still needs CareVue's own rhythm and ectopy items and
+# labels, and the grouping of its ethnicity values.
+NOT_YET_MAPPED = {"heart_rhythm", "ectopy_type", "ectopy_frequency", "patient_race"}
 
 
 def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
@@ -398,4 +400,71 @@ def test_every_iv_coverage_gap_has_an_explicit_reason() -> None:
         "immature_granulocytes",
         "neutrophils_absolute",
         *DEFERRED_INFUSIONS,
+        *NOT_YET_MAPPED,
     }
+
+
+def test_metavision_and_carevue_rates_share_one_contract_and_carevue_takes_the_latest_weight(
+    tmp_path: Path,
+) -> None:
+    """MetaVision settings and CareVue observations through vasopressor_infusion to norepinephrine_rate.
+
+    MetaVision: "Changed" ends a segment, not the infusion (MIMIC-III inputevents_mv docs). CareVue:
+    a "Stopped"/"D/C'd" flag is a stop (0) even with a rate on the row, in the infusion's unit when the
+    row has none; a charted zero is a zero too. CareVue
+    rows carry no weight, so per-minute rates use patient_weight, including "Present Weight (kg)"
+    (3580, mimic-code weight_durations): the latest weight before the rate, even from an earlier
+    admission (README: subjects span admissions).
+    """
+
+    def at(minutes: float) -> datetime:
+        return START + timedelta(minutes=minutes)
+
+    mv = {"subject_id": 1, "stay_id": 7, "linkorderid": 1}
+    cv = {"subject_id": 2, "stay_id": 8, "linkorderid": 11, "code": "INFUSION_RATE//30047//Norepinephrine"}
+    outputs = run_concepts(
+        tmp_path,
+        dataset="mimic-iii",
+        version="1.4",
+        concepts=["vasopressor_infusion", "patient_weight", "norepinephrine_rate"],
+        sources={
+            "inputevents_mv/INFUSION_START": [
+                {**mv, "time": at(0), "code": "INFUSION_START//221906//Norepinephrine", "orderid": 1,
+                 "originalrate": 0.2, "rateuom": "mcg/kg/min", "patientweight": 80.0},
+            ],
+            "inputevents_mv/INFUSION_END": [
+                {**mv, "time": at(10), "code": "INFUSION_END//221906//Norepinephrine", "orderid": 1,
+                 "text_value": "Changed"},
+                {**mv, "time": at(20), "code": "INFUSION_END//221906//Norepinephrine", "orderid": 2,
+                 "text_value": "Stopped"},
+            ],
+            "inputevents_cv/INFUSION_RATE": [
+                {**cv, "time": at(10), "numeric_value": 8.0, "rateuom": "mcgmin"},
+                {**cv, "time": at(20), "numeric_value": 8.0, "rateuom": "mcgmin", "text_value": "Stopped"},
+                {**cv, "time": at(30), "numeric_value": None, "text_value": "D/C'd"},
+                {**cv, "time": at(40), "numeric_value": 0.0, "rateuom": "mcgmin"},
+            ],
+            "chartevents/CHART": [
+                # Subject 2's only weight: an earlier admission's, a year before.
+                {"subject_id": 2, "stay_id": 9, "time": at(-365 * 24 * 60), "code": "CHART//3580//Present Weight (kg)",
+                 "numeric_value": 40.0},
+            ],
+        },
+    )  # fmt: skip
+
+    assert_rows(
+        outputs["norepinephrine_rate"],
+        [
+            {"subject_id": 1, "time": at(0), "numeric_value": 0.2, "stream_id": "inputevents_mv:1"},
+            {"subject_id": 1, "time": at(20), "numeric_value": 0, "text_value": "Stopped",
+             "stream_id": "inputevents_mv:1"},
+            # 8 mcg/min with the 40 kg of the earlier admission, the only weight there is.
+            {"subject_id": 2, "time": at(10), "numeric_value": 0.2,
+             "stream_id": "inputevents_cv:11"},
+            {"subject_id": 2, "time": at(20), "numeric_value": 0, "text_value": "Stopped"},
+            # Without a unit of its own, the stop is a stop all the same.
+            {"subject_id": 2, "time": at(30), "numeric_value": 0, "text_value": "D/C'd"},
+            {"subject_id": 2, "time": at(40), "numeric_value": 0, "text_value": None},
+        ],
+        context="norepinephrine_rate",
+    )  # fmt: skip

@@ -227,9 +227,9 @@ def test_sex_follows_the_gender_code_and_is_dated_at_birth(tmp_path: Path) -> No
     )
 
 
-def test_ed_visit_and_discharge_status_are_emitted_only_with_their_time(tmp_path: Path) -> None:
-    """ED registration and exit exist only for an admission through the ED; the mortality status needs a discharge."""
-    recorded = {"edregtime": at(-3), "edouttime": at(-1), "dischtime": at(96)}
+def test_ed_registration_and_exit_are_emitted_only_with_their_time(tmp_path: Path) -> None:
+    """A direct admission has no ED registration or exit."""
+    recorded = {"edregtime": at(-3), "edouttime": at(-1)}
     events = extract_native(
         tmp_path,
         dataset=DATASET,
@@ -240,19 +240,13 @@ def test_ed_visit_and_discharge_status_are_emitted_only_with_their_time(tmp_path
                 "subject_id": 1,
                 "hadm_id": 100,
                 "admittime": f"{START}",
-                "hospital_expire_flag": 0,
                 **{column: f"{time}" for column, time in recorded.items()},
             },
-            # admitted directly, not yet discharged
-            {"subject_id": 2, "hadm_id": 200, "admittime": f"{START}", "hospital_expire_flag": 0},
+            {"subject_id": 2, "hadm_id": 200, "admittime": f"{START}"},
         ],
     )
 
-    for event, column in [
-        ("ED_REGISTRATION", "edregtime"),
-        ("ED_OUT", "edouttime"),
-        ("IN_HOSPITAL_MORTALITY", "dischtime"),
-    ]:
+    for event, column in [("ED_REGISTRATION", "edregtime"), ("ED_OUT", "edouttime")]:
         assert_rows(events[event], [{"hadm_id": 100, "time": recorded[column]}], context=event)
 
 

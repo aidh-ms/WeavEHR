@@ -1,0 +1,114 @@
+# Vital signs charted during the ED stay, one row per charttime, one column per
+# measurement. Each non-null measurement becomes one event, dated at its charttime;
+# the code prefix VITALSIGN keeps them apart from the triage measurements.
+path: ed/vitalsign.csv.gz
+
+columns:
+  # subject_id and extensions
+  - name: subject_id
+    type: int64
+  - name: stay_id
+    type: int64
+  # db fields - times
+  - name: charttime
+    type: datetime
+    params:
+      format: "%Y-%m-%d %H:%M:%S"
+  # db fields - values
+  # Units are those of the documentation. temperature is in °F, though the
+  # documentation warns that some temperatures were charted in Celsius; values are kept
+  # as charted.
+  - name: temperature
+    type: float32
+  - name: heartrate
+    type: float32
+  - name: resprate
+    type: float32
+  - name: o2sat
+    type: float32
+  - name: sbp
+    type: float32
+  - name: dbp
+    type: float32
+  # Free text (e.g. "Sinus Rhythm", "afib").
+  - name: rhythm
+    type: string
+  # pain is free text (a 0-10 score, but also entries like "asleep"), so it is read as
+  # a string: a float column would fail on those entries.
+  - name: pain
+    type: string
+
+# charttime is nullable in the documentation; an event needs a time.
+filters:
+  - drop_na(charttime)
+
+event_defaults:
+  subject_id: col(subject_id)
+  time: col(charttime)
+  code_prefix:
+    - const(VITALSIGN)
+  extension:
+    available_time: col(charttime)
+    stay_id: col(stay_id)
+
+# A null measurement in this wide table means it was not taken at that time, so it is not
+# an event: every event drops the rows where its own value is null.
+events:
+  - name: TEMPERATURE
+    columns:
+      code:
+        - const("°F")
+      numeric_value: col(temperature)
+    filters:
+      - drop_na(temperature)
+  - name: HEART_RATE
+    columns:
+      code:
+        - const(bpm)
+      numeric_value: col(heartrate)
+    filters:
+      - drop_na(heartrate)
+  # insp/min: the unit MIMIC-IV charts and the respiratory_rate concept uses.
+  - name: RESPIRATORY_RATE
+    columns:
+      code:
+        - const("insp/min")
+      numeric_value: col(resprate)
+    filters:
+      - drop_na(resprate)
+  # Peripheral oxygen saturation, i.e. pulse oximetry.
+  - name: O2_SATURATION_PULSE_OXIMETRY
+    columns:
+      code:
+        - const("%")
+      numeric_value: col(o2sat)
+    filters:
+      - drop_na(o2sat)
+  - name: SYSTOLIC_BLOOD_PRESSURE
+    columns:
+      code:
+        - const(mmHg)
+      numeric_value: col(sbp)
+    filters:
+      - drop_na(sbp)
+  - name: DIASTOLIC_BLOOD_PRESSURE
+    columns:
+      code:
+        - const(mmHg)
+      numeric_value: col(dbp)
+    filters:
+      - drop_na(dbp)
+  # Free text with spelling variants, so it is a text value, not a code part.
+  - name: HEART_RHYTHM
+    columns:
+      text_value: col(rhythm)
+    filters:
+      - drop_na(rhythm)
+  # The raw text is kept in text_value; numeric_value holds the number when the text is
+  # one and is null otherwise (as eicu-crd infusiondrug casts its text drugrate).
+  - name: PAIN
+    columns:
+      numeric_value: cast(col(pain), "float32")
+      text_value: col(pain)
+    filters:
+      - drop_na(pain)

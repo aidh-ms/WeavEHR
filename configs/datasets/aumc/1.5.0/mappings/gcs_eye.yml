@@ -1,6 +1,13 @@
 # AUMCdb (OMOP CDM 5.4 via AMSTEL) -- maps OMOP measurement_concept_id:
-#   3016335 = Glasgow coma score eye opening
-#   3026019 = Glasgow coma score eye opening at First encounter
+#   3016335 = Glasgow coma score eye opening                     (item 6732)
+#   3026019 = Glasgow coma score eye opening at First encounter  (item 13077)
+# GCS items are list items: AMSTEL leaves value_as_number empty and stores the
+# answer as a LOINC value_as_concept_id (the Dutch label is in text_value). The
+# score follows ricu's egcs labels; both items share these answer concepts:
+#   45880466 = Eyes open spontaneously (Spontane reactie, Spontaan)          -> 4
+#   45876254 = To verbal stimulation (Reactie op verbale prikkel, Op aanspreken) -> 3
+#   45884209 = To painful stimulation (Reactie op pijnprikkel, Op pijn)      -> 2
+#   45877537 = No eye opening (Geen reactie, Niet)                           -> 1
 type: simple
 mappings:
   - pattern:
@@ -8,5 +15,11 @@ mappings:
       event: MEASUREMENT
       code: "^(3016335|3026019)(//.*)?$"
     columns:
-      numeric_value: col(numeric_value)
+      numeric_value: >-
+        replace(value_as_concept_id == 45880466, 4,
+        replace(value_as_concept_id == 45876254, 3,
+        replace(value_as_concept_id == 45884209, 2,
+        replace(value_as_concept_id == 45877537, 1, None))))
       text_value: col(text_value)
+    filters:
+      - drop_na(numeric_value)

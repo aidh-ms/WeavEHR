@@ -21,6 +21,7 @@ from weavehr.steps.base.step import ConfigurableBaseStep
 from weavehr.steps.concept.config.concept import (
     ComplexDatasetConceptConfig,
     ConceptConfig,
+    DatasetConceptConfigUnion,
     DerivedDatasetConceptConfig,
     SimpleDatasetConceptConfig,
 )
@@ -77,8 +78,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             )
 
             for concept in self._registry.values():
-                dataset_concept = concept.get_dataset_concept(dataset, version)
-                if dataset_concept is None:
+                dataset_concepts = concept.get_dataset_concepts(dataset, version)
+                if not dataset_concepts:
                     logger.warning(
                         "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
                         concept.name,
@@ -87,38 +88,27 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     )
                     continue
 
-                if isinstance(dataset_concept, SimpleDatasetConceptConfig):
-                    logger.debug(
-                        "Extracting simple concept %s for dataset %s",
-                        concept.identifier,
-                        dataset,
-                    )
-                    self.extract_simple_concept(
+                if all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts):
+                    self.extract_concept(
                         concept,
-                        dataset_concept,
+                        dataset_concepts,
                         routed_sources=routed_sources,
                         dataset_extension_columns=dataset_config.extension_columns,
                     )
-
-                if isinstance(dataset_concept, (DerivedDatasetConceptConfig, ComplexDatasetConceptConfig)):
+                else:
                     logger.debug(
                         "Registering dependent concept %s for dataset %s",
                         concept.identifier,
                         dataset,
                     )
-                    depend_concepts[concept.identifier] = dataset_concept.dependencies
+                    depend_concepts[concept.identifier] = self.concept_dependencies(dataset_concepts)
 
             for concept_id in TopologicalSorter(depend_concepts).static_order():
-                logger.debug(
-                    "Processing dependent concept %s for dataset %s",
-                    concept_id,
-                    dataset,
-                )
                 concept = self._registry.get(concept_id)
                 assert concept is not None, f"concept {concept_id} not found in registry"
 
-                dataset_concept = concept.get_dataset_concept(dataset, version)
-                if dataset_concept is None:
+                dataset_concepts = concept.get_dataset_concepts(dataset, version)
+                if not dataset_concepts:
                     logger.warning(
                         "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
                         concept.name,
@@ -127,30 +117,91 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     )
                     continue
 
-                if isinstance(dataset_concept, DerivedDatasetConceptConfig):
-                    logger.debug(
-                        "Extracting derived concept %s for dataset %s",
-                        concept.identifier,
-                        dataset,
-                    )
-                    self.extract_derived_concept(
-                        concept,
-                        dataset_concept,
-                    )
+                # Concepts with only simple mappings were extracted above.
+                if concept_id not in depend_concepts:
+                    continue
 
-                if isinstance(dataset_concept, ComplexDatasetConceptConfig):
-                    logger.debug(
-                        "Running complex concept %s for dataset %s",
-                        concept.identifier,
-                        dataset,
-                    )
-                    self.extract_complex_concept(
-                        concept,
-                        dataset_concept,
-                    )
+                logger.debug(
+                    "Processing dependent concept %s for dataset %s",
+                    concept_id,
+                    dataset,
+                )
+                self.extract_concept(
+                    concept,
+                    dataset_concepts,
+                    routed_sources=routed_sources,
+                    dataset_extension_columns=dataset_config.extension_columns,
+                )
 
             if routed_cache_dir.exists():
                 shutil.rmtree(routed_cache_dir)
+
+    @staticmethod
+    def concept_dependencies(dataset_concepts: list[DatasetConceptConfigUnion]) -> set[str]:
+        """Return the identifiers of the concepts that any of a concept's mappings for one dataset depends on."""
+        dependencies: set[str] = set()
+        for dataset_concept in dataset_concepts:
+            if not isinstance(dataset_concept, SimpleDatasetConceptConfig):
+                dependencies |= dataset_concept.dependencies
+        return dependencies
+
+    def extract_concept(
+        self,
+        concept: ConceptConfig,
+        dataset_concepts: list[DatasetConceptConfigUnion],
+        routed_sources: dict[tuple[Path, str], list[Path]] | None = None,
+        dataset_extension_columns: dict[str, str] | None = None,
+    ) -> None:
+        """Extract a concept for one dataset version from all of its mappings there.
+
+        Each mapping writes the output file as if it were the only one; with several, each output is moved
+        aside and the parts are concatenated in mapping order (columns missing from a part are null).
+
+        Args:
+            concept: The concept to extract
+            dataset_concepts: The concept's mappings for one dataset version (not empty)
+            routed_sources: Source files pre-partitioned per concept, used by simple mappings
+            dataset_extension_columns: Extra extension columns configured for the dataset
+        """
+
+        def extract_mapping(dataset_concept: DatasetConceptConfigUnion) -> None:
+            if isinstance(dataset_concept, SimpleDatasetConceptConfig):
+                self.extract_simple_concept(
+                    concept,
+                    dataset_concept,
+                    routed_sources=routed_sources,
+                    dataset_extension_columns=dataset_extension_columns,
+                )
+            elif isinstance(dataset_concept, DerivedDatasetConceptConfig):
+                self.extract_derived_concept(concept, dataset_concept)
+            else:
+                self.extract_complex_concept(concept, dataset_concept)
+
+        if len(dataset_concepts) == 1:
+            extract_mapping(dataset_concepts[0])
+            return
+
+        output_file = self.concept_output_file(concept, dataset_concepts[0].dataset, dataset_concepts[0].version)
+        # Simple mappings stage their own parts in `<version>.tmp`.
+        parts_dir = output_file.with_suffix(".parts")
+
+        parts = []
+        for index, dataset_concept in enumerate(dataset_concepts):
+            extract_mapping(dataset_concept)
+            if output_file.exists():
+                parts_dir.mkdir(exist_ok=True)
+                part = parts_dir / f"{index}.parquet"
+                output_file.replace(part)
+                parts.append(part)
+
+        if not parts:
+            return
+
+        pl.concat([pl.scan_parquet(part) for part in parts], how="diagonal").sink_parquet(output_file)
+
+        for part in parts:
+            part.unlink()
+        parts_dir.rmdir()
 
     def concept_output_dir(self, concept: ConceptConfig) -> Path:
         """Return the workspace directory a concept's per-dataset parquet files are written to.
@@ -192,25 +243,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             logger.warning("skipping concept step: extraction codes.parquet not found")
             return pl.DataFrame()
         return pl.read_parquet(codes_path)
-
-    def apply_limits(self, concept: ConceptConfig, lf: pl.LazyFrame) -> pl.LazyFrame:
-        if concept.limits.min is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") < concept.limits.min)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        if concept.limits.max is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") > concept.limits.max)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        return lf
 
     @staticmethod
     def _code_matches(event_name: str, regex: str) -> pl.Expr:
@@ -331,6 +363,16 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         return self.codes_df.lazy().filter(expr).select("code").collect().get_column("code").to_list()
 
+    @staticmethod
+    def _simple_mappings(concept: ConceptConfig, dataset: str, version: str) -> list[MappingConfig]:
+        """Return the mappings of all of a concept's simple mappings for one dataset version."""
+        return [
+            mapping
+            for dataset_concept in concept.get_dataset_concepts(dataset, version)
+            if isinstance(dataset_concept, SimpleDatasetConceptConfig)
+            for mapping in dataset_concept.mappings
+        ]
+
     def _build_code_concept_routes(
         self,
         dataset: str,
@@ -341,12 +383,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         rows: list[dict[str, str]] = []
 
         for concept in self._registry.values():
-            dataset_concept = concept.get_dataset_concept(dataset, version)
-
-            if not isinstance(dataset_concept, SimpleDatasetConceptConfig):
-                continue
-
-            for mapping in dataset_concept.mappings:
+            for mapping in self._simple_mappings(concept, dataset, version):
                 if mapping.pattern.extensions or mapping.filters:
                     continue
 
@@ -389,12 +426,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         source_paths: set[Path] = set()
 
         for concept in self._registry.values():
-            dataset_concept = concept.get_dataset_concept(dataset, version)
-
-            if not isinstance(dataset_concept, SimpleDatasetConceptConfig):
-                continue
-
-            for mapping in dataset_concept.mappings:
+            for mapping in self._simple_mappings(concept, dataset, version):
                 if mapping.pattern.extensions or mapping.filters:
                     continue
 
@@ -548,7 +580,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     dataset_extension_columns=dataset_extension_columns,
                 )
 
-                lf = self.apply_limits(concept, lf)
+                lf = concept.limits.apply(lf)
 
                 tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
                 logger.debug(
@@ -615,6 +647,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         lf = lf.with_columns(pl.lit(version).alias("version"))
         lf = lf.with_columns(pl.lit(table).alias("table"))
         lf = lf.with_columns(pl.lit(event_name).alias("event"))
+
+        # Helper columns, on every matched row: no filter has dropped one yet. The final select drops them.
+        for expr in mapping.callbacks:
+            lf = lf.with_columns(parse_expr(lf, expr))
 
         extension_columns = concept.extension_columns.copy()
         extension_columns.update(dataset_extension_columns or {})
@@ -790,7 +826,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             )
             return
 
-        lf = self.apply_limits(concept, lf)
+        lf = concept.limits.apply(lf)
 
         output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
         output_file.parent.mkdir(parents=True, exist_ok=True)

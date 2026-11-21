@@ -1,0 +1,132 @@
+# MetaVision segments (INPUTEVENTS_MV) and CareVue charted rates (INPUTEVENTS_CV) in source
+# units; <drug>_rate converts them. See docs/user_guide/vasopressor_events.md.
+#
+# MetaVision follows the MIMIC-IV rules: `originalrate` at INFUSION_START is the set rate, and an
+# INFUSION_END is a stop unless the dose changed ("Changed" in III). Rewritten segments are
+# already excluded by the table config.
+#
+# CareVue charts the running rate. A row flagged "Stopped" or "D/C'd" is a stop, a rate of 0, even
+# if it still carries the last positive rate. CareVue rows carry no weight; per-minute rates take
+# patient_weight.
+# Item IDs follow ricu's concept dictionary, without 30125: ricu files it under dopamine but
+# D_ITEMS labels it Milrinone.
+type: simple
+mappings:
+  # --- MetaVision
+  - level: norepinephrine
+    pattern: {table: inputevents_mv, event: INFUSION_START, code: '^221906(?:$|//)'}
+    <<: &mv_setting
+      columns:
+        numeric_value: col(originalrate)
+        extension:
+          rate_unit: col(rateuom)
+          stay_id: col(stay_id)
+          stream_id: concat_str("inputevents_mv:", linkorderid)
+          available_time: col(available_time)
+      filters:
+        # A row without a rate changes no state; a null would mean an unknown state.
+        - drop_na(numeric_value)
+  - level: norepinephrine
+    pattern: {table: inputevents_mv, event: INFUSION_END, code: '^221906(?:$|//)'}
+    <<: &mv_stop
+      columns:
+        numeric_value: const(0)
+        text_value: col(text_value)
+        extension:
+          rate_unit: col(rateuom)
+          stay_id: col(stay_id)
+          stream_id: concat_str("inputevents_mv:", linkorderid)
+          available_time: col(available_time)
+      filters:
+        - text_value != "Changed"
+  - level: epinephrine
+    pattern: {table: inputevents_mv, event: INFUSION_START, code: '^221289(?:$|//)'}
+    <<: *mv_setting
+  - level: epinephrine
+    pattern: {table: inputevents_mv, event: INFUSION_END, code: '^221289(?:$|//)'}
+    <<: *mv_stop
+  - level: dopamine
+    pattern: {table: inputevents_mv, event: INFUSION_START, code: '^221662(?:$|//)'}
+    <<: *mv_setting
+  - level: dopamine
+    pattern: {table: inputevents_mv, event: INFUSION_END, code: '^221662(?:$|//)'}
+    <<: *mv_stop
+  - level: dobutamine
+    pattern: {table: inputevents_mv, event: INFUSION_START, code: '^221653(?:$|//)'}
+    <<: *mv_setting
+  - level: dobutamine
+    pattern: {table: inputevents_mv, event: INFUSION_END, code: '^221653(?:$|//)'}
+    <<: *mv_stop
+  - level: phenylephrine
+    pattern: {table: inputevents_mv, event: INFUSION_START, code: '^221749(?:$|//)'}
+    <<: *mv_setting
+  - level: phenylephrine
+    pattern: {table: inputevents_mv, event: INFUSION_END, code: '^221749(?:$|//)'}
+    <<: *mv_stop
+  - level: vasopressin
+    pattern: {table: inputevents_mv, event: INFUSION_START, code: '^222315(?:$|//)'}
+    <<: *mv_setting
+  - level: vasopressin
+    pattern: {table: inputevents_mv, event: INFUSION_END, code: '^222315(?:$|//)'}
+    <<: *mv_stop
+
+  # --- CareVue
+  - level: norepinephrine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30047|30120)(?:$|//)'}
+    <<: &cv_rate
+      columns:
+        numeric_value: col(numeric_value)
+        text_value: col(text_value)
+        extension:
+          rate_unit: col(rateuom)
+          stay_id: col(stay_id)
+          stream_id: concat_str("inputevents_cv:", linkorderid)
+          available_time: col(available_time)
+      filters:
+        - text_value == None or not (text_value.str.contains("(?i)^(stopped|d/c.*)$"))
+        # A row with only an amount changes no rate; a null would mean an unknown state.
+        - drop_na(numeric_value)
+  - level: norepinephrine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30047|30120)(?:$|//)'}
+    <<: &cv_stop
+      columns:
+        numeric_value: const(0)
+        text_value: col(text_value)
+        extension:
+          # Often missing on a stop row; the rate concept then uses the infusion's unit.
+          rate_unit: col(rateuom)
+          stay_id: col(stay_id)
+          stream_id: concat_str("inputevents_cv:", linkorderid)
+          available_time: col(available_time)
+      filters:
+        - text_value.str.contains("(?i)^(stopped|d/c.*)$")
+  - level: epinephrine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30044|30119|30309)(?:$|//)'}
+    <<: *cv_rate
+  - level: epinephrine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30044|30119|30309)(?:$|//)'}
+    <<: *cv_stop
+  - level: dopamine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30043|30307)(?:$|//)'}
+    <<: *cv_rate
+  - level: dopamine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30043|30307)(?:$|//)'}
+    <<: *cv_stop
+  - level: dobutamine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30042|30306)(?:$|//)'}
+    <<: *cv_rate
+  - level: dobutamine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30042|30306)(?:$|//)'}
+    <<: *cv_stop
+  - level: phenylephrine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30127|30128)(?:$|//)'}
+    <<: *cv_rate
+  - level: phenylephrine
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30127|30128)(?:$|//)'}
+    <<: *cv_stop
+  - level: vasopressin
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30051)(?:$|//)'}
+    <<: *cv_rate
+  - level: vasopressin
+    pattern: {table: inputevents_cv, event: INFUSION_RATE, code: '^(?:30051)(?:$|//)'}
+    <<: *cv_stop

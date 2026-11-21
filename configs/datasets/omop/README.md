@@ -62,6 +62,8 @@ and the derived `condition_era` / `drug_era` tables duplicate
   `format`/`strict` params (`%Y-%m-%d %H:%M:%S` for datetimes, `%Y-%m-%d` for
   dates).
 - `person_id` is used as the MEDS `subject_id`.
+- `drug_exposure` keeps the free-text `sig` as an extension of both events.
+  The CDM has no infusion-rate field; AMSTEL writes the AUMCdb rate there.
 - No `available_time` extension is emitted. The OMOP CDM records no
   entry/result/store time, so there is no honest value for *when an event became
   knowable*; setting it to the event time would assert a zero latency we cannot

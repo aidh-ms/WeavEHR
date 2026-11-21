@@ -1,0 +1,9 @@
+# AUMCdb records no GCS total (ricu has no aumc tgcs), so the total is the sum of
+# the current components; an intubated verbal answer (gcs_unable) sets it to 15.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.gcs.GcsTransformer
+concepts:
+  - gcs_eye.1.0.0
+  - gcs_motor.1.0.0
+  - gcs_verbal.1.0.0
+  - gcs_unable.1.0.0

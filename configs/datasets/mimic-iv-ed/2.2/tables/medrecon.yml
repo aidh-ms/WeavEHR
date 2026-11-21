@@ -1,0 +1,58 @@
+# Medicine reconciliation: the medications a patient reported taking when asked on
+# arrival in the ED. A medication belongs to one or more Enhanced Therapeutic Class
+# (ETC) groups and has one row per group, told apart by etc_rn, so the same medication
+# can appear on several rows at one charttime (MIMIC-IV-ED documentation, medrecon).
+path: ed/medrecon.csv.gz
+
+columns:
+  # subject_id and extensions
+  - name: subject_id
+    type: int64
+  - name: stay_id
+    type: int64
+  # db fields - times
+  - name: charttime
+    type: datetime
+    params:
+      format: "%Y-%m-%d %H:%M:%S"
+  # db fields - values
+  - name: name
+    type: string
+  # gsn, ndc and etccode are codes with leading zeros, so they stay strings. The
+  # documentation states that a gsn or ndc of 0 means the value is missing; the raw
+  # value is kept as it is.
+  - name: gsn
+    type: string
+  - name: ndc
+    type: string
+  - name: etc_rn
+    type: int64
+  - name: etccode
+    type: string
+  - name: etcdescription
+    type: string
+
+# charttime is nullable in the documentation; an event needs a time.
+filters:
+  - drop_na(charttime)
+
+event_defaults:
+  subject_id: col(subject_id)
+  extension:
+    stay_id: col(stay_id)
+
+events:
+  # One event per raw row, i.e. per medication and ETC group; the medication name is
+  # the code, as mimic-iv prescriptions codes MEDICATION_ORDER by drug name.
+  - name: MEDICATION_RECONCILIATION
+    columns:
+      time: col(charttime)
+      code:
+        - col(name)
+      extension:
+        available_time: col(charttime)
+        gsn: col(gsn)
+        ndc: col(ndc)
+        etc_rn: col(etc_rn)
+        etccode: col(etccode)
+        etcdescription: col(etcdescription)

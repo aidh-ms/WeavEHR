@@ -142,3 +142,27 @@ def test_no_timeout_keeps_a_state_until_its_recorded_stop(transformer: RateTrans
         {"dose": events([0, 72], [1.0, 0.0], pump=["A", "A"]), "pulse": events([48, 96], [80.0, 80.0])}
     ).collect()
     assert result["numeric_value"].to_list() == [1.0, 1.0, 0.0, 0.0]
+
+
+def test_an_unknown_state_ends_the_value_before_it_without_saying_off(transformer: RateTransformer) -> None:
+    """A null that is not a stop: the pump's rate is unknown from then on; a later update is known again."""
+    result = transformer.transform(
+        {"dose": events([0, 1, 1.5], [0.2, None, 0.1], pump=["A"] * 3), "pulse": events([0.5, 1.2], [80.0] * 2)}
+    ).collect()
+    # -1 shows an unknown rate: unlike a stop, the unknown state is no zero.
+    assert result["numeric_value"].to_list() == pytest.approx([0.2, 0.2, -1, -1, 0.1])
+
+
+def test_an_unknown_state_leaves_other_states_current(transformer: RateTransformer) -> None:
+    result = transformer.transform(
+        {"dose": events([0, 0, 1], [0.2, 0.05, None], pump=["A", "B", "A"]), "pulse": events([1.5], [80.0])}
+    ).collect()
+    assert result["numeric_value"].to_list() == pytest.approx([0.2, 0.05, 0.05])
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_coincident_update_stop_and_unknown_resolve_by_precedence(transformer: RateTransformer, reverse: bool) -> None:
+    """An update wins over a coincident stop or unknown; a stop wins over an unknown."""
+    source = events([0, 0, 1, 1], [0.2, None, 0.0, None], pump=["A"] * 4)
+    result = transformer.transform({"dose": source.reverse() if reverse else source}).collect()
+    assert result["numeric_value"].to_list() == pytest.approx([0.2, 0.0])

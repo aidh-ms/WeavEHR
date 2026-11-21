@@ -34,7 +34,9 @@ join:
 
     filters:
       - drop_na(deathtime)
-      - first_distinct(subject_id)
+      # If a subject has a deathtime on more than one admission, keep the
+      # earliest, so the result does not depend on the row order of admissions.
+      - first_distinct(subject_id, order_by=[deathtime])
 
     both_on:
       - subject_id

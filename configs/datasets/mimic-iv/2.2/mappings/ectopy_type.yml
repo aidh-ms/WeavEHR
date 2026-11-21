@@ -1,0 +1,44 @@
+# mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
+# mimic-iv/concepts/measurement/rhythm.sql: Ectopy Type 1 (224650) and Ectopy Type 2
+# (226479), mimic-code's ectopy_type and ectopy_type_secondary. Labels are grouped by
+# the origin of the beats after trimming spaces. A second type of "None" only says
+# that there is no second type, so it is not an assessment of no ectopy.
+type: simple
+mappings:
+  - pattern:
+      table: chartevents
+      event: CHART
+      code: ^(?:CHART//)?(?:224650)(?:$|//)
+    level: none
+    columns: &columns
+      text_value: col(text_value)
+    filters:
+      - str_contains(strip_str(text_value), "(?i)^none$")
+  - pattern: &both
+      table: chartevents
+      event: CHART
+      code: ^(?:CHART//)?(?:224650|226479)(?:$|//)
+    level: ventricular
+    columns: *columns
+    filters:
+      # premature ventricular contractions, ventricular bigeminy and trigeminy
+      - str_contains(strip_str(text_value), "(?i)^PVC|^vent|ventric")
+  - pattern: *both
+    level: atrial
+    columns: *columns
+    filters:
+      # premature atrial contractions, atrial bigeminy and trigeminy
+      - str_contains(strip_str(text_value), "(?i)^PAC|atrial")
+  - pattern: *both
+    level: junctional
+    columns: *columns
+    filters:
+      # premature junctional contractions, nodal or junctional escape beats and bigeminy
+      - str_contains(strip_str(text_value), "(?i)^PJC|nod|junc")
+  # Every other label, so that no charted type is lost: the union of the patterns above.
+  - pattern: *both
+    level: other
+    columns: *columns
+    filters:
+      - strip_str(text_value) != ""
+      - not str_contains(strip_str(text_value), "(?i)^none$|^PVC|^vent|ventric|^PAC|atrial|^PJC|nod|junc")
