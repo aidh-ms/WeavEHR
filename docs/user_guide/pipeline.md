@@ -146,8 +146,11 @@ Sharding shows its current phase. The row clears on success, failure, or interru
 
 Without Rich, in notebooks or batch jobs, with redirected output, or with application-managed
 logging, long steps log their current status once per minute at `INFO`. Short steps keep their
-usual summaries. Progress runs only at `INFO`. Use `configure_logging(live_progress=False)` to disable both forms of progress.
+usual summaries. Progress runs only at `INFO`. Use `configure_logging(live_progress=False)` to disable both forms
+of progress. Applications managing their own logging can silence periodic updates with
+`logging.getLogger("weavehr.progress").setLevel(logging.WARNING)`.
 
-Python warnings and prints appear above the row when they share its terminal. Redirected stderr
-keeps its destination. Earlier handlers such as those from `logging.basicConfig()` and native
+While the row is active, writes to a terminal stderr appear above it, including when stderr points
+to a second terminal. Writes to a file or pipe keep their destination. Earlier handlers such as those from
+`logging.basicConfig()` and native
 file-descriptor writes can overwrite the row. If this happens, disable live progress or redirect those writes.

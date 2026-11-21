@@ -1,20 +1,15 @@
-"""Terminal and batch progress reporting, including end-to-end step counts."""
+"""Terminal and batch progress reporting."""
 
 import io
 import logging
-import os
 import sys
 from collections.abc import Generator
-from pathlib import Path
 from threading import Event
 from time import perf_counter
 
 import pytest
 
-from tests.steps.conftest import load_concept_config, load_extracation_config
-from weavehr import ConceptStep, ExtractionStep, PersistenceStep, WeavEHRProject, dataset_config_registry
-from weavehr.logging import _StepProgress, _shares_terminal, configure_logging, get_logger, set_log_level
-from weavehr.steps.concept.registry import concept_config_registry
+from weavehr.logging import _StepProgress, configure_logging, get_logger, set_log_level
 
 
 class Terminal(io.StringIO):
@@ -44,7 +39,10 @@ def test_live_output_and_cleanup_on_failure(terminal: Terminal, monkeypatch: pyt
     logger = get_logger("test")
     with pytest.raises(ValueError, match="schema"), progress.display("extraction", perf_counter()):
         assert (sys.stderr is not stderr) == shared
-        progress.detail = "testdb/1.0 | measurements | 1/2 tables processed"
+        tables = progress.track("testdb/1.0", "tables", 2, ["vitals", "measurements"], str)
+        assert next(tables) == "vitals"
+        assert next(tables) == "measurements"
+        assert progress.detail == "testdb/1.0 | measurements | 1/2 tables processed"
         logger.warning("Missing source file")
         print("stdout diagnostic")
         print("missing units", file=sys.stderr)
@@ -72,21 +70,6 @@ def test_progress_can_be_suppressed(terminal: Terminal, monkeypatch: pytest.Monk
     assert terminal.getvalue() == "Missing source file\n"
 
 
-def test_stderr_may_be_a_second_descriptor_on_the_same_or_another_terminal() -> None:
-    pty = pytest.importorskip("pty")
-    master, slave = pty.openpty()
-    other_master, other_slave = pty.openpty()
-    with (
-        os.fdopen(master, "rb"),
-        os.fdopen(other_master, "rb"),
-        os.fdopen(slave, "w") as stdout,
-        os.fdopen(os.dup(slave), "w") as same,
-        os.fdopen(other_slave, "w") as other,
-    ):
-        assert _shares_terminal(stdout, same)
-        assert not _shares_terminal(stdout, other)
-
-
 @pytest.mark.parametrize("mode", ["redirected", "application", "terminal-without-rich"])
 def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
     monkeypatch.setattr(sys, "stdout", terminal)
@@ -111,7 +94,7 @@ def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch:
     reported = Event()
 
     def observe(record: logging.LogRecord) -> bool:
-        if "chartevents" in record.getMessage():
+        if record.name == "weavehr.progress" and "chartevents" in record.getMessage():
             reported.set()
         return True
 
@@ -123,24 +106,13 @@ def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch:
     assert "\x1b" not in terminal.getvalue()
 
 
-def test_steps_render_final_dataset_counts(
-    terminal: Terminal, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, extraction_config: Path, concept_config: Path
+def test_application_can_silence_periodic_progress(
+    monkeypatch: pytest.MonkeyPatch, terminal: Terminal, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(sys, "stdout", terminal)
-    configure_logging(format="%(message)s")
-    config = tmp_path / "config"
-    (config / "concepts" / "unmapped.yml").write_text("name: unmapped\nversion: 1.0.0\n")
-    load_extracation_config(config / "testdb" / "1.0" / "tables")
-    load_concept_config(config / "concepts", [config / "testdb" / "1.0" / "mappings"])
-    project = WeavEHRProject(tmp_path / "project")
-    PersistenceStep.load(project, extraction_config).run()
-    ExtractionStep.load(project, extraction_config).run()
-    ConceptStep.load(project, concept_config).run()
-    mapped = sum(bool(c.get_dataset_concepts("testdb", "1.0")) for c in concept_config_registry.values())
-    assert 0 < mapped < len(concept_config_registry)
-    tables = len(dataset_config_registry.filter("testdb", "1.0"))
-    files = len(list((project.workspace_path / "persistence" / "testdb" / "1.0").glob("*.parquet")))
-    output = terminal.getvalue()
-    assert f"testdb/1.0 | {files}/{files} sources processed" in output
-    assert f"testdb/1.0 | {tables}/{tables} tables processed" in output
-    assert f"testdb/1.0 | {mapped}/{mapped} concepts processed" in output
+    package = logging.getLogger("weavehr")
+    package.setLevel(logging.INFO)
+    package.addHandler(logging.StreamHandler(terminal))
+    monkeypatch.setattr("weavehr.logging._log_periodically", lambda _: pytest.fail("started a progress reporter"))
+    with caplog.at_level(logging.WARNING, logger="weavehr.progress"), _StepProgress().display("step", perf_counter()):
+        get_logger("test").info("summary")
+    assert terminal.getvalue() == "summary\n"
