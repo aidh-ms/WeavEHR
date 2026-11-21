@@ -328,7 +328,7 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
 
     Subject 1 needs the later infusion to complete its coverage; subject 2 needs its death
     to shorten the horizon. Subject 3's short course does not qualify, and its D50 order is
-    no antibiotic. Without deaths, the extracted death file and the death concept are empty.
+    no antibiotic. The all-alive case supplies an empty MEDS_DEATH file.
     """
     medication_orders = [
         {
@@ -346,7 +346,7 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["antibiotics", "dextrose_as_D10", "death", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
+        concepts=["antibiotics", "dextrose_as_D10", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
         mapping_overrides=sofa_component_stubs(),
         sources={
             "medication/MEDICATION_ORDER": medication_orders,
@@ -373,11 +373,6 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
         context="antibiotics",
     )
     assert_rows(outputs["dextrose_as_D10"], [{"subject_id": 3}], context="dextrose_as_D10")
-    assert_rows(
-        outputs["death"],
-        [{"subject_id": row["subject_id"], "time": row["time"], "numeric_value": None} for row in extracted_deaths],
-        context="death",
-    )
     subjects = [1, 2] if deaths else [1]
     for name, time in [("suspected_infection", at(0)), ("sepsis3", at(60))]:
         assert_rows(
