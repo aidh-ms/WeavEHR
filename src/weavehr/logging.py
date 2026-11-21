@@ -19,9 +19,20 @@ Usage:
     configure_logging(level="INFO")
 """
 
+from __future__ import annotations
+
 import logging
 import sys
-from typing import Literal, Optional
+from collections.abc import Callable, Generator, Iterable, Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from datetime import timedelta
+from importlib.util import find_spec
+from threading import Event, Thread
+from time import perf_counter
+from typing import TYPE_CHECKING, Literal, Optional
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 # Package logger name
 LOGGER_NAME = "weavehr"
@@ -34,10 +45,100 @@ DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
+_PROGRESS_INTERVAL = 60.0
+_progress_logger = logging.getLogger("weavehr.progress")
+
+
+class _LiveConsoleHandler(logging.StreamHandler):
+    progress_enabled = True
+
+
+@contextmanager
+def _log_periodically(status: Callable[[], str]) -> Generator[None]:
+    stop = Event()
+
+    def report() -> None:
+        while not stop.wait(_PROGRESS_INTERVAL):
+            _progress_logger.info("%s", status())
+
+    thread = Thread(target=report, name="weavehr-progress", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        stop.set()
+        thread.join()
+
+
+class _StepProgress:
+    """Report the current operation while a step is running."""
+
+    detail: str = ""
+
+    def track[T](
+        self, dataset: str, unit: str, total: int, items: Iterable[T], name: Callable[[T], str]
+    ) -> Iterator[T]:
+        """Report the current item and how many preceding items have finished."""
+        for done, item in enumerate(items):
+            self.detail = f"{dataset} | {name(item)} | {done}/{total} {unit} processed"
+            yield item
+
+    def display(self, step: str, started: float) -> AbstractContextManager[None]:
+        package = logging.getLogger(LOGGER_NAME)
+        handler = next((h for h in package.handlers if isinstance(h, _LiveConsoleHandler)), None)
+        if package.getEffectiveLevel() != logging.INFO or not package.isEnabledFor(logging.INFO):
+            return nullcontext()
+        if handler and (not handler.progress_enabled or handler.level > logging.INFO):
+            return nullcontext()
+
+        self.detail = "Starting"
+
+        def status() -> str:
+            elapsed = timedelta(seconds=int(perf_counter() - started))
+            return f"{step} | {elapsed} | {self.detail}"
+
+        if handler and handler.stream.isatty() and find_spec("rich") is not None:
+            from rich.console import Console
+
+            console = Console(file=handler.stream, soft_wrap=True, markup=False, emoji=False, highlight=False)
+            if console.is_interactive and not console.is_jupyter:
+                return _terminal(handler, console, status)
+        return _log_periodically(status) if _progress_logger.isEnabledFor(logging.INFO) else nullcontext()
+
+
+@contextmanager
+def _terminal(handler: _LiveConsoleHandler, console: Console, status: Callable[[], str]) -> Generator[None]:
+    from rich.file_proxy import FileProxy
+    from rich.live import Live
+    from rich.text import Text
+
+    stream, stderr = handler.stream, sys.stderr
+    with Live(
+        get_renderable=lambda: Text(status(), no_wrap=True, overflow="ellipsis"),
+        console=console,
+        transient=True,
+        refresh_per_second=2,
+        redirect_stdout=stream is sys.stdout,
+        redirect_stderr=bool(stderr and stderr.isatty()),
+    ):
+        live_stderr = sys.stderr
+        handler.setStream(FileProxy(console, stream))
+        handler.progress_enabled = False  # Nested steps share the outer terminal row.
+        try:
+            yield
+        finally:
+            handler.progress_enabled = True
+            handler.setStream(stream)
+            if live_stderr is not stderr:
+                live_stderr.flush()  # Rich buffers writes without a trailing newline.
+
+
 def configure_logging(
     level: LogLevel = DEFAULT_LOG_LEVEL,
     format: Optional[str] = None,
     date_format: str = DEFAULT_DATE_FORMAT,
+    *,
+    live_progress: bool = True,
 ) -> None:
     """Configure logging for the WeavEHR package.
 
@@ -50,6 +151,7 @@ def configure_logging(
         level: Minimum log level to capture (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         format: Custom format string for logs (uses DEFAULT_LOG_FORMAT if None)
         date_format: Date format for timestamps
+        live_progress: Show a live terminal row at INFO when possible, or log progress once per minute.
 
     Example:
         >>> configure_logging(level="DEBUG")
@@ -69,7 +171,8 @@ def configure_logging(
     logger.propagate = False
 
     # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = _LiveConsoleHandler(sys.stdout)
+    console_handler.progress_enabled = live_progress
     console_handler.setLevel(level)
     console_formatter = logging.Formatter(format or DEFAULT_LOG_FORMAT, datefmt=date_format)
     console_handler.setFormatter(console_formatter)

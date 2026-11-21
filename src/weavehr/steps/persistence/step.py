@@ -81,7 +81,10 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                     )
 
             logger.info("Persisting %s/%s (%d source files selected)", dataset.name, dataset.version, len(sources))
-            for source_file, (table_name, dtypes) in sources.items():
+            dataset_id = f"{dataset.name}/{dataset.version}"
+            for source_file, (table_name, dtypes) in self._progress.track(
+                dataset_id, "sources", len(sources), sources.items(), lambda item: item[1][0]
+            ):
                 try:
                     self._persist_table(
                         source_file=source_file,
