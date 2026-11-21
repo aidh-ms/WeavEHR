@@ -1,6 +1,7 @@
 """End-to-end tests for the concept step on synthetic fixture data."""
 
 import gzip
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -35,6 +36,26 @@ def project(tmp_path: Path, extraction_config: Path, concept_config: Path) -> We
 
 def concept_path(project: WeavEHRProject, name: str) -> Path:
     return project.datasets_path / "concept" / "data" / name / "1.0.0" / "testdb" / "1.0.parquet"
+
+
+def test_unmapped_concepts_are_summarised_once_per_dataset(
+    tmp_path: Path, extraction_config: Path, concept_config: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = tmp_path / "config"
+    for name in ("unmapped_a", "unmapped_b"):
+        (config / "concepts" / f"{name}.yml").write_text(f"name: {name}\nversion: 1.0.0\n")
+    load_extracation_config(config / "testdb" / "1.0" / "tables")
+    load_concept_config(config / "concepts", [config / "testdb" / "1.0" / "mappings"])
+    project = WeavEHRProject(tmp_path / "project")
+    ExtractionStep.load(project, extraction_config).run()
+    with caplog.at_level(logging.DEBUG, logger="weavehr"):
+        ConceptStep.load(project, concept_config).run()
+
+    progress = [r.getMessage() for r in caplog.records if r.levelno >= logging.INFO]
+    assert progress.count("Concept mappings for testdb/1.0: 4 mapped, 2 unmapped") == 1
+    for name in ("unmapped_a", "unmapped_b"):
+        assert any(name in message for message in caplog.messages)
+        assert all(name not in message for message in progress)
 
 
 def test_gcs_unable_correction_reaches_cns_sofa(

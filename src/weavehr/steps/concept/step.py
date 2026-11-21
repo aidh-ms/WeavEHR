@@ -65,6 +65,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         for (dataset, version), dataset_config in datasets.items():
             logger.info("Processing concepts for dataset %s (version %s)", dataset, version)
             depend_concepts = dict()
+            unmapped_count = 0
 
             assert self._workspace_dir is not None
             routed_cache_dir = Path(self._workspace_dir.path).parent / "_concept_routed_sources"
@@ -80,7 +81,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             for concept in self._registry.values():
                 dataset_concepts = concept.get_dataset_concepts(dataset, version)
                 if not dataset_concepts:
-                    logger.warning(
+                    unmapped_count += 1
+                    logger.debug(
                         "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
                         concept.name,
                         dataset,
@@ -107,20 +109,11 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 concept = self._registry.get(concept_id)
                 assert concept is not None, f"concept {concept_id} not found in registry"
 
-                dataset_concepts = concept.get_dataset_concepts(dataset, version)
-                if not dataset_concepts:
-                    logger.warning(
-                        "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
-                        concept.name,
-                        dataset,
-                        version,
-                    )
-                    continue
-
-                # Concepts with only simple mappings were extracted above.
+                # Only dependent concepts mapped for this dataset still need extraction.
                 if concept_id not in depend_concepts:
                     continue
 
+                dataset_concepts = concept.get_dataset_concepts(dataset, version)
                 logger.debug(
                     "Processing dependent concept %s for dataset %s",
                     concept_id,
@@ -135,6 +128,14 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
             if routed_cache_dir.exists():
                 shutil.rmtree(routed_cache_dir)
+
+            logger.info(
+                "Concept mappings for %s/%s: %d mapped, %d unmapped",
+                dataset,
+                version,
+                len(self._registry) - unmapped_count,
+                unmapped_count,
+            )
 
     @staticmethod
     def concept_dependencies(dataset_concepts: list[DatasetConceptConfigUnion]) -> set[str]:
@@ -616,7 +617,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         files = list(output_dataset_path.glob("*.parquet"))
         if files:
-            logger.info(
+            logger.debug(
                 "Writing merged concept file for %s to %s",
                 concept.identifier,
                 output_file,
@@ -846,7 +847,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(
+        logger.debug(
             "Writing derived concept %s to %s",
             concept.identifier,
             output_file,

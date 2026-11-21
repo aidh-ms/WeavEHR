@@ -173,7 +173,7 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
         Args:
             path: Base directory path for saving configurations
         """
-        logger.info("Saving configurations to %s", path)
+        logger.debug("Saving configurations to %s", path)
         path.mkdir(parents=True, exist_ok=True)
         for config in self._registry.values():
             logger.debug("Saving configuration %s", config.identifier)

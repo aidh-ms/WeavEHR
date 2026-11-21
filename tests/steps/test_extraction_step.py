@@ -1,5 +1,6 @@
 """End-to-end tests for the extraction step on synthetic fixture data."""
 
+import logging
 import shutil
 from datetime import datetime
 from decimal import Decimal
@@ -282,7 +283,7 @@ class TestExtractionStep:
         assert output.stat().st_mtime_ns == first_mtime
 
     def test_rerun_after_interrupted_run_starts_from_scratch(
-        self, tmp_path: Path, extraction_config: Path, monkeypatch: pytest.MonkeyPatch
+        self, tmp_path: Path, extraction_config: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
         project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
@@ -293,8 +294,9 @@ class TestExtractionStep:
 
         # Both step directories exist after the crash, but the run never completed.
         monkeypatch.setattr(step, "hooks", crash)
-        with pytest.raises(RuntimeError):
+        with caplog.at_level(logging.INFO, logger="weavehr"), pytest.raises(RuntimeError):
             step.run()
+        assert not any(msg.startswith("Finished step") for msg in caplog.messages)
         marker = project.datasets_path / "extraction" / ".complete"
         assert (project.workspace_path / "extraction").exists()
         assert (project.datasets_path / "extraction").exists()
@@ -342,13 +344,21 @@ config:
         assert list(data_path.rglob("*.parquet")) == []
 
     def test_missing_source_file_is_skipped(
-        self, tmp_path: Path, data_dir: Path, table_config_dir: Path, extraction_config: Path
+        self, tmp_path: Path, data_dir: Path, extraction_config: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         (data_dir / "vitals.csv").unlink()
 
         project = WeavEHRProject(tmp_path / "project")
         load_extracation_config(tmp_path / "config" / "testdb" / "1.0" / "tables")
-        ExtractionStep.load(project, extraction_config).run()  # must not raise
+        with caplog.at_level(logging.INFO, logger="weavehr"):
+            step = ExtractionStep.load(project, extraction_config)
+            step.run()
+
+        assert any(r.levelno == logging.WARNING and "vitals.csv" in r.getMessage() for r in caplog.records)
+        assert not any("Writing event" in msg for msg in caplog.messages)
+        finished = [msg for msg in caplog.messages if msg.startswith("Finished step 'extraction' in ")]
+        assert len(finished) == 1
+        assert finished[0].endswith(f"Output: {step.output_path}")
 
         data_path = project.datasets_path / "extraction" / "data"
         # measurements still processed, vitals skipped
@@ -360,7 +370,9 @@ config:
         snapshot = project.configs_path / "table" / "testdb" / "1.0" / "vitals.yml"
         assert snapshot.exists()
 
-    def test_skipped_step_keeps_config_snapshot(self, tmp_path: Path, extraction_config: Path) -> None:
+    def test_skipped_step_keeps_config_snapshot(
+        self, tmp_path: Path, extraction_config: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
         project = run_extraction(tmp_path, extraction_config)
         snapshot = project.configs_path / "table" / "testdb" / "1.0" / "vitals.yml"
         original = snapshot.read_text()
@@ -373,8 +385,11 @@ config:
         )
         dataset_config_registry.clear()
         load_extracation_config(table_dir)
-        ExtractionStep.load(project, extraction_config).run()
+        with caplog.at_level(logging.INFO, logger="weavehr"):
+            step = ExtractionStep.load(project, extraction_config)
+            step.run()
 
+        assert caplog.messages == [f"Reusing completed step 'extraction'. Output: {step.output_path}"]
         assert snapshot.read_text() == original
 
     def test_reads_parquet_source_with_native_types(self, tmp_path: Path) -> None:

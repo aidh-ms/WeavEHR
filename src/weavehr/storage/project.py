@@ -185,7 +185,7 @@ class WeavEHRProject(FileStorage):
             if not dataset_path.is_dir():
                 continue
 
-            logger.info(
+            logger.debug(
                 "Discovered existing dataset '%s' at %s",
                 dataset_path.name,
                 dataset_path,

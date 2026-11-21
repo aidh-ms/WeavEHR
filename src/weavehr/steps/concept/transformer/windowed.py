@@ -572,7 +572,7 @@ class WindowedConceptTransformer(BaseConceptTransformer):
         optional = {sources[name] for name in self.optional_inputs if name in sources}
         missing = sorted({source for source in sources.values() if source not in dependencies})
         if absent_optional := [source for source in missing if source in optional]:
-            logger.info(
+            logger.debug(
                 "Concept %s (%s): optional input(s) %s not available for this dataset.",
                 self._concept.identifier,
                 type(self).__name__,

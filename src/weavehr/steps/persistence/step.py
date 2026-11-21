@@ -110,7 +110,7 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         output_file = self._workspace_dir.path / dataset_name / dataset_version / f"{table_name}.parquet"
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(
+        logger.debug(
             "Persisting %d configured columns from source table '%s' from %s to %s",
             len(dtypes),
             table_name,
@@ -153,7 +153,7 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
     def collect(self) -> None:
         """Skip MEDS collection for persisted source tables."""
-        logger.info(
+        logger.debug(
             "Skipping MEDS collection for step '%s'; persisted source tables remain in the workspace",
             self._step_name,
         )

@@ -70,18 +70,15 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         The extracted data is written to workspace_dir/dataset/table/event.parquet
         """
         for cfg in self._config.config.data:
-            for table in self._registry.filter(
+            tables = self._registry.filter(
                 cfg.name,
                 cfg.version,
                 includes=cfg.includes,
                 excludes=cfg.excludes,
-            ):
-                logger.info(
-                    "Extracting table %s from dataset %s (version %s)",
-                    table.name,
-                    cfg.name,
-                    cfg.version,
-                )
+            )
+            logger.info("Extracting %s/%s (%d tables selected)", cfg.name, cfg.version, len(tables))
+            for table in tables:
+                logger.debug("Extracting table %s/%s/%s", cfg.name, cfg.version, table.name)
                 self._extract(table, cfg.path)
 
     def _extract(self, table: TableConfig, path: Path) -> None:
@@ -90,8 +87,6 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         except FileNotFoundError as e:
             logger.warning("Skipping table %s: %s", table.name, e)
             return
-
-        logger.info("Processing table %s", table.name)
 
         include_event_name = (
             table.settings.include_event_name_in_code
@@ -118,7 +113,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         replacements = []
         for event_name, frames in event_frames.items():
             output_file = output_data_path / f"{event_name}.parquet"
-            logger.info(
+            logger.debug(
                 "Writing event %s for table %s to %s",
                 event_name,
                 table.name,
@@ -126,7 +121,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             )
 
             if output_file.exists():
-                logger.info(
+                logger.debug(
                     "Existing output found for event %s, appending to it",
                     event_name,
                 )
@@ -361,7 +356,7 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
             }
 
             if decimal256_columns:
-                logger.info(
+                logger.debug(
                     "Reading Parquet with PyArrow fallback for Decimal256 columns: %s",
                     sorted(decimal256_columns),
                 )
