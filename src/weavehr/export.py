@@ -5,7 +5,6 @@ from pathlib import Path
 
 import polars as pl
 
-from weavehr.steps.base.step import ConfigurableBaseStep
 from weavehr.steps.sharding.step import ShardingStep
 from weavehr.storage.events import (
     CORE_COLUMNS,
@@ -22,15 +21,6 @@ __all__ = ["ShardingStep", "load_concepts"]
 
 def _names(value: str | Sequence[str]) -> list[str]:
     return [value] if isinstance(value, str) else list(value)
-
-
-def _data_path(root: Path, step: str) -> Path:
-    if not step or step in (".", "..") or Path(step).name != step:
-        raise ValueError(f"Expected a step name, got {step!r}")
-    path = root / "datasets" / step.lower()
-    if not (path / ConfigurableBaseStep.COMPLETION_MARKER).is_file():
-        raise FileNotFoundError(f"No completed {step!r} output at {path}")
-    return path / "data"
 
 
 def _qualified_name(file: InputFile) -> str:
@@ -74,7 +64,7 @@ def load_concepts(
     """Query harmonised concepts and/or extracted MEDS events from one dataset.
 
     Args:
-        project: Existing project or its directory.
+        project: Existing project or its directory. Paths are opened read-only.
         concepts: Concept name(s), optionally qualified as <concept path>/<concept version>.
         dataset: Dataset name, or name/version when the project holds multiple versions.
         events: Extraction event name(s) across tables, or table/EVENT to select one table.
@@ -97,10 +87,11 @@ def load_concepts(
     name, separator, version = dataset.partition("/")
     if not name or (separator and not version) or "/" in version:
         raise ValueError("Expected dataset or dataset/version")
-    root = project.path if isinstance(project, WeavEHRProject) else Path(project)
-    files = concept_input_files(_data_path(root, concept_step)) if concepts else []
+    if not isinstance(project, WeavEHRProject):
+        project = WeavEHRProject(project, read_only=True)
+    files = concept_input_files(project.completed_dataset(concept_step).data_path) if concepts else []
     if events or codes:
-        files.extend(extraction_input_files(extraction_step, _data_path(root, extraction_step)))
+        files.extend(extraction_input_files(extraction_step, project.completed_dataset(extraction_step).data_path))
 
     files = [f for f in files if f.dataset == name and (not version or f.version == version)]
     if not files:

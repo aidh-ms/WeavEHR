@@ -9,16 +9,18 @@ After extraction and optional concept harmonisation, choose the export that fits
 
 ## Query a cohort
 
-Open a completed project by path, including in a fresh Python session. This example selects subjects
-with a recorded creatinine measurement, then retrieves their heart rate measurements and recorded
-deaths. Setting `dataset` to `"eicu-demo"` runs the same query against eICU. WeavEHR finds the
-`MEDS_DEATH` event in the appropriate source table for each dataset.
+Pass an existing project or its path to `load_concepts()`. A path is opened read-only. You can also
+open it explicitly with `WeavEHRProject(path, read_only=True)` for a series of queries.
+
+This example selects subjects with a recorded creatinine measurement, then retrieves their heart
+rate measurements and recorded deaths. Setting `dataset` to `"eicu-demo"` runs the same query
+against eICU. WeavEHR finds the `MEDS_DEATH` event in the appropriate source table for each dataset.
 
 ```python
 import polars as pl
-from weavehr import load_concepts
+from weavehr import WeavEHRProject, load_concepts
 
-project = "output/project"
+project = WeavEHRProject("output/project", read_only=True)
 dataset = "mimic-iv-demo"
 creatinine = load_concepts(project, "creatinine", dataset=dataset)
 cohort = (

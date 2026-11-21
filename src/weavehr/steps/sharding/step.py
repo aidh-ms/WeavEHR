@@ -193,17 +193,8 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
                 return None
             return concept_dataset.data_path, concept_input_files(concept_dataset.data_path)
 
-        step_name = extraction_step.lower()
-        extraction_dataset = self._project.datasets.get(step_name)
-        dataset_path = self._project.datasets_path / step_name
-        # An extraction that is still running or was interrupted leaves files that are
-        # incomplete or renamed later; sharding them would silently lose events.
-        if extraction_dataset is None or not (dataset_path / self.COMPLETION_MARKER).is_file():
-            raise FileNotFoundError(
-                f"Extraction step '{extraction_step}' has no completed output in {dataset_path} "
-                f"(missing {self.COMPLETION_MARKER}); run it first"
-            )
-        return extraction_dataset.data_path, extraction_input_files(extraction_step, extraction_dataset.data_path)
+        data_path = self._project.completed_dataset(extraction_step).data_path
+        return data_path, extraction_input_files(extraction_step, data_path)
 
     def _select_input_files(self, input_files: list[InputFile]) -> list[InputFile]:
         """Apply the dataset filter and the concept or event selection.

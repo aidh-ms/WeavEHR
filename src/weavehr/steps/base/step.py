@@ -43,7 +43,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         _step_name: Normalized name of this step (lowercase)
     """
 
-    COMPLETION_MARKER = ".complete"
+    COMPLETION_MARKER = WeavEHRProject.COMPLETION_MARKER
     """File written to the step's dataset directory as the last action of a successful run."""
 
     def __init__(self, project: WeavEHRProject, config: SCT, registry: BaseConfigRegistry[CT]) -> None:
@@ -98,7 +98,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         Returns:
             ``<project>/datasets/<step>/.complete``
         """
-        return self._project.datasets_path / self._step_name / self.COMPLETION_MARKER
+        return self._project.completion_marker(self._step_name)
 
     @property
     def output_path(self) -> Path:
@@ -109,7 +109,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         Returns:
             ``<project>/datasets/<step>``, which also holds the completion marker
         """
-        return self._project.datasets_path / self._step_name
+        return self._project.dataset_path(self._step_name)
 
     def run(self) -> WorkspaceDir:
         """Execute the complete step workflow.
@@ -132,6 +132,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             and the step runs from scratch, so an interrupted run is redone
             rather than reused or appended to.
         """
+        self._project.require_writable()
         completed = self.completion_marker.exists()
         output_exists = self.output_path.exists()
         skip = not self._config.overwrite and completed and output_exists
@@ -184,6 +185,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         configs directory.
         """
 
+        self._project.require_writable()
         logger.info(
             "Saving merged configuration to %s",
             self._project.configs_path,

@@ -17,6 +17,11 @@ def test_load_concepts_from_a_completed_pipeline(tmp_path: Path, extraction_conf
     load_concept_config(config / "concepts", [config / "testdb" / "1.0" / "mappings"])
     project = WeavEHRProject(tmp_path / "project")
     ExtractionStep.load(project, extraction_config).run()
+    read_only_step = ExtractionStep.load(WeavEHRProject(project.path, read_only=True), extraction_config)
+    with pytest.raises(PermissionError, match="read-only"):
+        read_only_step.run()
+    with pytest.raises(PermissionError, match="read-only"):
+        read_only_step.setup_config()
     raw = load_concepts(project, events="CHART", dataset="testdb")
     # Repeating a qualifying subject in the cohort must preserve the underlying event count.
     cohort = raw.filter(pl.col("text_value") == "eighty").select("dataset", "dataset_version", "subject_id")
@@ -44,6 +49,30 @@ def write_output(project: Path, step: str, files: dict[str, pl.DataFrame]) -> No
         path.parent.mkdir(parents=True, exist_ok=True)
         frame.write_parquet(path)
     (root / ".complete").touch()
+
+
+def test_queries_use_the_project_layout_without_creating_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "project"
+    with pytest.raises(FileNotFoundError, match="project"):
+        load_concepts(root, "x", dataset="db")
+    assert not root.exists()
+
+    write_output(root, "raw", {"db/1/table/X.parquet": event_frame([5], "x")})
+    outputs = (root / "datasets").rename(root / "outputs")
+    (outputs / "concept").mkdir()
+    monkeypatch.setattr(WeavEHRProject, "datasets_path", property(lambda project: project.path / "outputs"))
+    before = set(root.rglob("*"))
+
+    rows = load_concepts(str(root), events="X", dataset="db", extraction_step="Raw").collect()
+    assert rows["code"].to_list() == ["x"]
+    project = WeavEHRProject(root, read_only=True)
+    with pytest.raises(FileNotFoundError, match="concept"):
+        load_concepts(project, "x", dataset="db")
+    with pytest.raises(ValueError, match="step name"):
+        load_concepts(project, "x", dataset="db", concept_step="../raw")
+    assert set(root.rglob("*")) == before
 
 
 def test_event_names_codes_and_scoped_cohorts(tmp_path: Path) -> None:
