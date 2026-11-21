@@ -24,8 +24,8 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from collections.abc import Callable, Generator
-from contextlib import contextmanager
+from collections.abc import Callable, Generator, Iterable, Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from datetime import timedelta
 from importlib.util import find_spec
 from threading import Event, Thread
@@ -52,20 +52,6 @@ _PROGRESS_INTERVAL = 60.0
 
 class _LiveConsoleHandler(logging.StreamHandler):
     progress_enabled = True
-    console: Console | None = None
-
-    def emit(self, record: logging.LogRecord) -> None:
-        console = self.console
-        if console is None:
-            super().emit(record)
-            return
-        # Use the same console as the live row so warnings stay above it.
-        try:
-            from rich.text import Text
-
-            console.print(Text.from_ansi(self.format(record)), soft_wrap=True, end=self.terminator)
-        except Exception:
-            self.handleError(record)
 
 
 def _shares_terminal(stream: TextIO, other: TextIO | None) -> bool:
@@ -100,26 +86,26 @@ class _StepProgress:
     detail: str = ""
     _live: Live | None = None
 
-    def finish_dataset(self, detail: str) -> None:
-        """Render the final count before the next phase replaces it."""
-        self.detail = detail
+    def track[T](
+        self, dataset: str, unit: str, total: int, items: Iterable[T], name: Callable[[T], str]
+    ) -> Iterator[T]:
+        """Report each item as it starts and the final count when iteration finishes."""
+        done = 0
+        for item in items:
+            self.detail = f"{dataset} | {name(item)} | {done}/{total} {unit} processed"
+            yield item
+            done += 1
+        self.detail = f"{dataset} | {done}/{total} {unit} processed"
         if self._live is not None:
             self._live.refresh()
 
-    @contextmanager
-    def display(self, step: str, started: float) -> Generator[None]:
+    def display(self, step: str, started: float) -> AbstractContextManager[None]:
         package = logging.getLogger(LOGGER_NAME)
         handler = next((h for h in package.handlers if isinstance(h, _LiveConsoleHandler)), None)
-        if (
-            package.getEffectiveLevel() != logging.INFO
-            or not package.isEnabledFor(logging.INFO)
-            or (
-                handler
-                and (not handler.progress_enabled or handler.level > logging.INFO or handler.console is not None)
-            )
-        ):
-            yield
-            return
+        if package.getEffectiveLevel() != logging.INFO or not package.isEnabledFor(logging.INFO):
+            return nullcontext()
+        if handler and (not handler.progress_enabled or handler.level > logging.INFO):
+            return nullcontext()
 
         self.detail = "Starting"
 
@@ -127,38 +113,41 @@ class _StepProgress:
             elapsed = timedelta(seconds=int(perf_counter() - started))
             return f"{step} | {elapsed} | {self.detail}"
 
-        if handler is not None and handler.stream.isatty() and find_spec("rich") is not None:
+        if handler and handler.stream.isatty() and find_spec("rich") is not None:
             from rich.console import Console
 
-            console = Console(file=handler.stream, markup=False, emoji=False, highlight=False)
+            console = Console(file=handler.stream, soft_wrap=True, markup=False, emoji=False, highlight=False)
             if console.is_interactive and not console.is_jupyter:
-                from rich.live import Live
-                from rich.text import Text
+                return self._terminal(handler, console, status)
+        return _log_periodically(status)
 
-                stderr = sys.stderr
-                with Live(
-                    get_renderable=lambda: Text(status(), no_wrap=True, overflow="ellipsis"),
-                    console=console,
-                    transient=True,
-                    refresh_per_second=2,
-                    redirect_stdout=handler.stream is sys.stdout,
-                    redirect_stderr=_shares_terminal(handler.stream, stderr),
-                ) as live:
-                    live_stderr = sys.stderr
-                    handler.console = console
-                    self._live = live
-                    try:
-                        yield
-                    finally:
-                        self._live = None
-                        handler.console = None
-                        if live_stderr is not stderr:
-                            # Rich buffers writes without a trailing newline.
-                            live_stderr.flush()
-                return
+    @contextmanager
+    def _terminal(self, handler: _LiveConsoleHandler, console: Console, status: Callable[[], str]) -> Generator[None]:
+        from rich.file_proxy import FileProxy
+        from rich.live import Live
+        from rich.text import Text
 
-        with _log_periodically(status):
-            yield
+        stream, stderr = handler.stream, sys.stderr
+        with Live(
+            get_renderable=lambda: Text(status(), no_wrap=True, overflow="ellipsis"),
+            console=console,
+            transient=True,
+            refresh_per_second=2,
+            redirect_stdout=stream is sys.stdout,
+            redirect_stderr=_shares_terminal(stream, stderr),
+        ) as live:
+            live_stderr = sys.stderr
+            handler.setStream(FileProxy(console, stream))
+            handler.progress_enabled = False  # Nested steps share the outer terminal row.
+            self._live = live
+            try:
+                yield
+            finally:
+                self._live = None
+                handler.progress_enabled = True
+                handler.setStream(stream)
+                if live_stderr is not stderr:
+                    live_stderr.flush()  # Rich buffers writes without a trailing newline.
 
 
 def configure_logging(

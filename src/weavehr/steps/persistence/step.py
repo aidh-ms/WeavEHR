@@ -81,10 +81,11 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                     )
 
             logger.info("Persisting %s/%s (%d source files selected)", dataset.name, dataset.version, len(sources))
-            for done, (source_file, (table_name, dtypes)) in enumerate(sources.items()):
-                self._progress.detail = (
-                    f"{dataset.name}/{dataset.version} | {table_name} | {done}/{len(sources)} sources processed"
-                )
+            dataset_id = f"{dataset.name}/{dataset.version}"
+            for source_file in self._progress.track(
+                dataset_id, "sources", len(sources), sources, lambda p: sources[p][0]
+            ):
+                table_name, dtypes = sources[source_file]
                 try:
                     self._persist_table(
                         source_file=source_file,
@@ -96,10 +97,6 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 except Exception as exc:
                     exc.add_note(f"While persisting {dataset.name}/{dataset.version}/{table_name}")
                     raise
-
-            self._progress.finish_dataset(
-                f"{dataset.name}/{dataset.version} | {len(sources)}/{len(sources)} sources processed"
-            )
 
     def _persist_table(
         self,

@@ -34,58 +34,42 @@ def terminal(monkeypatch: pytest.MonkeyPatch) -> Generator[Terminal]:
     package.setLevel(level)
 
 
-def test_live_progress_preserves_warning_and_restores_cursor_on_error(
-    terminal: Terminal, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(sys, "stdout", terminal)
-    configure_logging(format="%(message)s")
-    progress = _StepProgress()
-    logger = get_logger("test")
-    with pytest.raises(ValueError, match="schema"):
-        with progress.display("extraction", perf_counter()):
-            progress.detail = "testdb/1.0 | measurements | 1/2 tables processed"
-            logger.warning("Missing source file")
-            raise ValueError("schema")
-    logger.info("after failure")
-    output = terminal.getvalue()
-    assert progress.detail in output
-    assert output.count("Missing source file\n") == 1
-    assert "\x1b[?25h" in output
-    assert output.endswith("after failure\n")
-
-
-@pytest.mark.parametrize("mode", ["redirected", "disabled", "debug", "warning", "application"])
-def test_plain_logging_has_no_live_output(terminal: Terminal, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
-    monkeypatch.setattr(sys, "stdout", terminal)
-    logger = get_logger("test")
-    if mode == "redirected":
-        monkeypatch.setattr(terminal, "isatty", lambda: False)
-    if mode == "application":
-        logging.getLogger("weavehr").addHandler(logging.StreamHandler(terminal))
-    else:
-        configure_logging(format="%(message)s", live_progress=mode != "disabled")
-        if mode in ("debug", "warning"):
-            set_log_level("DEBUG" if mode == "debug" else "WARNING")
-    with _StepProgress().display("extraction", perf_counter()):
-        logger.warning("Missing source file")
-    assert terminal.getvalue() == "Missing source file\n"
-
-
 @pytest.mark.parametrize("shared", [True, False], ids=["same-terminal", "redirected-stderr"])
-def test_stderr_keeps_its_destination(terminal: Terminal, monkeypatch: pytest.MonkeyPatch, shared: bool) -> None:
+def test_live_output_and_cleanup_on_failure(terminal: Terminal, monkeypatch: pytest.MonkeyPatch, shared: bool) -> None:
     stderr = terminal if shared else io.StringIO()
     monkeypatch.setattr(sys, "stdout", terminal)
     monkeypatch.setattr(sys, "stderr", stderr)
     configure_logging(format="%(message)s")
-    with _StepProgress().display("extraction", perf_counter()):
+    progress = _StepProgress()
+    logger = get_logger("test")
+    with pytest.raises(ValueError, match="schema"), progress.display("extraction", perf_counter()):
         assert (sys.stderr is not stderr) == shared
+        progress.detail = "testdb/1.0 | measurements | 1/2 tables processed"
+        logger.warning("Missing source file")
+        print("stdout diagnostic")
         print("missing units", file=sys.stderr)
         sys.stderr.write("final diagnostic [/literal]")
-    assert sys.stderr is stderr
+        raise ValueError("schema")
+    logger.info("after failure")
+    output = terminal.getvalue()
+    assert sys.stderr is stderr and sys.stdout is terminal
     assert stderr.getvalue().count("missing units") == 1
     assert stderr.getvalue().count("final diagnostic [/literal]") == 1
-    if not shared:
-        assert "missing units" not in terminal.getvalue()
+    assert ("missing units" in output) == shared
+    assert progress.detail in output and "\x1b[?25h" in output
+    assert output.count("Missing source file\n") == output.count("stdout diagnostic\n") == 1
+    assert output.endswith("after failure\n")
+
+
+@pytest.mark.parametrize("mode", ["disabled", "debug", "warning"])
+def test_progress_can_be_suppressed(terminal: Terminal, monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+    monkeypatch.setattr(sys, "stdout", terminal)
+    configure_logging(format="%(message)s", live_progress=mode != "disabled")
+    if mode != "disabled":
+        set_log_level("DEBUG" if mode == "debug" else "WARNING")
+    with _StepProgress().display("extraction", perf_counter()):
+        get_logger("test").warning("Missing source file")
+    assert terminal.getvalue() == "Missing source file\n"
 
 
 def test_stderr_may_be_a_second_descriptor_on_the_same_or_another_terminal() -> None:
@@ -111,7 +95,6 @@ def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch:
         monkeypatch.setitem(sys.modules, "rich.console", None)
     else:
         monkeypatch.setattr(terminal, "isatty", lambda: False)
-    monkeypatch.setattr("weavehr.logging._PROGRESS_INTERVAL", 0.01)
     package = logging.getLogger("weavehr")
     if mode == "application":
         package.addHandler(logging.StreamHandler(terminal))
@@ -119,6 +102,12 @@ def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch:
     else:
         configure_logging(format="%(message)s")
 
+    progress = _StepProgress()
+    with progress.display("short", perf_counter()):
+        get_logger("test").warning("Missing source file")
+    assert terminal.getvalue() == "Missing source file\n"
+
+    monkeypatch.setattr("weavehr.logging._PROGRESS_INTERVAL", 0.01)
     reported = Event()
 
     def observe(record: logging.LogRecord) -> bool:
@@ -127,7 +116,6 @@ def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch:
         return True
 
     package.handlers[0].addFilter(observe)
-    progress = _StepProgress()
     with progress.display("extraction", perf_counter()):
         progress.detail = "mimic-iv/2.2 | chartevents | 1/19 tables processed"
         assert reported.wait(5)

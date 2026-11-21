@@ -82,18 +82,14 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 )
                 continue
             logger.info("Extracting %s/%s (%d tables selected)", cfg.name, cfg.version, len(tables))
-            for done, table in enumerate(tables):
-                self._progress.detail = (
-                    f"{cfg.name}/{cfg.version} | {table.name} | {done}/{len(tables)} tables processed"
-                )
+            dataset = f"{cfg.name}/{cfg.version}"
+            for table in self._progress.track(dataset, "tables", len(tables), tables, lambda t: t.name):
                 logger.debug("Extracting table %s/%s/%s", cfg.name, cfg.version, table.name)
                 try:
                     self._extract(table, cfg.path)
                 except Exception as exc:
                     exc.add_note(f"While extracting {cfg.name}/{cfg.version}/{table.name}")
                     raise
-
-            self._progress.finish_dataset(f"{cfg.name}/{cfg.version} | {len(tables)}/{len(tables)} tables processed")
 
     def _extract(self, table: TableConfig, path: Path) -> None:
         try:

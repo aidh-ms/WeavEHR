@@ -140,22 +140,14 @@ Each completed step reports its elapsed time and output directory. A reused step
 its existing output. Set `overwrite: true` in the step configuration to rerun it.
 Use `DEBUG` for individual tables, joins, events, and file writes.
 
-When Rich is installed, `configure_logging()` shows one updating row at `INFO` in an
-interactive terminal. Install `weavehr[progress]` to include Rich.
-The row shows elapsed time, the current table, source, or concept, and how many have been
-processed. Harmonisation counts only mapped concepts. Sharding shows its current phase.
-The row clears on completion, failure, or interruption.
+Install `weavehr[progress]` for a live row at `INFO` in interactive terminals. It shows elapsed
+time, the current item, and the number of sources, tables, or mapped concepts processed.
+Sharding shows its current phase. The row clears on success, failure, or interruption.
 
-Without Rich, a running step reports its current status at `INFO` once per minute.
-Notebooks, redirected logs, batch jobs such as Slurm, and application-managed INFO logging
-use the same plain updates, including while one table takes several minutes. Short steps
-produce only the usual summaries. Use `configure_logging(live_progress=False)` to turn off both forms
-of progress reporting. At `DEBUG` the detailed trace already shows individual operations.
-At `WARNING` and higher only messages meeting the selected threshold appear.
+Without Rich, in notebooks or batch jobs, with redirected output, or with application-managed
+logging, long steps log their current status once per minute at `INFO`. Short steps keep their
+usual summaries. Progress runs only at `INFO`. Use `configure_logging(live_progress=False)` to disable both forms of progress.
 
-Python warnings and writes to `sys.stderr` appear above the live row when stderr shares
-the console terminal. Redirected stderr keeps its own destination. Application log handlers
-created earlier (for example by `logging.basicConfig()`) can keep a reference to the original
-stderr and write over the row. Native code writing directly to a file descriptor can do the same.
-If another writer uses the same terminal this way, use
-`live_progress=False` or send their output to a file.
+Python warnings and prints appear above the row when they share its terminal. Redirected stderr
+keeps its destination. Earlier handlers such as those from `logging.basicConfig()` and native
+file-descriptor writes can overwrite the row. If this happens, disable live progress or redirect those writes.
