@@ -1,6 +1,5 @@
 # ricu 0.6.3 applies the same limits when loading the concept (its dbp concept: 0-200 mmHg,
-# inclusive), so eicu-crd-ricu inherits this mapping. YAIB's weavehr-extensions had no
-# range filter here.
+# inclusive). YAIB's weavehr-extensions had no range filter here.
 type: simple
 mappings:
 - pattern:

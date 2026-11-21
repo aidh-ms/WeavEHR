@@ -1,7 +1,7 @@
 # Rows whose reported unit (labmeasurenameinterface, the column ricu 0.6.3 reads the unit
 # from) is mmol/L, in any case, are converted to mg/dL, the concept unit:
 # 1 mmol/L = 4.008 mg/dL (Ca 40.078 g/mol). ricu 0.6.3 multiplies by 4 for eICU
-# (eicu-crd-ricu) and by 4.008 for HiRID and AUMC; not reported upstream.
+# and by 4.008 for HiRID and AUMC; not reported upstream.
 # Unverified: eICU documents labmeasurenameinterface only as the unit name "from
 # interfaces". On eICU-CRD 2.0, the 115 rows in mmol/L (median 1.13) and the 186 rows
 # without a unit (median 4.7) are closer to the reference range of ionized calcium
@@ -14,7 +14,7 @@ mappings:
       event: LAB
       code: ^calcium//.*$
     columns:
-      # Conversion factor 4.008, from the molar mass. ricu 0.6.3 uses 4 (eicu-crd-ricu);
+      # Conversion factor 4.008, from the molar mass. ricu 0.6.3 uses 4;
       # to use 4 here too, change it in this line. On eICU-CRD 2.0 it affects 115 of
       # 1,226,978 calcium rows.
       numeric_value: >-

@@ -17,10 +17,6 @@ critical care database from the Beth Israel Deaconess Medical Center
 The openly available 100-patient demo is configured in `../mimic-iv-demo/`
 as a diff of `2.2`.
 
-[`../mimic-iv-ricu/`](../mimic-iv-ricu/) extends this dataset with ricu 0.6.3's
-mappings where this dataset intentionally differs from ricu, for comparisons
-with ricu-based cohorts.
-
 ## Layout
 
 ```

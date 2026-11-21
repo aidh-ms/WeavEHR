@@ -420,3 +420,55 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
             [{"subject_id": subject, "time": time, "numeric_value": 1} for subject in subjects],
             context=name,
         )
+
+
+@pytest.mark.parametrize(
+    ("interface_unit", "expected"),
+    [
+        ("L/min", None),
+        ("l/min", None),
+        (" L / min ", None),
+        ("%", 40.0),
+        (None, 40.0),
+    ],
+)
+def test_fio2_excludes_explicit_litres_per_minute(
+    tmp_path: Path,
+    interface_unit: str | None,
+    expected: float | None,
+) -> None:
+    """Lab oxygen flow must not be interpreted as FiO2 concentration."""
+    row = FIO2_SOURCES["lab"](Fio2Text("40", 40, 40, "unit filtering"))
+    row["labmeasurenameinterface"] = interface_unit
+
+    ((event, extracted),) = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="lab",
+        rows=[row],
+        joins=PATIENT_JOIN,
+    ).items()
+
+    result = map_rows(
+        "fraction_of_inspired_oxygen",
+        dataset=DATASET,
+        version=VERSION,
+        table="lab",
+        event=event,
+        rows=extracted.to_dicts(),
+    )
+
+    if expected is None:
+        assert result.is_empty()
+    else:
+        assert_rows(
+            result,
+            [
+                {
+                    "code": "fraction_of_inspired_oxygen//%",
+                    "numeric_value": expected,
+                    "text_value": "40",
+                }
+            ],
+        )

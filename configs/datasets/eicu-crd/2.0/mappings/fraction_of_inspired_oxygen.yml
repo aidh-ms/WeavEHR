@@ -4,8 +4,8 @@
 # and numeric values outside the conversion interval without range filtering.
 # ricu 0.6.3 reads the charted text with percent_as_numeric (as.numeric() after removing
 # "%"), does not convert fractions such as 0.4 (its 21-100 % limits then drop them) and
-# sets lab FiO2 to missing where the unit matches mm(hg); eicu-crd-ricu approximates
-# that. Implementation difference; not reported upstream.
+# sets lab FiO2 to missing where the unit matches mm(hg).
+# Implementation difference; not reported upstream.
 type: simple
 mappings:
   - pattern:
@@ -29,3 +29,7 @@ mappings:
       event: LAB
       code: ^(FiO2)(//.*)?$
     columns: *fio2_columns
+    # L/min describes oxygen flow, not inspired oxygen concentration.
+    # Retain rows with missing unit information.
+    filters:
+      - replace(labmeasurenameinterface == None, True, not str_contains(labmeasurenameinterface, "(?i)^\\s*l\\s*/\\s*min\\s*$"))

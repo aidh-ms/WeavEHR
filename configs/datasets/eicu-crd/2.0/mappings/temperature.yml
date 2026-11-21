@@ -9,8 +9,8 @@
 # value) are kept.
 # YAIB's ricu-extensions (temp) map the (F) rows as well, so each nurse-charted reading
 # counts twice, and ricu 0.6.3 does not convert Fahrenheit monitor values (its 32-42 C
-# limits drop them; eICU demo: 2,912 of 112,820 monitor values above 50). eicu-crd-ricu
-# reproduces both. Independently identified; not reported upstream.
+# limits drop them; eICU demo: 2,912 of 112,820 monitor values above 50).
+# Independently identified; not reported upstream.
 type: simple
 mappings:
 - pattern:

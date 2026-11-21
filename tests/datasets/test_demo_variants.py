@@ -55,9 +55,6 @@ class Demo(NamedTuple):
 DEMOS: Final = {
     "eicu-demo": Demo("2.0", "eicu-crd", eicu_demo_layout),
     "mimic-iv-demo": Demo("2.2", "mimic-iv", mimic_iv_demo_layout),
-    # The ricu variants restate their demo's table overrides (a version extends one version only).
-    "eicu-demo-ricu": Demo("2.0", "eicu-crd-ricu", eicu_demo_layout),
-    "mimic-iv-demo-ricu": Demo("2.2", "mimic-iv-ricu", mimic_iv_demo_layout),
 }
 
 TIMES_OF_DAY: Final = {"hospitaladmittime24"}
