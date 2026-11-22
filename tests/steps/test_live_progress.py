@@ -90,7 +90,10 @@ def test_plain_logging_reports_a_long_operation(terminal: Terminal, monkeypatch:
         get_logger("test").warning("Missing source file")
     assert terminal.getvalue() == "Missing source file\n"
 
-    monkeypatch.setattr("weavehr.logging._PROGRESS_INTERVAL", 0.01)
+    if mode == "application":
+        monkeypatch.setattr("weavehr.logging._DEFAULT_PROGRESS_INTERVAL", 0.01)
+    else:
+        configure_logging(format="%(message)s", progress_interval=0.01)
     reported = Event()
 
     def observe(record: logging.LogRecord) -> bool:
@@ -112,7 +115,16 @@ def test_application_can_silence_periodic_progress(
     package = logging.getLogger("weavehr")
     package.setLevel(logging.INFO)
     package.addHandler(logging.StreamHandler(terminal))
-    monkeypatch.setattr("weavehr.logging._log_periodically", lambda _: pytest.fail("started a progress reporter"))
+    monkeypatch.setattr("weavehr.logging._log_periodically", lambda *_: pytest.fail("started a progress reporter"))
     with caplog.at_level(logging.WARNING, logger="weavehr.progress"), _StepProgress().display("step", perf_counter()):
         get_logger("test").info("summary")
     assert terminal.getvalue() == "summary\n"
+
+
+@pytest.mark.parametrize("interval", [0, -1, float("nan"), float("inf")])
+def test_invalid_progress_interval_preserves_handlers(interval: float) -> None:
+    package = logging.getLogger("weavehr")
+    handlers = list(package.handlers)
+    with pytest.raises(ValueError, match="progress_interval"):
+        configure_logging(progress_interval=interval)
+    assert package.handlers == handlers
