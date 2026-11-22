@@ -7,6 +7,27 @@ After extraction and optional concept harmonisation, choose the export that fits
 | `ShardingStep` | Extracted events or harmonised concepts | A MEDS dataset on disk, partitioned by subject. See the [sharding guide](sharding.md). |
 | `load_concepts()` | Selected harmonised concepts, native extraction events, or both | A long-format Polars `LazyFrame` for an interactive session. |
 
+## Discover available inputs
+
+`project.available_inputs()` returns a Polars `DataFrame` with one row per concept definition or
+extracted event stream in each dataset release. Use a concept's `selector` in `concepts=` and an event's
+`selector` in `events=`. The `extension_columns` list comes from that input's Parquet schema.
+For example, to find streams that carry a stay ID:
+
+```python
+import polars as pl
+from weavehr import WeavEHRProject
+
+project = WeavEHRProject("output/project", read_only=True)
+inputs = project.available_inputs(dataset="mimic-iv-demo/2.2")
+with_stay_id = inputs.filter(pl.col("extension_columns").list.contains("stay_id"))
+```
+
+Omit `dataset` to see all releases, or pass a dataset name to see its versions. The inventory reads
+only Parquet schema metadata for matching inputs in completed steps. A stream with zero events still has
+an entry. An absent stream has none. For custom step names, pass `concept_step` or `extraction_step`
+as you would to `load_concepts()`.
+
 ## Query a cohort
 
 Pass an existing project or its path to `load_concepts()`. A path is opened read-only. You can also

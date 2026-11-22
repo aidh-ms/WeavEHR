@@ -172,7 +172,8 @@ output/project/
         └── metadata/{dataset.json, codes.parquet}
 ```
 
-For an interactive export, select the concepts and native events of interest:
+For an interactive export, use `project.available_inputs()` to discover concept and event selectors,
+then pass your selection to `load_concepts()`:
 
 ```python
 from weavehr import load_concepts

@@ -12,6 +12,15 @@ from weavehr.steps.concept.config.concept import ConceptConfig
 logger = get_logger(__name__)
 
 CORE_COLUMNS = ["subject_id", "time", "code", "numeric_value", "text_value"]
+QUERY_COLUMNS = frozenset([*CORE_COLUMNS, "dataset", "version", "source"])
+
+
+def split_dataset(selector: str) -> tuple[str, str]:
+    """Split a dataset name or name/version selector; an omitted version is empty."""
+    name, separator, version = selector.partition("/")
+    if not name or (separator and not version) or "/" in version:
+        raise ValueError("Expected dataset or dataset/version")
+    return name, version
 
 
 @dataclass(frozen=True)
@@ -44,12 +53,18 @@ class InputFile:
             (ConceptConfig.__weavehr_config_type__, self.concept.as_posix(), self.concept_version)
         )
 
+    @property
+    def selector(self) -> str:
+        """Return the fully qualified selector for this concept or event stream."""
+        if self.concept is not None:
+            return self.concept_identifier
+        return f"{self.dataset}/{self.table}/{self.event}"
+
     def matches_event(self, selector: str) -> bool:
         """Match a dataset/table, dataset/table/event, or dataset-scoped event name."""
         if self.event is None:
             return False
-        table = f"{self.dataset}/{self.table}"
-        return selector in (table, f"{table}/{self.event}", self.event)
+        return selector in (self.event, f"{self.dataset}/{self.table}", self.selector)
 
 
 def is_concept_identifier(selector: str) -> bool:
@@ -131,6 +146,11 @@ def extraction_input_files(step_name: str, extraction_data_path: Path) -> list[I
     return input_files
 
 
+def input_schema(path: Path) -> pl.Schema:
+    """Read the schema of one discovered file, treating its name literally."""
+    return pl.scan_parquet(path, glob=False).collect_schema()
+
+
 def extension_column_dtypes(files: list[Path], columns: Sequence[str]) -> dict[str, pl.DataType]:
     """Determine the dtype of each requested extension column across the selected files.
 
@@ -150,7 +170,7 @@ def extension_column_dtypes(files: list[Path], columns: Sequence[str]) -> dict[s
     if not columns:
         return {}
 
-    schemas = {file: pl.read_parquet_schema(file) for file in files}
+    schemas = {file: input_schema(file) for file in files}
     dtypes: dict[str, pl.DataType] = {}
     for column in columns:
         present = False

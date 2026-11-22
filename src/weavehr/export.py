@@ -7,13 +7,14 @@ import polars as pl
 
 from weavehr.steps.sharding.step import ShardingStep
 from weavehr.storage.events import (
-    CORE_COLUMNS,
+    QUERY_COLUMNS,
     InputFile,
     concept_input_files,
     extension_column_dtypes,
     extraction_input_files,
     matching_concept_files,
     scan_events,
+    split_dataset,
 )
 from weavehr.storage.project import WeavEHRProject
 
@@ -84,9 +85,7 @@ def load_concepts(
     concepts, events, codes = _names(concepts), _names(events), _names(codes)
     if not (concepts or events or codes):
         raise ValueError("Select at least one concept, event, or MEDS code")
-    name, separator, version = dataset.partition("/")
-    if not name or (separator and not version) or "/" in version:
-        raise ValueError("Expected dataset or dataset/version")
+    name, version = split_dataset(dataset)
     if not isinstance(project, WeavEHRProject):
         project = WeavEHRProject(project, read_only=True)
     files = concept_input_files(project.completed_dataset(concept_step).data_path) if concepts else []
@@ -109,7 +108,7 @@ def load_concepts(
     selected.extend(raw)
 
     extensions = _names(extension_columns)
-    reserved = set(extensions) & {*CORE_COLUMNS, "dataset", "version", "source"}
+    reserved = set(extensions) & QUERY_COLUMNS
     if reserved:
         raise ValueError(f"Already included in the result: {', '.join(sorted(reserved))}")
     dtypes = extension_column_dtypes([f.path for f in selected], extensions)

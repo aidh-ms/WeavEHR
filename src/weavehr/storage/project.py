@@ -7,8 +7,17 @@ and configuration files.
 
 from pathlib import Path
 
+import polars as pl
+
 from weavehr.logging import get_logger
 from weavehr.storage.base import FileStorage
+from weavehr.storage.events import (
+    QUERY_COLUMNS,
+    concept_input_files,
+    extraction_input_files,
+    input_schema,
+    split_dataset,
+)
 from weavehr.storage.meds import MEDSDataset
 from weavehr.storage.workspace import WorkspaceDir
 
@@ -138,17 +147,59 @@ class WeavEHRProject(FileStorage):
 
     def completed_dataset(self, step: str) -> MEDSDataset:
         """Open a step's collected dataset read-only, checking its current state on disk."""
+        dataset = self._completed_dataset(step)
+        if dataset is None:
+            marker = self.completion_marker(step)
+            raise FileNotFoundError(
+                f"Step {step!r} has no completed output in {marker.parent} (missing {marker.name}). Run the step first."
+            )
+        return dataset
+
+    def _completed_dataset(self, step: str) -> MEDSDataset | None:
+        """Return None for a step that has not finished; propagate errors in completed output."""
         if not step or step in (".", "..") or Path(step).name != step:
             raise ValueError(f"Expected a step name, got {step!r}")
         marker = self.completion_marker(step)
         if not marker.is_file():
-            raise FileNotFoundError(
-                f"Step {step!r} has no completed output in {marker.parent} (missing {marker.name}). Run the step first."
-            )
+            return None
         dataset = MEDSDataset(marker.parent, read_only=True)
         if not dataset.data_path.is_dir():
             raise FileNotFoundError(f"Missing data directory for step {step!r}: {dataset.data_path}")
         return dataset
+
+    def available_inputs(
+        self, *, dataset: str | None = None, concept_step: str = "concept", extraction_step: str = "extraction"
+    ) -> pl.DataFrame:
+        """List queryable concepts and event streams in completed step outputs.
+
+        Filter by dataset name or name/version, or omit the filter to list all releases.
+        Each row gives the dataset, version, kind, selector and selectable extension columns.
+        Reads Parquet schemas only. An existing empty stream is listed, and an unmatched
+        filter returns an empty DataFrame with the same columns.
+        """
+        name, version = split_dataset(dataset) if dataset is not None else ("", "")
+        concepts = self._completed_dataset(concept_step)
+        extraction = self._completed_dataset(extraction_step)
+        files = concept_input_files(concepts.data_path) if concepts is not None else []
+        if extraction is not None:
+            files.extend(extraction_input_files(extraction_step, extraction.data_path))
+
+        rows = []
+        for file in files:
+            if (name and file.dataset != name) or (version and file.version != version):
+                continue
+            columns = input_schema(file.path)
+            extensions = [column for column in columns if column not in QUERY_COLUMNS]
+            kind = "concept" if file.concept is not None else "event"
+            rows.append((file.dataset, file.version, kind, file.selector, extensions))
+        schema = {
+            "dataset": pl.String,
+            "version": pl.String,
+            "kind": pl.String,
+            "selector": pl.String,
+            "extension_columns": pl.List(pl.String),
+        }
+        return pl.DataFrame(rows, schema=schema, orient="row").sort("dataset", "version", "kind", "selector")
 
     def add_workspace_dir(self, name: str, overwrite: bool = False) -> WorkspaceDir:
         """Create and register a new workspace directory.

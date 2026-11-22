@@ -53,6 +53,50 @@ def write_output(project: Path, step: str, files: dict[str, pl.DataFrame]) -> No
     (root / ".complete").touch()
 
 
+def test_available_inputs_round_trip(tmp_path: Path) -> None:
+    empty = event_frame([], "unused").with_columns(pl.lit(None, dtype=pl.Int64).alias("stay_id"))
+    row = event_frame([1], "X").with_columns(pl.lit("db").alias("dataset"))
+    write_output(tmp_path, "raw", {"db/1/t/X.parquet": row, "db/2/t/X.parquet": row, "other/1/t/X.parquet": row})
+    write_output(tmp_path, "mapped", {"vital/pulse[1]/1.0/db/1.parquet": empty})
+    project = WeavEHRProject(tmp_path, read_only=True)
+    steps = {"concept_step": "Mapped", "extraction_step": "Raw"}
+    catalog = project.available_inputs(dataset="db/1", **steps)
+    assert catalog.rows() == [
+        ("db", "1", "concept", "weavehr.config.concept.vital/pulse[1].1.0", ["stay_id"]),
+        ("db", "1", "event", "db/t/X", []),
+    ]
+    for name, version, kind, selector, extensions in catalog.iter_rows():
+        rows = load_concepts(
+            project,
+            dataset=f"{name}/{version}",
+            extension_columns=extensions,
+            **({"concepts": selector} if kind == "concept" else {"events": selector}),
+            **steps,
+        ).collect()
+        assert rows.height == (0 if kind == "concept" else 1)
+        assert set(extensions) <= set(rows.columns)
+    assert project.available_inputs(dataset="db", **steps)["version"].to_list() == ["1", "1", "2"]
+    assert project.available_inputs(**steps).height == 4
+    assert project.available_inputs(dataset="absent", **steps).equals(catalog.clear())
+    with pytest.raises(ValueError, match="dataset/version"):
+        project.available_inputs(dataset="db/")
+
+
+def test_available_inputs_only_inspects_completed_steps_and_selected_schemas(tmp_path: Path) -> None:
+    project = WeavEHRProject(tmp_path, read_only=True)
+    assert project.available_inputs().is_empty()
+    assert not any(tmp_path.iterdir())
+    write_output(tmp_path, "extraction", {"db/1/t/X.parquet": event_frame([1], "x")})
+    incomplete = tmp_path / "datasets/concept/data"
+    incomplete.mkdir(parents=True)
+    (incomplete / "unfinished.parquet").touch()
+    unrelated = tmp_path / "datasets/extraction/data/other/1/t"
+    unrelated.mkdir(parents=True)
+    (unrelated / "X.parquet").touch()  # No readable schema; outside the requested dataset.
+    assert project.available_inputs(dataset="db")["selector"].to_list() == ["db/t/X"]
+    assert not (tmp_path / "workspace").exists()
+
+
 def test_queries_use_the_project_layout_without_creating_directories(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
