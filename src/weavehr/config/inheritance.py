@@ -26,6 +26,12 @@ Bases may themselves extend other versions; chains are resolved recursively
 and cycles are rejected. The identity (dataset, version, name) of every
 resolved configuration always comes from the extending version's directory,
 never from where a file physically lives.
+
+A base is looked up next to the extending version first. If it is not there, or
+it is a version already in the chain (e.g. a custom ``mimic-iv/3.1`` extending
+``mimic-iv/3.1``), it is looked up in the configuration roots set with
+:func:`set_search_roots`, in order. This lets a custom configuration root
+override a bundled version with only the files it changes.
 """
 
 import glob
@@ -44,6 +50,24 @@ CONFIG_SUFFIXES = {".yml", ".yaml"}
 
 ConfigData = dict[str, Any] | list[Any]
 """The data of one configuration file: a mapping, or a list of YAML documents."""
+
+_search_roots: list[Path] = []
+
+
+def set_search_roots(roots: list[Path]) -> None:
+    """Set the configuration roots searched for ``extends.yml`` bases in other roots.
+
+    Args:
+        roots: Configuration directories with the ``datasets/<dataset>/<version>``
+            layout, searched in order
+    """
+    global _search_roots
+    _search_roots = list(roots)
+
+
+def get_search_roots() -> list[Path]:
+    """Get the configuration roots searched for ``extends.yml`` bases, in order."""
+    return list(_search_roots)
 
 
 def load_config_file(file_path: Path) -> ConfigData:
@@ -102,7 +126,9 @@ def resolve_version_chain(version_dir: Path) -> list[Path]:
     """Resolve the inheritance chain of a version directory.
 
     Follows ``extends.yml`` markers recursively, returning the chain with the
-    most distant base first and ``version_dir`` itself last.
+    most distant base first and ``version_dir`` itself last. A base is taken from
+    the extending version's root, or else from the first search root (see
+    :func:`set_search_roots`) that has it and whose directory is not yet in the chain.
 
     Args:
         version_dir: The version directory (``.../<dataset>/<version>``)
@@ -123,12 +149,15 @@ def resolve_version_chain(version_dir: Path) -> list[Path]:
         if "dataset" not in data or "version" not in data:
             raise ValueError(f"{marker} must define both 'dataset' and 'version'")
 
-        base = current.parents[1] / str(data["dataset"]) / str(data["version"])
-        if not base.is_dir():
+        relative = Path(str(data["dataset"])) / str(data["version"])
+        candidates = [current.parents[1] / relative, *(root / "datasets" / relative for root in _search_roots)]
+        existing = [candidate for candidate in candidates if candidate.is_dir()]
+        if not existing:
             raise FileNotFoundError(
-                f"{marker} extends '{data['dataset']}/{data['version']}', but {base} does not exist"
+                f"{marker} extends '{data['dataset']}/{data['version']}', but {candidates[0]} does not exist"
             )
-        if base.resolve() in seen:
+        base = next((candidate for candidate in existing if candidate.resolve() not in seen), None)
+        if base is None:
             raise ValueError(f"Circular extends chain detected at {marker}")
 
         logger.debug("Version %s extends %s", current, base)

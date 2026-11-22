@@ -40,7 +40,7 @@ with WeavEHRProject(project_path) as project:
 
 Importing the package has no side effects: the bundled dataset and concept
 configurations are loaded when the first step is created (or explicitly via
-`auto_load_configs()`), and no log handler is installed until the application
+`load_configs()`), and no log handler is installed until the application
 calls `weavehr.logging.configure_logging()`.
 
 Author:
@@ -81,7 +81,7 @@ from weavehr.steps.extraction.step import ExtractionStep, dataset_config_registr
 from weavehr.steps.persistence.step import PersistenceStep
 from weavehr.steps.sharding.step import ShardingStep, sharding_config_registry
 from weavehr.storage.project import WeavEHRProject
-from weavehr.utils.loader import auto_load_configs
+from weavehr.utils.loader import load_configs
 
 __all__ = [
     "WeavEHRProject",
@@ -90,7 +90,7 @@ __all__ = [
     "ConceptStep",
     "ShardingStep",
     "scan_events",
-    "auto_load_configs",
+    "load_configs",
     "dataset_config_registry",
     "concept_config_registry",
     "sharding_config_registry",

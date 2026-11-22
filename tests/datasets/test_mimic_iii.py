@@ -9,7 +9,7 @@ import polars as pl
 import pytest
 
 from tests.datasets.support import assert_rows, run_concepts
-from weavehr.config.registry import load_configs
+from weavehr.config.registry import _load_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
@@ -111,7 +111,7 @@ def test_gcs_intubation_correction(item: int, text: str | None, value: float | N
 def test_yaml_header_overrides_apply_types_and_lookup_joins(tmp_path: Path, dataset: str, uppercase: bool) -> None:
     config = next(
         table
-        for table in load_configs(CONFIGS / "datasets" / dataset / "1.4/tables", TableConfig)
+        for table in _load_configs(CONFIGS / "datasets" / dataset / "1.4/tables", TableConfig)
         if table.name == "labevents"
     )
     header = "row_id,subject_id,hadm_id,itemid,charttime,value,valuenum,valueuom,flag\n"
@@ -141,7 +141,7 @@ def test_yaml_header_overrides_apply_types_and_lookup_joins(tmp_path: Path, data
 
 @cache
 def tables(dataset: str) -> dict[str, TableConfig]:
-    return {table.name: table for table in load_configs(CONFIGS / "datasets" / dataset / "1.4/tables", TableConfig)}
+    return {table.name: table for table in _load_configs(CONFIGS / "datasets" / dataset / "1.4/tables", TableConfig)}
 
 
 def header_aliases(table: TableConfig | JoinTableConfig) -> list[str]:
