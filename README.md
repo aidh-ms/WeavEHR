@@ -176,8 +176,9 @@ For an interactive export, use `project.available_inputs()` to discover concept 
 then pass your selection to `scan_events()`:
 
 ```python
-from weavehr import scan_events
+from weavehr import scan_events, load_encounters
 
+admissions = load_encounters(project_path, "hospital", dataset="mimic-iv/3.1")
 events = scan_events(project_path, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset="mimic-iv/3.1")
 print(events.head(10).collect())
 ```

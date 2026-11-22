@@ -1,0 +1,3 @@
+start: ED_REGISTRATION
+end: ED_OUT
+id_column: stay_id

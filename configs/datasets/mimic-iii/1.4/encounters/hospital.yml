@@ -1,0 +1,3 @@
+start: HOSPITAL_ADMISSION
+end: HOSPITAL_DISCHARGE
+id_column: hadm_id

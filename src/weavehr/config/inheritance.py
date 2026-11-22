@@ -9,7 +9,7 @@ version: "2.0"
 ```
 
 Configuration files in the version's subdirectories (``tables/``,
-``mappings/``) are then resolved against the base, like a diff applied on top
+``mappings/``, ``encounters/``) are then resolved against the base, like a diff applied on top
 of a reference version:
 
 - Files that exist only in the base are inherited unchanged.

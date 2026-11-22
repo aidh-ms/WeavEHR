@@ -1,0 +1,3 @@
+start: VISIT_START
+end: VISIT_END
+id_column: visit_occurrence_id

@@ -1,14 +1,16 @@
 """Interactive export from collected output, including selection across both layouts."""
 
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 
 import polars as pl
 import pytest
 
+from tests.datasets.support import extract_native
 from tests.steps.conftest import load_concept_config, load_extracation_config
 from tests.steps.test_sharding_step import event_frame, read_shards, shard_extraction, shard_input
-from weavehr import ConceptStep, ExtractionStep, WeavEHRProject, scan_events
+from weavehr import ConceptStep, ExtractionStep, WeavEHRProject, scan_events, load_encounters
 
 
 def test_scan_events_from_a_completed_pipeline(tmp_path: Path, extraction_config: Path, concept_config: Path) -> None:
@@ -241,3 +243,132 @@ def test_qualified_event_selectors_match_sharding(tmp_path: Path, selector: str,
     (shard,) = read_shards(shard_extraction(tmp_path, files, events=[selector]))
     rows = scan_events(tmp_path / "project", events=selector, dataset="testdb").collect()
     assert sorted(rows["code"].to_list()) == sorted(shard["code"].to_list()) == expected
+
+
+@pytest.mark.parametrize(
+    ("dataset", "version", "kind", "table", "subject", "identifier", "start", "end"),
+    [
+        ("mimic-iv-demo", "2.2", "hospital", "admissions", "subject_id", "hadm_id", "admittime", "dischtime"),
+        ("mimic-iv", "3.1", "icu", "icustay", "subject_id", "stay_id", "intime", "outtime"),
+        ("mimic-iv-ed-demo", "2.2", "ed", "edstays", "subject_id", "stay_id", "intime", "outtime"),
+        (
+            "omop",
+            "5.4",
+            "visit",
+            "visit_occurrence",
+            "person_id",
+            "visit_occurrence_id",
+            "visit_start_datetime",
+            "visit_end_datetime",
+        ),
+    ],
+)
+def test_load_encounters_from_native_rows(
+    tmp_path: Path,
+    dataset: str,
+    version: str,
+    kind: str,
+    table: str,
+    subject: str,
+    identifier: str,
+    start: str,
+    end: str,
+) -> None:
+    first, second, third = (datetime(2020, 1, day) for day in (1, 2, 3))
+    native = extract_native(
+        tmp_path / "raw",
+        dataset=dataset,
+        version=version,
+        table=table,
+        rows=[
+            {subject: 1, identifier: 20, start: first, end: third},
+            {subject: 1, identifier: 21, start: second},  # A second encounter, overlapping the first.
+        ],
+    )
+    project = tmp_path / "project"
+    write_output(project, "extraction", {f"{dataset}/{version}/{table}/{k}.parquet": v for k, v in native.items()})
+    result = load_encounters(project, kind, dataset=dataset)
+    assert isinstance(result, pl.LazyFrame)
+    assert result.collect_schema().names() == [
+        "dataset",
+        "version",
+        "subject_id",
+        "encounter_type",
+        "encounter_id",
+        "start",
+        "end",
+    ]
+    assert result.sort("encounter_id").collect().rows() == [
+        (dataset, version, 1, kind, 20, first, third),
+        (dataset, version, 1, kind, 21, second, None),
+    ]
+
+
+def test_custom_encounters_pair_only_by_subject_and_native_id(tmp_path: Path) -> None:
+    config = tmp_path / "configs"
+    mappings = config / "datasets/site/1/encounters"
+    mappings.mkdir(parents=True)
+    (mappings / "outpatient.yml").write_text("start: site/booking/IN\nend: site/clinic/OUT\nid_column: appointment\n")
+    first, last = datetime(2020, 1, 1), datetime(2020, 1, 2)
+    arrivals = event_frame(
+        [1, 1, 1, 2, 3], "in", [first, first, None, last, first], appointment=pl.Series(["A", "A", "A", "A", None])
+    )
+    leaves = event_frame([1, 4], "out", [last, last], appointment=pl.Series(["A", "B"]))
+    project = tmp_path / "project"
+    write_output(
+        project,
+        "raw",
+        {
+            "site/1/booking/IN.parquet": arrivals,
+            "site/1/clinic/OUT.parquet": leaves,
+            "site/1/other/IN.parquet": leaves,
+            "site/2/booking/IN.parquet": arrivals,
+        },
+    )
+    query = partial(load_encounters, project, "outpatient", config_root=config, extraction_step="Raw")
+    with pytest.raises(ValueError, match="Available versions"):
+        query(dataset="site")
+    assert query(dataset="site/1").sort("subject_id").select(
+        "subject_id", "encounter_id", "start", "end"
+    ).collect().rows() == [
+        (1, "A", first, last),
+        (2, "A", last, None),
+        (4, "B", None, last),
+    ]
+    with pytest.raises(KeyError, match="Available: outpatient"):
+        load_encounters(project, "hospital", dataset="site/1", config_root=config, extraction_step="Raw")
+
+    write_output(
+        project, "raw", {"site/1/booking/IN.parquet": pl.concat([arrivals, arrivals.with_columns(time=pl.lit(last))])}
+    )
+    with pytest.raises(pl.exceptions.ComputeError, match="single value"):
+        query(dataset="site/1").collect()
+
+
+def test_hospital_encounters_can_be_the_meds_subject(tmp_path: Path) -> None:
+    first, second, third = (datetime(2020, 1, day) for day in (1, 2, 3))
+
+    def events(times: list[datetime | None], stays: list[int]) -> pl.DataFrame:
+        return event_frame([7] * len(stays), "event", times, stay_id=pl.Series(stays))
+
+    streams = {
+        "HOSPITAL_ADMISSION": events([first], [10]),
+        "HOSPITAL_DISCHARGE": events([third], [11]),
+        "ICU_ADMISSION": events([first, second], [10, 11]),
+        "ICU_DISCHARGE": events([second, third], [10, 11]),
+    }
+    write_output(
+        tmp_path, "extraction", {f"eicu-demo/2.0/patient/{key}.parquet": frame for key, frame in streams.items()}
+    )
+
+    def intervals(kind: str) -> list[tuple]:
+        return (
+            load_encounters(tmp_path, kind, dataset="eicu-demo")
+            .sort("encounter_id")
+            .select("encounter_id", "start", "end")
+            .collect()
+            .rows()
+        )
+
+    assert intervals("hospital") == [(7, first, third)]
+    assert intervals("icu") == [(10, first, second), (11, second, third)]

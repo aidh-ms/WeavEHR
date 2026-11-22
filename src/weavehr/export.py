@@ -4,7 +4,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import polars as pl
+from pydantic import BaseModel, ConfigDict
 
+from weavehr.config.inheritance import resolve_effective_configs
 from weavehr.steps.sharding.step import ShardingStep
 from weavehr.storage.events import (
     QUERY_COLUMNS,
@@ -17,8 +19,9 @@ from weavehr.storage.events import (
     split_dataset,
 )
 from weavehr.storage.project import WeavEHRProject
+from weavehr.utils.loader import bundled_config_path
 
-__all__ = ["ShardingStep", "scan_events"]
+__all__ = ["ShardingStep", "scan_events", "load_encounters"]
 
 
 def _names(value: str | Sequence[str]) -> list[str]:
@@ -46,6 +49,26 @@ def _select(files: list[InputFile], names: list[str], kind: str, dataset: str) -
             raise ValueError(f"Ambiguous concept {name!r} for {dataset!r}. Select one of {choices}")
         selected.update((f.path, f) for f in matches)
     return list(selected.values())
+
+
+def _dataset_files(
+    project: WeavEHRProject | Path | str, dataset: str, concept_step: str | None, extraction_step: str | None
+) -> list[InputFile]:
+    """Find inputs from exactly one release of the dataset."""
+    name, version = split_dataset(dataset)
+    if not isinstance(project, WeavEHRProject):
+        project = WeavEHRProject(project, read_only=True)
+    files = concept_input_files(project.completed_dataset(concept_step).data_path) if concept_step is not None else []
+    if extraction_step is not None:
+        files.extend(extraction_input_files(extraction_step, project.completed_dataset(extraction_step).data_path))
+
+    files = [f for f in files if f.dataset == name and (not version or f.version == version)]
+    if not files:
+        raise KeyError(f"No output for dataset {dataset!r} in the selected steps")
+    versions = sorted({f.version for f in files})
+    if len(versions) > 1:
+        raise ValueError(f"Specify dataset as {name}/<version>. Available versions: {', '.join(versions)}")
+    return files
 
 
 def scan_events(
@@ -85,20 +108,9 @@ def scan_events(
     concepts, events, codes = _names(concepts), _names(events), _names(codes)
     if not (concepts or events or codes):
         raise ValueError("Select at least one concept, event, or MEDS code")
-    name, version = split_dataset(dataset)
-    if not isinstance(project, WeavEHRProject):
-        project = WeavEHRProject(project, read_only=True)
-    files = concept_input_files(project.completed_dataset(concept_step).data_path) if concepts else []
-    if events or codes:
-        files.extend(extraction_input_files(extraction_step, project.completed_dataset(extraction_step).data_path))
-
-    files = [f for f in files if f.dataset == name and (not version or f.version == version)]
-    if not files:
-        raise KeyError(f"No output for dataset {dataset!r} in the selected steps")
-    versions = sorted({f.version for f in files})
-    if len(versions) > 1:
-        raise ValueError(f"Specify dataset as {name}/<version>. Available versions: {', '.join(versions)}")
-
+    files = _dataset_files(
+        project, dataset, concept_step if concepts else None, extraction_step if events or codes else None
+    )
     selected = _select([f for f in files if f.concept is not None], concepts, "concept", dataset)
     raw = [f for f in files if f.event is not None]
     if events:
@@ -136,3 +148,77 @@ def scan_events(
     if cohort is not None:
         return result.filter(pl.col("subject_id").is_in(list(cohort)))
     return result
+
+
+class _EncounterConfig(BaseModel):
+    """Extraction streams and the column identifying one encounter in both."""
+
+    model_config = ConfigDict(extra="forbid", str_min_length=1)
+
+    start: str
+    end: str
+    id_column: str
+
+
+def load_encounters(
+    project: WeavEHRProject | Path | str,
+    encounter_type: str,
+    *,
+    dataset: str,
+    extraction_step: str = "extraction",
+    config_root: Path | str | None = None,
+) -> pl.LazyFrame:
+    """Load one row per identifiable encounter, using the dataset version's encounter mapping.
+
+    The result has dataset, version, subject_id, encounter_type, encounter_id, start and end.
+    Repeated identical boundaries collapse. Missing boundaries stay null. Distinct recorded
+    times for the same boundary and encounter raise a Polars error at collection.
+
+    A custom config_root uses the same datasets/<name>/<version> layout as the bundled configs.
+    Each encounters/<type>.yml defines start and end event selectors and their shared id_column.
+    """
+    files = _dataset_files(project, dataset, None, extraction_step)
+    name, version = files[0].dataset, files[0].version
+    root = Path(config_root) if config_root is not None else bundled_config_path()
+    if root is None or not root.is_dir():
+        raise FileNotFoundError(f"Encounter configuration root is unavailable: {root}")
+    configs = resolve_effective_configs(root / "datasets" / name / version / "encounters")
+    if encounter_type not in configs:
+        choices = ", ".join(sorted(configs)) or "none"
+        raise KeyError(f"No encounter type {encounter_type!r} for {name}/{version}. Available: {choices}")
+    config = _EncounterConfig.model_validate(configs[encounter_type])
+
+    boundaries = []
+    for boundary, selector in (("start", config.start), ("end", config.end)):
+        matches = _select(files, [selector], "event", dataset)
+        if len(matches) != 1:
+            choices = ", ".join(file.selector for file in matches)
+            raise ValueError(
+                f"Ambiguous {boundary} stream {selector!r} for {encounter_type!r}. Select one of {choices}"
+            )
+        source = pl.scan_parquet(matches[0].path, glob=False)
+        if config.id_column not in source.collect_schema():
+            raise ValueError(f"Encounter ID column {config.id_column!r} is missing from {matches[0].selector!r}")
+        boundaries.append(
+            source.select(
+                pl.col("subject_id").cast(pl.Int64),
+                pl.col(config.id_column).alias("encounter_id"),
+                pl.col("time").cast(pl.Datetime("us")).alias(boundary),
+            )
+        )
+
+    return (
+        pl.concat(boundaries, how="diagonal")
+        .drop_nulls(["subject_id", "encounter_id"])
+        .group_by("subject_id", "encounter_id")
+        .agg(pl.col("start", "end").drop_nulls().unique().item(allow_empty=True))
+        .select(
+            pl.lit(name).alias("dataset"),
+            pl.lit(version).alias("version"),
+            "subject_id",
+            pl.lit(encounter_type).alias("encounter_type"),
+            "encounter_id",
+            "start",
+            "end",
+        )
+    )

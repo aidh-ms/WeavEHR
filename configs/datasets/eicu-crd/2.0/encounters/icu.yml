@@ -1,0 +1,3 @@
+start: ICU_ADMISSION
+end: ICU_DISCHARGE
+id_column: stay_id

@@ -5,6 +5,7 @@ After extraction and optional concept harmonisation, choose the export that fits
 | Export | Input | Result |
 | --- | --- | --- |
 | `ShardingStep` | Extracted events or harmonised concepts | A MEDS dataset on disk, partitioned by subject. See the [sharding guide](sharding.md). |
+| `load_encounters()` | Extracted encounter boundaries and the dataset's encounter mapping | One row per encounter in a Polars `LazyFrame`. |
 | `scan_events()` | Selected harmonised concepts, native extraction events, or both | A long-format Polars `LazyFrame` for an interactive session. |
 
 ## Discover available inputs
@@ -27,6 +28,50 @@ Omit `dataset` to see all releases, or pass a dataset name to see its versions. 
 only Parquet schema metadata for matching inputs in completed steps. A stream with zero events still has
 an entry. An absent stream has none. For custom step names, pass `concept_step` or `extraction_step`
 as you would to `scan_events()`.
+
+## Load encounters
+
+Use the same call for hospital admissions, ICU stays, emergency department visits and other
+encounters. The dataset version supplies the boundary streams and native identifier for each type.
+
+```python
+from weavehr import load_encounters
+
+admissions = load_encounters(project, "hospital", dataset="mimic-iv-demo/2.2")
+icu_stays = load_encounters(project, "icu", dataset="mimic-iv-demo/2.2")
+ed_visits = load_encounters(project, "ed", dataset="mimic-iv-ed/2.2")
+```
+
+Each lazy frame contains `dataset`, `version`, `subject_id`, `encounter_type`, `encounter_id`,
+`start` and `end`. In MIMIC-IV, the hospital `encounter_id` is the native `hadm_id`.
+In eICU, it is the MEDS `subject_id`, which denotes a hospital stay spanning one or more unit stays.
+
+| Dataset family | Encounter types shipped |
+| --- | --- |
+| MIMIC-III, MIMIC-IV, NWICU, eICU | `hospital`, `icu` |
+| MIMIC-IV-ED | `ed`, including visits without a hospital admission |
+| OMOP, AmsterdamUMCdb | `visit`, from `visit_occurrence` |
+
+The loader pairs boundaries by subject and encounter ID. Open and end-only encounters retain a null
+boundary. Rows missing a subject ID or encounter ID are skipped. Repeated identical timestamps collapse.
+Conflicting timestamps for the same boundary raise an error when collected. Recorded times retain
+their source ordering, including an end before a start.
+
+To add an encounter type for your dataset, place a mapping under
+`configs/datasets/<dataset>/<version>/encounters/<type>.yml`. For example, an outpatient clinic
+could define `outpatient.yml` as follows.
+
+```yaml
+start: CHECK_IN
+end: CHECK_OUT
+id_column: appointment_id
+```
+
+Each selector must resolve to one extracted stream. Use a qualified selector from
+`project.available_inputs()` when several tables share a stream name. Both streams must carry the
+identifier. Pass `config_root="path/to/configs"` to use your mapping tree. Dataset variants inherit
+mappings through `extends.yml`. The query reads the mapping at call time and works on existing
+completed extraction outputs.
 
 ## Query a cohort
 
@@ -80,23 +125,26 @@ if the analysis needs chronological order.
 - **Missing data.** An unknown concept or event stream raises an error identifying the requested name
   and dataset. A valid selection with no matching subjects or codes returns zero rows.
 
-## Subjects and ICU stays
+## Use encounters as a cohort
 
 `cohort=[101, 102]` selects subject IDs in the requested dataset version. A Polars cohort table
-can instead supply explicit join keys. Repeated keys select each matching event once. Keeping
-`dataset` and `version` among the keys prevents collisions when reusing a multicentre cohort.
-
-For rows carrying a native stay ID, pass `cohort=stays.select("subject_id", "stay_id")` and
-`extension_columns="stay_id"`. Both keys must match. Where a concept carries only a subject and
-timestamp, apply your study's stay windows explicitly. For example, given a table `stays` from
-the same dataset version with `subject_id`, `stay_id`, `start` and `end`:
+can instead supply explicit join keys. For example, in MIMIC-IV, events that carry `hadm_id` can
+be selected for a cohort of hospital admissions using the native identifier.
 
 ```python
-heart_rate = scan_events(project, "heart_rate", dataset=dataset, cohort=stays.select("subject_id"))
-within_stay = heart_rate.join(stays.lazy(), on="subject_id").filter(
-    pl.col("time").is_between("start", "end", closed="left")
-)
+admissions = load_encounters(project, "hospital", dataset=dataset)
+cohort = admissions.filter(pl.col("end") - pl.col("start") >= pl.duration(days=2))
+keys = cohort.select("dataset", "version", "subject_id", pl.col("encounter_id").alias("hadm_id"))
+events = scan_events(project, events="HOSPITAL_DISCHARGE", dataset=dataset, cohort=keys, extension_columns="hadm_id")
 ```
 
-This example includes the start and excludes the end. Overlapping windows yield one match per stay.
-Choose the time origin, bin size and aggregation for the downstream task.
+For concepts carrying only a subject and timestamp, match the encounter windows explicitly.
+
+```python
+keys = ["dataset", "version", "subject_id"]
+heart_rate = scan_events(project, "heart_rate", dataset=dataset, cohort=cohort.select(keys))
+within_admission = heart_rate.join(cohort, on=keys).filter(pl.col("time").is_between("start", "end", closed="left"))
+```
+
+This example includes the start and excludes the end. Overlapping windows yield one match per
+encounter. The study determines how to handle overlaps and missing boundaries.
