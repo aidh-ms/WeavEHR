@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from weavehr.config.registry import load_configs
+from weavehr.config.registry import _load_configs
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.registry import concept_config_registry
 from weavehr.steps.extraction.config.table import TableConfig
@@ -275,7 +275,7 @@ config:
 
 
 def load_extracation_config(config_path: Path) -> None:
-    concepts = load_configs(
+    concepts = _load_configs(
         config_path,
         config_type=TableConfig,
     )
@@ -284,7 +284,7 @@ def load_extracation_config(config_path: Path) -> None:
 
 
 def load_concept_config(config_path: Path, mapping_paths: list[Path]) -> None:
-    concepts = load_configs(
+    concepts = _load_configs(
         config_path,
         config_type=ConceptConfig,
         dataset_paths=mapping_paths,
