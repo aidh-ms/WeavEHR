@@ -161,7 +161,7 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
             file_path,
             overwrite,
         )
-        for config in load_configs(file_path, self._config_type, includes=includes, excludes=excludes):
+        for config in _load_configs(file_path, self._config_type, includes=includes, excludes=excludes):
             self.register(config, overwrite=overwrite)
 
     def save(self, path: Path) -> None:
@@ -217,7 +217,7 @@ class BaseConfigRegistry[T: BaseConfig](ABC):
         return filtered_configs
 
 
-def load_configs[T: BaseConfig](
+def _load_configs[T: BaseConfig](
     path: Path, config_type: type[T], includes: list[str] | None = None, excludes: list[str] | None = None, **kwargs
 ) -> list[T]:
     """Load all configuration files of a specific type from a directory.

@@ -4,13 +4,14 @@ import logging
 import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 import pytest
 
-from weavehr.steps.concept.config.simple import SimpleDatasetConceptConfig
+from weavehr.config import inheritance
 from weavehr.steps.concept.registry import concept_config_registry
+from weavehr.steps.extraction.config.table import TableConfig
 from weavehr.steps.extraction.registry import dataset_config_registry
 from weavehr.steps.sharding.step import ShardingStep
 from weavehr.storage.project import WeavEHRProject
@@ -18,7 +19,27 @@ from weavehr.utils import loader
 
 CONFIG_ROOT = Path(__file__).parents[2] / "configs"
 LABEVENTS = "weavehr.config.table.mimic-iv.2.2.labevents"
+CHARTEVENTS = "weavehr.config.table.mimic-iv.2.2.chartevents"
+CUSTOM_VITALS = "weavehr.config.table.custom-ds.1.0.vitals"
 HEART_RATE = "weavehr.config.concept.heart_rate.1.0.0"
+
+
+def write(path: Path, content: str) -> None:
+    """Write a file, creating its parent directories."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
+def get_table(identifier: str) -> TableConfig:
+    """Get a registered table config, failing if it is missing."""
+    table = dataset_config_registry.get(identifier)
+    assert isinstance(table, TableConfig)
+    return table
+
+
+def load_table(path: Path) -> TableConfig:
+    """Load a table config directly from its file."""
+    return TableConfig.load(path)
 
 
 def run_python(code: str, **env: str) -> str:
@@ -49,10 +70,34 @@ def config_root(tmp_path: Path) -> Path:
     return root
 
 
+@pytest.fixture
+def bundled(config_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Use the small copy of the bundled configs as the bundled configs."""
+    monkeypatch.setattr(loader, "bundled_config_path", lambda: config_root)
+    return config_root
+
+
+@pytest.fixture
+def custom_root(tmp_path: Path) -> Path:
+    """A custom config root: a new dataset with a heart rate mapping and its own heart rate concept."""
+    root = tmp_path / "custom"
+    write(
+        root / "datasets/custom-ds/1.0/tables/vitals.yml",
+        (CONFIG_ROOT / "datasets/mimic-iv/2.2/tables/chartevents.yml").read_text(),
+    )
+    write(
+        root / "datasets/custom-ds/1.0/mappings/heart_rate.yml",
+        (CONFIG_ROOT / "datasets/mimic-iv/2.2/mappings/heart_rate.yml").read_text().replace("chartevents", "vitals"),
+    )
+    write(root / "concepts/vitals/heart_rate.yml", "name: heart_rate\nversion: 1.0.0\nunit: 1/min\n")
+    return root
+
+
 @pytest.fixture(autouse=True)
 def clean_loader(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Start every test with empty registries and the configs not yet loaded."""
+    """Start every test with empty registries, the configs not yet loaded and no extra extends roots."""
     monkeypatch.setattr(loader, "_loaded", False)
+    monkeypatch.setattr(inheritance, "_search_roots", [])
     dataset_config_registry.clear()
     concept_config_registry.clear()
     yield
@@ -84,50 +129,162 @@ class TestAutoLoadConfigs:
     def test_bundled_config_path_falls_back_to_repository(self) -> None:
         assert loader.bundled_config_path() == CONFIG_ROOT
 
-    def test_loads_custom_configs(self, config_root: Path) -> None:
-        assert loader.auto_load_configs(load_bundled=False, custom_config_path=config_root) is True
+    def test_loads_bundled_configs_by_default(self, bundled: Path) -> None:
+        assert loader.load_configs() is True
 
-        assert set(dataset_config_registry.keys()) == {LABEVENTS, LABEVENTS.replace("labevents", "chartevents")}
+        assert set(dataset_config_registry.keys()) == {LABEVENTS, CHARTEVENTS}
         assert concept_config_registry.keys() == [HEART_RATE]
         assert loader._loaded is True
 
-    def test_defaults_to_bundled_configs(self, config_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(loader, "bundled_config_path", lambda: config_root)
+    def test_loads_custom_configs_only(self, bundled: Path, custom_root: Path) -> None:
+        assert loader.load_configs(load_bundled=False, custom_config_path=custom_root) is True
 
-        assert loader.auto_load_configs() is True
-        assert LABEVENTS in dataset_config_registry
-        assert loader._loaded is True
+        assert dataset_config_registry.keys() == [CUSTOM_VITALS]
+        heart_rate = concept_config_registry.get(HEART_RATE)
+        assert heart_rate is not None
+        assert heart_rate.unit == "1/min"
+        assert {(m.dataset, m.version) for m in heart_rate.dataset_concepts} == {("custom-ds", "1.0")}
 
-    def test_registered_configs_take_precedence(self, config_root: Path) -> None:
-        dataset_config_registry.load(config_root / "datasets" / "mimic-iv" / "2.2" / "tables")
+    def test_custom_mapping_attaches_to_bundled_concept(self, bundled: Path, custom_root: Path) -> None:
+        (custom_root / "concepts").rename(custom_root / "unused")
+
+        loader.load_configs(custom_config_path=custom_root)
+
+        assert set(dataset_config_registry.keys()) == {LABEVENTS, CHARTEVENTS, CUSTOM_VITALS}
+        heart_rate = concept_config_registry.get(HEART_RATE)
+        assert heart_rate is not None
+        assert heart_rate.unit == "bpm"
+        assert {(m.dataset, m.version) for m in heart_rate.dataset_concepts} == {
+            ("mimic-iv", "2.2"),
+            ("custom-ds", "1.0"),
+        }
+
+    def test_custom_concept_takes_precedence(self, bundled: Path, custom_root: Path) -> None:
+        loader.load_configs(custom_config_path=custom_root)
+
+        heart_rate = concept_config_registry.get(HEART_RATE)
+        assert heart_rate is not None
+        assert heart_rate.unit == "1/min"
+        assert len(heart_rate.dataset_concepts) == 2
+
+    def test_custom_version_replaces_bundled_version(self, bundled: Path, tmp_path: Path) -> None:
+        custom = tmp_path / "custom"
+        write(custom / "datasets/mimic-iv/2.2/tables/labevents.yml", "path: local/labevents.parquet\n")
+
+        loader.load_configs(custom_config_path=custom)
+
+        assert dataset_config_registry.keys() == [LABEVENTS]
+        assert get_table(LABEVENTS).path == "local/labevents.parquet"
+        heart_rate = concept_config_registry.get(HEART_RATE)
+        assert heart_rate is not None
+        assert heart_rate.dataset_concepts == []
+
+    @pytest.mark.parametrize("load_bundled", [True, False])
+    def test_custom_version_extending_itself_changes_only_its_files(
+        self, bundled: Path, tmp_path: Path, load_bundled: bool
+    ) -> None:
+        custom = tmp_path / "custom"
+        write(custom / "datasets/mimic-iv/2.2/extends.yml", "dataset: mimic-iv\nversion: '2.2'\n")
+        write(custom / "datasets/mimic-iv/2.2/tables/labevents.yml", "path: local/labevents.parquet\n")
+
+        loader.load_configs(load_bundled=load_bundled, custom_config_path=custom)
+
+        assert set(dataset_config_registry.keys()) == {LABEVENTS, CHARTEVENTS}
+        labevents = get_table(LABEVENTS)
+        assert labevents.path == "local/labevents.parquet"
+        assert labevents.columns == load_table(bundled / "datasets/mimic-iv/2.2/tables/labevents.yml").columns
+        heart_rate = concept_config_registry.get(HEART_RATE)
+        if load_bundled:
+            assert heart_rate is not None
+            assert [(m.dataset, m.version) for m in heart_rate.dataset_concepts] == [("mimic-iv", "2.2")]
+        else:
+            assert heart_rate is None
+
+    def test_first_custom_path_takes_precedence(self, bundled: Path, tmp_path: Path) -> None:
+        first, second = tmp_path / "first", tmp_path / "second"
+        write(first / "datasets/mimic-iv/2.2/tables/labevents.yml", "path: first.parquet\n")
+        write(second / "datasets/mimic-iv/2.2/tables/labevents.yml", "path: second.parquet\n")
+
+        loader.load_configs(load_bundled=False, custom_config_path=[first, second])
+
+        assert get_table(LABEVENTS).path == "first.parquet"
+
+    def test_dataset_filter_skips_tables_and_mappings(
+        self, bundled: Path, custom_root: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            loader.load_configs(custom_config_path=custom_root, dataset_filter=["custom-ds", "unknown"])
+
+        assert dataset_config_registry.keys() == [CUSTOM_VITALS]
+        heart_rate = concept_config_registry.get(HEART_RATE)
+        assert heart_rate is not None
+        assert [(m.dataset, m.version) for m in heart_rate.dataset_concepts] == [("custom-ds", "1.0")]
+        assert "'unknown' in dataset_filter was not found" in caplog.text
+        assert "custom-ds" not in caplog.text
+
+    def test_dataset_filter_applies_to_custom_configs(self, bundled: Path, custom_root: Path) -> None:
+        loader.load_configs(custom_config_path=custom_root, dataset_filter=["mimic-iv"])
+
+        assert set(dataset_config_registry.keys()) == {LABEVENTS, CHARTEVENTS}
+
+    def test_tolerates_missing_datasets_directory_and_stray_files(self, bundled: Path, tmp_path: Path) -> None:
+        custom = tmp_path / "custom"
+        write(custom / "concepts/vitals/spo2.yml", "name: spo2\nversion: 1.0.0\nunit: '%'\n")
+        write(bundled / "datasets/.DS_Store", "")
+
+        assert loader.load_configs(custom_config_path=custom) is True
+
+        assert set(dataset_config_registry.keys()) == {LABEVENTS, CHARTEVENTS}
+        assert set(concept_config_registry.keys()) == {HEART_RATE, "weavehr.config.concept.spo2.1.0.0"}
+
+    def test_loads_only_once(self, bundled: Path, custom_root: Path, caplog: pytest.LogCaptureFixture) -> None:
+        loader.load_configs(load_bundled=False, custom_config_path=custom_root)
+
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            assert loader.load_configs() is True
+            assert loader.ensure_configs_loaded() is False
+
+        assert "already loaded" in caplog.text
+        assert dataset_config_registry.keys() == [CUSTOM_VITALS]
+
+    def test_registered_configs_take_precedence(self, bundled: Path) -> None:
+        dataset_config_registry.load(bundled / "datasets" / "mimic-iv" / "2.2" / "tables")
         custom = dataset_config_registry.get(LABEVENTS)
 
-        loader.auto_load_configs(load_bundled=False, custom_config_path=config_root)
+        loader.load_configs()
 
         assert dataset_config_registry.get(LABEVENTS) is custom
 
-    def test_missing_directory_returns_false(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
-        with caplog.at_level(logging.WARNING, logger="weavehr"):
-            assert loader.auto_load_configs(load_bundled=False, custom_config_path=tmp_path / "missing") is False
+    def test_missing_custom_directory_raises(self, bundled: Path, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError, match="is not a directory"):
+            loader.load_configs(custom_config_path=[tmp_path / "missing"])
 
-        assert "No configuration directory" in caplog.text
         assert len(dataset_config_registry) == 0
         assert loader._loaded is False
 
-    def test_missing_custom_directory_still_loads_bundled(
-        self, config_root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    def test_missing_bundled_directory_returns_false(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
     ) -> None:
-        monkeypatch.setattr(loader, "bundled_config_path", lambda: config_root)
+        # A package location with no configs/ next to it or two levels up.
+        monkeypatch.setattr(loader, "files", lambda _: tmp_path / "site-packages" / "lib" / "weavehr")
 
         with caplog.at_level(logging.WARNING, logger="weavehr"):
-            assert loader.auto_load_configs(custom_config_path=tmp_path / "missing") is True
+            assert loader.load_configs() is False
 
-        assert "No configuration directory" in caplog.text
-        assert concept_config_registry.keys() == [HEART_RATE]
+        assert "No bundled configuration directory" in caplog.text
+        assert len(dataset_config_registry) == 0
+        assert loader._loaded is False
 
-    def test_registration_is_logged_at_debug(self, config_root: Path, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("custom_config_path", [None, []])
+    def test_nothing_to_load_raises(self, bundled: Path, custom_config_path: list[Path] | None) -> None:
+        with pytest.raises(ValueError, match="Nothing to load"):
+            loader.load_configs(load_bundled=False, custom_config_path=custom_config_path)
+
+        assert loader._loaded is False
+
+    def test_registration_is_logged_at_debug(self, bundled: Path, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.DEBUG, logger="weavehr"):
-            loader.auto_load_configs(load_bundled=False, custom_config_path=config_root)
+            loader.load_configs()
 
         registered = [r for r in caplog.records if r.getMessage().startswith("Registered configuration")]
         assert len(registered) == 3
@@ -138,15 +295,19 @@ class TestAutoLoadConfigs:
 class TestLazyLoading:
     @pytest.fixture
     def calls(self, monkeypatch: pytest.MonkeyPatch) -> list[None]:
-        """Record calls to auto_load_configs instead of loading all bundled configs."""
+        """Record calls to load_configs instead of loading all bundled configs."""
         calls: list[None] = []
 
-        def fake_auto_load_configs(load_bundled: bool = True, custom_config_path: Path | None = None) -> bool:
+        def fake_load_configs(
+            load_bundled: bool = True,
+            custom_config_path: Path | Sequence[Path] | None = None,
+            dataset_filter: Sequence[str] | None = None,
+        ) -> bool:
             calls.append(None)
             monkeypatch.setattr(loader, "_loaded", True)
             return True
 
-        monkeypatch.setattr(loader, "auto_load_configs", fake_auto_load_configs)
+        monkeypatch.setattr(loader, "load_configs", fake_load_configs)
         return calls
 
     @pytest.mark.parametrize("value", ["1", "true", "yes", ""])
@@ -195,93 +356,3 @@ class TestLazyLoading:
             ShardingStep.load(project, config_file)
 
         assert len(calls) == 1
-
-
-HOSPITAL_HEART_RATE = """\
-type: simple
-mappings:
-  - pattern:
-      table: observations
-      event: OBS
-      code: ^HR//bpm$
-    columns:
-      numeric_value: col(numeric_value)
-"""
-
-
-def write_mapping(root: Path, dataset: str, version: str, name: str, content: str = HOSPITAL_HEART_RATE) -> Path:
-    """Write ``<root>/datasets/<dataset>/<version>/mappings/<name>.yml`` and return ``root``."""
-    path = root / "datasets" / dataset / version / "mappings" / f"{name}.yml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
-    return root
-
-
-def mapping_tables(dataset: str, version: str) -> list[str | None]:
-    """The source tables of the registered heart rate concept's mappings for one dataset version."""
-    concept = concept_config_registry.get(HEART_RATE)
-    assert concept is not None
-    dataset_concepts = concept.get_dataset_concepts(dataset, version)
-    assert all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts)
-    return [
-        m.pattern.table for dc in dataset_concepts if isinstance(dc, SimpleDatasetConceptConfig) for m in dc.mappings
-    ]
-
-
-class TestLocalMappings:
-    """A custom directory with the tables and mappings of an institutional dataset."""
-
-    @pytest.fixture(autouse=True)
-    def bundled(self, config_root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-        """Use the small copy of the bundled configs as the bundled configs."""
-        monkeypatch.setattr(loader, "bundled_config_path", lambda: config_root)
-        return config_root
-
-    def test_mapping_attaches_to_bundled_concept(self, tmp_path: Path) -> None:
-        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
-
-        loader.auto_load_configs(custom_config_path=local)
-
-        assert mapping_tables("my_hospital", "1.0") == ["observations"]
-        assert mapping_tables("mimic-iv", "2.2") == ["chartevents"]
-        assert concept_config_registry.keys() == [HEART_RATE]
-
-    def test_first_step_does_not_reload(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv(loader.AUTO_LOAD_ENV_VAR, "1")
-        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
-
-        loader.auto_load_configs(custom_config_path=local)
-
-        assert loader.ensure_configs_loaded() is False
-        assert mapping_tables("my_hospital", "1.0") == ["observations"]
-
-    def test_custom_concept_keeps_bundled_mappings(self, bundled: Path, tmp_path: Path) -> None:
-        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
-        concept_file = next(bundled.glob("concepts/*/heart_rate.yml"))
-        (local / "concepts").mkdir()
-        shutil.copy(concept_file, local / "concepts" / concept_file.name)
-
-        loader.auto_load_configs(custom_config_path=local)
-
-        assert mapping_tables("my_hospital", "1.0") == ["observations"]
-        assert mapping_tables("mimic-iv", "2.2") == ["chartevents"]
-
-    def test_custom_mapping_replaces_bundled_mapping(self, tmp_path: Path) -> None:
-        local = write_mapping(tmp_path / "local", "mimic-iv", "2.2", "heart_rate")
-
-        loader.auto_load_configs(custom_config_path=local)
-
-        assert mapping_tables("mimic-iv", "2.2") == ["observations"]
-
-    def test_custom_mappings_without_bundled_concepts_attach_to_nothing(self, tmp_path: Path) -> None:
-        local = write_mapping(tmp_path / "local", "my_hospital", "1.0", "heart_rate")
-
-        loader.auto_load_configs(load_bundled=False, custom_config_path=local)
-
-        assert len(concept_config_registry) == 0
-
-    def test_loading_twice_adds_nothing(self) -> None:
-        loader.auto_load_configs()
-        loader.auto_load_configs()
-
-        assert mapping_tables("mimic-iv", "2.2") == ["chartevents"]

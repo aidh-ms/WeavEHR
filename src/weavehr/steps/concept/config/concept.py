@@ -160,50 +160,14 @@ class ConceptConfig(BaseConfig):
             data = yaml.safe_load(f)
 
         name = data.get("name")
-        # `kwargs` fill keys missing from the file only after this call, so look up their levels here too.
+        paths = dataset_paths or []
+        # `kwargs` fill keys missing from the file only after this loop, so look up their levels here too.
         levels = data.get("levels", kwargs.get("levels")) or []
-        dataset_concepts = cls.load_dataset_concepts(str(name), levels, dataset_paths or [])
-        if dataset_concepts:
-            data.setdefault("dataset_concepts", []).extend(dataset_concepts)
-
-        for k, v in kwargs.items():
-            if k not in data:
-                data[k] = v
-
-        return cls(**data)
-
-    @staticmethod
-    def load_dataset_concepts(
-        name: str, levels: list[str], dataset_paths: list[Path]
-    ) -> list[DatasetConceptConfigUnion]:
-        """Load the mappings of one concept from dataset mapping directories.
-
-        Each path is a ``<dataset>/<version>/mappings`` directory; the mapping file of the
-        concept is ``<name>.yml`` in it (resolved through ``extends.yml`` where present).
-        When several paths belong to the same dataset version, the first path with a
-        mapping for this concept wins and the later ones are skipped, so directories
-        loaded earlier (e.g. institutional or study-specific configs) take precedence.
-
-        Args:
-            name: Name of the concept
-            levels: The concept's declared levels
-            dataset_paths: Mapping directories, in order of precedence
-
-        Returns:
-            The dataset concepts, grouped by dataset version in path order
-        """
-        dataset_concepts: list[DatasetConceptConfigUnion] = []
-        seen: set[tuple[str, str]] = set()
-        for path in dataset_paths:
-            # Identity always comes from the dataset directory itself,
-            # never from where an inherited file physically lives.
-            key = (path.parent.parent.name, path.parent.name)
-            if key in seen:
-                continue
+        for path in paths:
             if has_extends(path):
                 # Resolve the dataset's inheritance chain; the mapping may be
                 # inherited from (or merged with) a base version's config.
-                sub_data = resolve_effective_config(path, name)
+                sub_data = resolve_effective_config(path, str(name))
                 if sub_data is None:
                     continue
             else:
@@ -212,38 +176,22 @@ class ConceptConfig(BaseConfig):
                     continue
                 sub_data = load_config_file(sub_file_path)
 
-            identity = {"dataset": key[0], "version": key[1], "name": name}
+            # Identity always comes from the dataset directory itself,
+            # never from where an inherited file physically lives.
+            identity = {"dataset": path.parent.parent.name, "version": path.parent.name, "name": name}
             try:
-                loaded = _validate_dataset_concepts(sub_data, identity, levels)
+                dataset_concepts = _validate_dataset_concepts(sub_data, identity, levels)
             except ValueError as e:
                 # All or nothing: a dataset with one invalid mapping out of several would otherwise lose data silently.
                 logger.warning("failed to load dataset concept config for %s from %s: %s", name, path, e)
                 continue
-            seen.add(key)
-            dataset_concepts.extend(loaded)
-        return dataset_concepts
+            data.setdefault("dataset_concepts", []).extend(dataset_concepts)
 
-    def add_dataset_concepts(self, dataset_concepts: list[DatasetConceptConfigUnion]) -> int:
-        """Attach mappings for dataset versions this concept has no mapping for yet.
+        for k, v in kwargs.items():
+            if k not in data:
+                data[k] = v
 
-        Mappings of a dataset version the concept already has are skipped, so the
-        mappings attached first take precedence.
-
-        Args:
-            dataset_concepts: Mappings of this concept, e.g. from :meth:`load_dataset_concepts`
-
-        Returns:
-            The number of mappings attached
-        """
-        present = {(dc.dataset, dc.version) for dc in self.dataset_concepts}
-        added = [dc for dc in dataset_concepts if (dc.dataset, dc.version) not in present]
-        for dc in added:
-            if undeclared := _undeclared_levels(dc, self.levels):
-                raise ValueError(f"{dc.dataset} {dc.version}: undeclared levels {undeclared}")
-            if isinstance(dc, ComplexDatasetConceptConfig):
-                dc._parent_concept = self
-        self.dataset_concepts.extend(added)
-        return len(added)
+        return cls(**data)
 
     def get_dataset_concepts(self, dataset_name: str, version: str) -> list[DatasetConceptConfigUnion]:
         """Get the mappings of this concept for one dataset version.

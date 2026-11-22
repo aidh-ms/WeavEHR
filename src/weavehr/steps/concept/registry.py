@@ -6,10 +6,7 @@ stores all loaded concept configurations.
 """
 
 from weavehr.config.registry import BaseConfigRegistry
-from weavehr.logging import get_logger
 from weavehr.steps.concept.config.concept import ConceptConfig
-
-logger = get_logger(__name__)
 
 
 class ConceptConfigRegistry(BaseConfigRegistry[ConceptConfig]):
@@ -20,21 +17,7 @@ class ConceptConfigRegistry(BaseConfigRegistry[ConceptConfig]):
     into MEDS events.
     """
 
-    def register_or_merge(self, concept: ConceptConfig) -> None:
-        """Register a concept, or attach its mappings to an already registered one.
-
-        A concept registered earlier under the same identifier keeps its definition
-        and the mappings it has; only mappings of dataset versions it lacks are added.
-
-        Args:
-            concept: The concept to register
-        """
-        existing = self.get(concept.identifier)
-        if existing is None:
-            self.register(concept)
-            return
-        if attached := existing.add_dataset_concepts(concept.dataset_concepts):
-            logger.debug("Attached %d mapping(s) to %s", attached, existing.identifier)
+    pass
 
 
 concept_config_registry = ConceptConfigRegistry()

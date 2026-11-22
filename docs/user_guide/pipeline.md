@@ -95,38 +95,28 @@ For dataset-bound configs the name, dataset, and version are inferred from the f
 
 ## Loading configurations
 
-Importing `weavehr` does not load any configuration. The dataset and concept configurations bundled in `configs/` are loaded into the global registries (`dataset_config_registry`, `concept_config_registry`) when the first step is created, once per process. To control loading yourself, call `auto_load_configs` once at startup, before the first step:
+Importing `weavehr` does not load any configuration. The dataset and concept configurations bundled in `configs/` are loaded into the global registries (`dataset_config_registry`, `concept_config_registry`) when the first step is created, once per process. To load custom configurations as well, call `auto_load_configs` once at startup, before creating a step:
 
 ```python
 from pathlib import Path
 
 from weavehr import auto_load_configs
 
-auto_load_configs()  # the bundled configs
-auto_load_configs(custom_config_path=Path("my_configs"))  # the bundled configs and your own
-auto_load_configs(load_bundled=False, custom_config_path=Path("my_configs"))  # your own only
+auto_load_configs(
+    load_bundled=True,  # also load the bundled configs (default)
+    custom_config_path=Path("my_configs"),  # or a list of paths; same layout as configs/
+    dataset_filter=["my-icu", "mimic-iv"],  # optional: only load these datasets' tables and mappings
+)
 ```
 
-Configurations already registered under the same identifier are kept, so anything you register directly in a registry beforehand takes precedence.
+- Custom roots take precedence over the bundled configs, and earlier roots over later ones. A concept defined in several roots is taken from the first.
+- A dataset version directory in a custom root (`my_configs/datasets/mimic-iv/3.1/`) replaces the same version of the bundled configs entirely. To change only some files, add an `extends.yml` that references the same dataset and version (`dataset: mimic-iv`, `version: "3.1"`): the base is then taken from the next root that has it, and the custom directory only needs the files it changes ([versioning](versioning.md) describes how files merge). This works with `load_bundled=False` too.
+- Mappings in a custom root attach to concepts of any root, e.g. a `my_configs/datasets/my-icu/1.0/mappings/heart_rate.yml` adds `my-icu` to the bundled `heart_rate` concept.
+- `dataset_filter` lists dataset names; every other dataset is skipped in all roots. All concepts are still loaded.
+- Configurations are loaded once per process: later `auto_load_configs` calls log a warning, ignore their arguments and return `True`, and steps no longer load the bundled configs. `load_bundled=False` without a `custom_config_path` raises a `ValueError`.
+- The sharding step's subject-group check finds `extends.yml` chains in the custom roots loaded here, so they need not be repeated in its `config_roots`.
 
-### Your own dataset
-
-A directory of your own uses the layout of `configs/` and needs only the tables and mappings of your dataset. Bundled and custom configurations are loaded together, so a mapping attaches to the concept it is named after wherever that concept is defined: a mapping file `heart_rate.yml` reuses the bundled `heart_rate` concept.
-
-```
-my_configs/
-└── datasets/my_hospital/1.0/
-    ├── tables/observations.yml
-    └── mappings/heart_rate.yml
-```
-
-```python
-auto_load_configs(custom_config_path=Path("my_configs"))
-```
-
-Your directory takes precedence where both configure the same thing: its mapping of a concept for a dataset version replaces the bundled one, and a concept it defines replaces the bundled definition while keeping the bundled mappings of the other datasets.
-
-Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs(...)` call always loads, and the first step then does not load again.
+Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call ignores it.
 
 ## The MEDS output
 
