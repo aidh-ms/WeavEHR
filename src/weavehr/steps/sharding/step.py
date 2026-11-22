@@ -44,6 +44,8 @@ from weavehr.storage.events import (
     concept_input_files,
     extension_column_dtypes,
     extraction_input_files,
+    is_concept_identifier,
+    matching_concept_files,
     scan_events,
 )
 from weavehr.storage.meds import MEDSDataset
@@ -216,12 +218,13 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         ]
 
         if config.concepts:
-            concept_filters = self._normalize_concept_filters(config.concepts)
-            selected = [
-                input_file
-                for input_file in selected
-                if input_file.concept is not None and self._matches_concept_filter(input_file.concept, concept_filters)
-            ]
+            paths = set()
+            for selector in config.concepts:
+                matches = matching_concept_files(selected, selector)
+                if not matches and is_concept_identifier(selector):
+                    raise ValueError(f"concepts entry {selector!r} matches no concept file of the selected input")
+                paths.update(f.path for f in matches)
+            selected = [f for f in selected if f.path in paths]
 
         return self._select_events(selected)
 
@@ -238,25 +241,15 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         config = self._config.config
         for field_name, entries in (("events", config.events), ("exclude_events", config.exclude_events)):
             for entry in entries:
-                if not any(self._matches_event_entry(input_file, entry) for input_file in input_files):
+                if not any(f.matches_event(entry) for f in input_files):
                     raise ValueError(self._unmatched_event_entry_message(field_name, entry, input_files))
 
         selected = input_files
         if config.events:
-            selected = [f for f in selected if any(self._matches_event_entry(f, entry) for entry in config.events)]
+            selected = [f for f in selected if any(f.matches_event(entry) for entry in config.events)]
         if config.exclude_events:
-            selected = [
-                f for f in selected if not any(self._matches_event_entry(f, entry) for entry in config.exclude_events)
-            ]
+            selected = [f for f in selected if not any(f.matches_event(entry) for entry in config.exclude_events)]
         return selected
-
-    @staticmethod
-    def _matches_event_entry(input_file: InputFile, entry: str) -> bool:
-        """Check whether ``<dataset>/<table>`` or ``<dataset>/<table>/<event>`` names a file (case-sensitive)."""
-        dataset, table, *event = entry.split("/")
-        return (
-            input_file.dataset == dataset and input_file.table == table and (not event or input_file.event == event[0])
-        )
 
     @staticmethod
     def _unmatched_event_entry_message(field_name: str, entry: str, input_files: list[InputFile]) -> str:
@@ -274,16 +267,6 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
     @staticmethod
     def _dataset_version(input_file: InputFile) -> str:
         return f"{input_file.dataset}/{input_file.version}"
-
-    @staticmethod
-    def _normalize_concept_filters(concepts: list[str]) -> set[str]:
-        return {concept.replace("\\", "/").strip("/").lower() for concept in concepts}
-
-    @staticmethod
-    def _matches_concept_filter(concept_path: Path, concept_filters: set[str]) -> bool:
-        concept_path_str = concept_path.as_posix().lower()
-        concept_name = concept_path.name.lower()
-        return concept_path_str in concept_filters or concept_name in concept_filters
 
     def _subject_keys(
         self,

@@ -14,7 +14,7 @@ open it explicitly with `WeavEHRProject(path, read_only=True)` for a series of q
 
 This example selects subjects with a recorded creatinine measurement, then retrieves their heart
 rate measurements and recorded deaths. Setting `dataset` to `"eicu-demo"` runs the same query
-against eICU. WeavEHR finds the `MEDS_DEATH` event in the appropriate source table for each dataset.
+against eICU. Selecting the exact MEDS code `MEDS_DEATH` works across source tables in each dataset.
 
 ```python
 import polars as pl
@@ -22,12 +22,10 @@ from weavehr import WeavEHRProject, load_concepts
 
 project = WeavEHRProject("output/project", read_only=True)
 dataset = "mimic-iv-demo"
-creatinine = load_concepts(project, "creatinine", dataset=dataset)
-cohort = (
-    creatinine.filter(pl.col("numeric_value").is_not_null()).select("dataset", "dataset_version", "subject_id").unique()
-)
+creatinine = load_concepts(project, "creatinine.1.0.0", dataset=dataset)
+cohort = creatinine.filter(pl.col("numeric_value").is_not_null()).select("dataset", "version", "subject_id").unique()
 
-events = load_concepts(project, "heart_rate", events="MEDS_DEATH", dataset=dataset, cohort=cohort)
+events = load_concepts(project, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset=dataset, cohort=cohort)
 summary = events.group_by("source").agg(pl.len().alias("n_events")).collect()
 ```
 
@@ -38,17 +36,23 @@ if the analysis needs chronological order.
 
 ## Choosing inputs
 
-- **Concepts.** Pass a name or a list, e.g. `["heart_rate", "creatinine"]`. If several definitions
-  match a name, select a version explicitly, e.g. `"heart_rate/1.0.0"`.
-- **Native events.** `events="MEDS_DEATH"` selects every event stream with that name in the dataset.
-  `events="patients/MEDS_DEATH"` selects one table. Stream names are case-sensitive. For an exact
-  row-level MEDS code, use `codes="MEDS_DEATH"`. Combining `events` and `codes` restricts the code
-  search to those streams. Code predicates apply to the extraction portion of a mixed query.
+- **Concepts.** Use the same identifier as in mapping YAML, e.g. `"heart_rate.1.0.0"` or
+  `"weavehr.config.concept.heart_rate.1.0.0"`. A bare name such as `"heart_rate"` works when it
+  identifies a single concept version in the selected dataset. Pass a list to select several concepts.
+  If the concept name contains a dot, include its version. For example, select version `1.0.0`
+  of a custom concept named `score.v2` with `"score.v2.1.0.0"`.
+- **Native events.** Use sharding's case-sensitive event selectors. For `dataset="mimic-iv-demo"`,
+  `events="mimic-iv-demo/patients"` selects the whole table and `events="mimic-iv-demo/patients/MEDS_DEATH"`
+  selects one event stream. In an interactive query, the bare stream name `events="MEDS_DEATH"` searches
+  across tables in the selected dataset.
+- **MEDS codes.** `codes="MEDS_DEATH"` selects extracted rows carrying that exact code, regardless of the
+  stream name. Supply `events` as well to limit the search to particular streams. In a mixed query,
+  the code filter applies only to extracted rows.
 - **Dataset.** Each call reads one dataset version. Use its name if unique or qualify it,
   e.g. `dataset="mimic-iv/2.2"`. Set `concept_step` or `extraction_step` if the project used
   custom step names. A native-only query needs only completed extraction output.
-- **Columns.** The result has the five core MEDS columns plus `dataset`, `dataset_version` and
-  `source`. For example, `source` can be `concept/heart_rate/1.0.0` or `extraction/patients/MEDS_DEATH`.
+- **Columns.** The result has the five core MEDS columns plus `dataset`, `version` and `source`.
+  `version` is the release of the source dataset. `source` identifies the concept or extraction stream.
   Request extensions such as `extension_columns=["stay_id", "available_time"]` when needed.
   Missing extensions in individual streams become typed nulls. An extension missing from every selected
   stream raises an error, as do conflicting extension types.
@@ -59,7 +63,7 @@ if the analysis needs chronological order.
 
 `cohort=[101, 102]` selects subject IDs in the requested dataset version. A Polars cohort table
 can instead supply explicit join keys. Repeated keys select each matching event once. Keeping
-`dataset` and `dataset_version` among the keys prevents collisions when reusing a multicentre cohort.
+`dataset` and `version` among the keys prevents collisions when reusing a multicentre cohort.
 
 For rows carrying a native stay ID, pass `cohort=stays.select("subject_id", "stay_id")` and
 `extension_columns="stay_id"`. Both keys must match. Where a concept carries only a subject and

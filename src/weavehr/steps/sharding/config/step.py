@@ -82,8 +82,8 @@ class CustomConfig(BaseModel):
         datasets: Dataset names to include, optionally qualified with a
             version (``mimic-iv/3.1``). An empty list includes all available
             datasets.
-        concepts: Concept names or relative concept paths to include. An empty
-            list includes all available concepts. Only for concept input.
+        concepts: Versioned YAML identifiers, bare concept names or relative concept
+            paths to include. An empty list includes all concepts. Only for concept input.
         events: Extraction event files to include, as ``<dataset>/<table>`` (every
             event of the table) or ``<dataset>/<table>/<event>``. An empty list
             includes all event files. Only for extraction input.
@@ -120,8 +120,8 @@ class CustomConfig(BaseModel):
     concepts: list[str] = Field(
         default_factory=list,
         description=(
-            "Concept names or relative concept paths to include. "
-            "Examples: heart_rate, vital/heart_rate. Empty means all concepts. Only for concept input."
+            "Versioned concept identifiers (heart_rate.1.0.0 or the full YAML ID), bare names "
+            "or relative concept paths. Empty means all concepts. Only for concept input."
         ),
     )
     events: list[str] = Field(

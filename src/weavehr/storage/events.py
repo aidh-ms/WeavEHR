@@ -7,6 +7,7 @@ from pathlib import Path
 import polars as pl
 
 from weavehr.logging import get_logger
+from weavehr.steps.concept.config.concept import ConceptConfig
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,38 @@ class InputFile:
     table: str | None = None
     event: str | None = None
     concept_version: str | None = None
+
+    @property
+    def concept_identifier(self) -> str:
+        """Return the YAML identifier of a discovered concept file."""
+        assert self.concept is not None and self.concept_version is not None
+        return ConceptConfig.build_identifier(
+            (ConceptConfig.__weavehr_config_type__, self.concept.as_posix(), self.concept_version)
+        )
+
+    def matches_event(self, selector: str) -> bool:
+        """Match a dataset/table, dataset/table/event, or dataset-scoped event name."""
+        if self.event is None:
+            return False
+        table = f"{self.dataset}/{self.table}"
+        return selector in (table, f"{table}/{self.event}", self.event)
+
+
+def is_concept_identifier(selector: str) -> bool:
+    """A dotted name or the explicit YAML prefix selects an exact concept definition."""
+    name = selector.replace("\\", "/").strip("/").lower()
+    return "." in name.rpartition("/")[2] or name.startswith(f"{ConceptConfig.prefix()}.")
+
+
+def matching_concept_files(files: Sequence[InputFile], selector: str) -> list[InputFile]:
+    """Match an exact YAML identifier or the existing unversioned name/path filter."""
+    name = selector.replace("\\", "/").strip("/").lower()
+    if is_concept_identifier(name):
+        identifier = ConceptConfig.ensure_prefix(name)
+        return [f for f in files if f.concept is not None and f.concept_identifier == identifier]
+    return [
+        f for f in files if f.concept is not None and name in (f.concept.name.lower(), f.concept.as_posix().lower())
+    ]
 
 
 def concept_input_files(concept_data_path: Path) -> list[InputFile]:

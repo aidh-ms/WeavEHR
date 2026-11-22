@@ -40,10 +40,16 @@ All lists are optional; an empty list includes everything.
 | Key | Applies to | Entries |
 | --- | --- | --- |
 | `datasets` | both inputs | dataset name (`mimic-iv`) or `name/version` (`mimic-iv/2.2`) |
-| `concepts` | concept input only | concept name (`heart_rate`) or relative concept path (`vital/heart_rate`) |
+| `concepts` | concept input only | concept name (`heart_rate`), versioned identifier (`heart_rate.1.0.0` or `weavehr.config.concept.heart_rate.1.0.0`), or relative concept path |
 | `events` | extraction input only | `<dataset>/<table>` (every event of the table) or `<dataset>/<table>/<event>` |
 | `exclude_events` | extraction input only | same form as `events`; applied after `events` |
 | `subjects` | both inputs | subject IDs |
+
+Use a versioned concept identifier to select the same definition you reference in mapping YAML.
+Sharding raises an error if a requested versioned identifier matches no file in the selected datasets.
+With a bare name or relative concept path, sharding includes all matching concept versions.
+A dot in the concept name requires an explicit version, e.g. `score.v2.1.0.0` for version `1.0.0` of `score.v2`.
+Dots in a parent directory are allowed in an unversioned path such as `custom.v2/heart_rate`.
 
 `events` and `exclude_events` entries name the dataset and the table because event names are not unique: the same name can occur in several tables of one dataset and in several datasets. They contain no version (choose versions with `datasets`) and no wildcards, and they are **case-sensitive** (they are compared with the event file names). Every entry must match at least one file left by the `datasets` filter; an entry that matches nothing fails and lists the names that do exist, because a mistyped exclusion would otherwise silently keep an event and a mistyped inclusion would silently drop one.
 

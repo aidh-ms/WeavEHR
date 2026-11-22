@@ -177,7 +177,7 @@ For an interactive export, select the concepts and native events of interest:
 ```python
 from weavehr import load_concepts
 
-events = load_concepts(project_path, "heart_rate", events="MEDS_DEATH", dataset="mimic-iv/3.1")
+events = load_concepts(project_path, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset="mimic-iv/3.1")
 print(events.head(10).collect())
 ```
 
