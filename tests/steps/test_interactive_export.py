@@ -8,10 +8,10 @@ import pytest
 
 from tests.steps.conftest import load_concept_config, load_extracation_config
 from tests.steps.test_sharding_step import event_frame, read_shards, shard_extraction, shard_input
-from weavehr import ConceptStep, ExtractionStep, WeavEHRProject, load_concepts
+from weavehr import ConceptStep, ExtractionStep, WeavEHRProject, scan_events
 
 
-def test_load_concepts_from_a_completed_pipeline(tmp_path: Path, extraction_config: Path, concept_config: Path) -> None:
+def test_scan_events_from_a_completed_pipeline(tmp_path: Path, extraction_config: Path, concept_config: Path) -> None:
     config = tmp_path / "config"
     load_extracation_config(config / "testdb" / "1.0" / "tables")
     load_concept_config(config / "concepts", [config / "testdb" / "1.0" / "mappings"])
@@ -22,13 +22,13 @@ def test_load_concepts_from_a_completed_pipeline(tmp_path: Path, extraction_conf
         read_only_step.run()
     with pytest.raises(PermissionError, match="read-only"):
         read_only_step.setup_config()
-    raw = load_concepts(project, events="CHART", dataset="testdb")
+    raw = scan_events(project, events="CHART", dataset="testdb")
     # Repeating a qualifying subject in the cohort must preserve the underlying event count.
     cohort = raw.filter(pl.col("text_value") == "eighty").select("dataset", "version", "subject_id")
     cohort = pl.concat([cohort, cohort])
     ConceptStep.load(project, concept_config).run()
 
-    query = load_concepts(project.path, ["heart_rate", "bmi"], dataset="testdb/1.0", events="WEIGHT", cohort=cohort)
+    query = scan_events(project.path, ["heart_rate", "bmi"], dataset="testdb/1.0", events="WEIGHT", cohort=cohort)
     assert isinstance(query, pl.LazyFrame)
     rows = query.collect()
     assert rows["subject_id"].unique().to_list() == [1]
@@ -66,7 +66,7 @@ def test_available_inputs_round_trip(tmp_path: Path) -> None:
         ("db", "1", "event", "db/t/X", []),
     ]
     for name, version, kind, selector, extensions in catalog.iter_rows():
-        rows = load_concepts(
+        rows = scan_events(
             project,
             dataset=f"{name}/{version}",
             extension_columns=extensions,
@@ -102,7 +102,7 @@ def test_queries_use_the_project_layout_without_creating_directories(
 ) -> None:
     root = tmp_path / "project"
     with pytest.raises(FileNotFoundError, match="project"):
-        load_concepts(root, "x", dataset="db")
+        scan_events(root, "x", dataset="db")
     assert not root.exists()
 
     write_output(root, "raw", {"db/1/table/X.parquet": event_frame([5], "x")})
@@ -111,13 +111,13 @@ def test_queries_use_the_project_layout_without_creating_directories(
     monkeypatch.setattr(WeavEHRProject, "datasets_path", property(lambda project: project.path / "outputs"))
     before = set(root.rglob("*"))
 
-    rows = load_concepts(str(root), events="X", dataset="db", extraction_step="Raw").collect()
+    rows = scan_events(str(root), events="X", dataset="db", extraction_step="Raw").collect()
     assert rows["code"].to_list() == ["x"]
     project = WeavEHRProject(root, read_only=True)
     with pytest.raises(FileNotFoundError, match="concept"):
-        load_concepts(project, "x", dataset="db")
+        scan_events(project, "x", dataset="db")
     with pytest.raises(ValueError, match="step name"):
-        load_concepts(project, "x", dataset="db", concept_step="../raw")
+        scan_events(project, "x", dataset="db", concept_step="../raw")
     assert set(root.rglob("*")) == before
 
 
@@ -134,7 +134,7 @@ def test_event_names_codes_and_scoped_cohorts(tmp_path: Path) -> None:
         },
     )
     write_output(tmp_path, "mapped", {"measure/1.0/a/1.parquet": other})
-    query = partial(load_concepts, tmp_path, dataset="a/1", extraction_step="Raw", concept_step="Mapped")
+    query = partial(scan_events, tmp_path, dataset="a/1", extraction_step="Raw", concept_step="Mapped")
     combined = query("measure", events=["MEAS", "a/table_a/MEAS"], extension_columns="stay_id")
     rows = combined.collect()
     assert rows.height == 5
@@ -174,19 +174,19 @@ def test_versions_and_incomplete_output(tmp_path: Path) -> None:
         },
     )
     with pytest.raises(ValueError, match="Available versions"):
-        load_concepts(tmp_path, "x", dataset="db")
+        scan_events(tmp_path, "x", dataset="db")
     with pytest.raises(ValueError, match=r"x\.1.*x\.2"):
-        load_concepts(tmp_path, "x", dataset="db/1")
-    assert load_concepts(tmp_path, "x.2", dataset="db/1").collect()["source"].to_list() == ["concept/x/2"]
+        scan_events(tmp_path, "x", dataset="db/1")
+    assert scan_events(tmp_path, "x.2", dataset="db/1").collect()["source"].to_list() == ["concept/x/2"]
     with pytest.raises(KeyError, match="x/2"):
-        load_concepts(tmp_path, "x/2", dataset="db/1")
+        scan_events(tmp_path, "x/2", dataset="db/1")
     with pytest.raises(KeyError, match="missing"):
-        load_concepts(tmp_path, ["x.1", "missing"], dataset="db/1")
+        scan_events(tmp_path, ["x.1", "missing"], dataset="db/1")
     with pytest.raises(FileNotFoundError, match="extraction"):
-        load_concepts(tmp_path, events="x", dataset="db/1")
+        scan_events(tmp_path, events="x", dataset="db/1")
     (tmp_path / "datasets/concept/.complete").unlink()
     with pytest.raises(FileNotFoundError, match="concept"):
-        load_concepts(tmp_path, "x", dataset="db/1")
+        scan_events(tmp_path, "x", dataset="db/1")
 
 
 @pytest.mark.parametrize(
@@ -209,7 +209,7 @@ def test_versioned_concept_selectors_match_sharding(tmp_path: Path, selector: st
     }
     output = shard_input(tmp_path, files, {"concept_step": "Concept", "concepts": [selector]}, input_dataset="concept")
     (shard,) = read_shards(output)
-    rows = load_concepts(tmp_path / "project", selector, dataset="testdb").collect()
+    rows = scan_events(tmp_path / "project", selector, dataset="testdb").collect()
     assert rows["subject_id"].to_list() == shard["subject_id"].to_list() == [subject_id]
 
 
@@ -224,7 +224,7 @@ def test_missing_concept_version_never_falls_back_to_a_literal_name(tmp_path: Pa
     with pytest.raises(ValueError, match=r"heart_rate\.1\.0\.0"):
         shard_input(tmp_path, files, config, input_dataset="concept")
     with pytest.raises(KeyError, match=r"heart_rate\.1\.0\.0"):
-        load_concepts(tmp_path / "project", selectors, dataset="testdb")
+        scan_events(tmp_path / "project", selectors, dataset="testdb")
 
 
 @pytest.mark.parametrize(
@@ -239,5 +239,5 @@ def test_qualified_event_selectors_match_sharding(tmp_path: Path, selector: str,
         "other/1.0/vitals/CHART.parquet": event_frame([1], "other-dataset"),
     }
     (shard,) = read_shards(shard_extraction(tmp_path, files, events=[selector]))
-    rows = load_concepts(tmp_path / "project", events=selector, dataset="testdb").collect()
+    rows = scan_events(tmp_path / "project", events=selector, dataset="testdb").collect()
     assert sorted(rows["code"].to_list()) == sorted(shard["code"].to_list()) == expected

@@ -46,7 +46,7 @@ from weavehr.storage.events import (
     extraction_input_files,
     is_concept_identifier,
     matching_concept_files,
-    scan_events,
+    scan_event_file,
 )
 from weavehr.storage.meds import MEDSDataset
 from weavehr.storage.project import WeavEHRProject
@@ -367,7 +367,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
 
         return pl.concat(
             [
-                scan_events(
+                scan_event_file(
                     file_path,
                     extension_columns,
                     pl.lit(dataset, dtype=pl.String).alias(DATASET_COLUMN),

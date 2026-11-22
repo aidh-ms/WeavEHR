@@ -5,7 +5,7 @@ After extraction and optional concept harmonisation, choose the export that fits
 | Export | Input | Result |
 | --- | --- | --- |
 | `ShardingStep` | Extracted events or harmonised concepts | A MEDS dataset on disk, partitioned by subject. See the [sharding guide](sharding.md). |
-| `load_concepts()` | Selected harmonised concepts, native extraction events, or both | A long-format Polars `LazyFrame` for an interactive session. |
+| `scan_events()` | Selected harmonised concepts, native extraction events, or both | A long-format Polars `LazyFrame` for an interactive session. |
 
 ## Discover available inputs
 
@@ -26,11 +26,11 @@ with_stay_id = inputs.filter(pl.col("extension_columns").list.contains("stay_id"
 Omit `dataset` to see all releases, or pass a dataset name to see its versions. The inventory reads
 only Parquet schema metadata for matching inputs in completed steps. A stream with zero events still has
 an entry. An absent stream has none. For custom step names, pass `concept_step` or `extraction_step`
-as you would to `load_concepts()`.
+as you would to `scan_events()`.
 
 ## Query a cohort
 
-Pass an existing project or its path to `load_concepts()`. A path is opened read-only. You can also
+Pass an existing project or its path to `scan_events()`. A path is opened read-only. You can also
 open it explicitly with `WeavEHRProject(path, read_only=True)` for a series of queries.
 
 This example selects subjects with a recorded creatinine measurement, then retrieves their heart
@@ -39,14 +39,14 @@ against eICU. Selecting the exact MEDS code `MEDS_DEATH` works across source tab
 
 ```python
 import polars as pl
-from weavehr import WeavEHRProject, load_concepts
+from weavehr import WeavEHRProject, scan_events
 
 project = WeavEHRProject("output/project", read_only=True)
 dataset = "mimic-iv-demo"
-creatinine = load_concepts(project, "creatinine.1.0.0", dataset=dataset)
+creatinine = scan_events(project, "creatinine.1.0.0", dataset=dataset)
 cohort = creatinine.filter(pl.col("numeric_value").is_not_null()).select("dataset", "version", "subject_id").unique()
 
-events = load_concepts(project, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset=dataset, cohort=cohort)
+events = scan_events(project, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset=dataset, cohort=cohort)
 summary = events.group_by("source").agg(pl.len().alias("n_events")).collect()
 ```
 
@@ -92,7 +92,7 @@ timestamp, apply your study's stay windows explicitly. For example, given a tabl
 the same dataset version with `subject_id`, `stay_id`, `start` and `end`:
 
 ```python
-heart_rate = load_concepts(project, "heart_rate", dataset=dataset, cohort=stays.select("subject_id"))
+heart_rate = scan_events(project, "heart_rate", dataset=dataset, cohort=stays.select("subject_id"))
 within_stay = heart_rate.join(stays.lazy(), on="subject_id").filter(
     pl.col("time").is_between("start", "end", closed="left")
 )

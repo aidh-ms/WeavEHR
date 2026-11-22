@@ -75,7 +75,7 @@ SOFTWARE.
 ```
 """
 
-from weavehr.export import load_concepts
+from weavehr.export import scan_events
 from weavehr.steps.concept.step import ConceptStep, concept_config_registry
 from weavehr.steps.extraction.step import ExtractionStep, dataset_config_registry
 from weavehr.steps.persistence.step import PersistenceStep
@@ -89,7 +89,7 @@ __all__ = [
     "ExtractionStep",
     "ConceptStep",
     "ShardingStep",
-    "load_concepts",
+    "scan_events",
     "auto_load_configs",
     "dataset_config_registry",
     "concept_config_registry",

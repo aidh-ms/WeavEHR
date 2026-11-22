@@ -47,7 +47,7 @@ flowchart TD
 
 1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
 2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). A dataset's mapping file may contain several YAML documents separated by `---`, each defining a mapping of any type; their outputs are combined. Concept dependencies are resolved automatically.
-3. **Export phase** — use `ShardingStep` to write subject-oriented MEDS shards, or call `load_concepts()` to query selected concepts and native events for a cohort in Python. Both exporters read the collected outputs of earlier steps. [Export guide](docs/user_guide/export.md)
+3. **Export phase** — use `ShardingStep` to write subject-oriented MEDS shards, or call `scan_events()` to query selected concepts and native events for a cohort in Python. Both exporters read the collected outputs of earlier steps. [Export guide](docs/user_guide/export.md)
 
 Extraction and harmonisation each write a self-contained MEDS dataset. A later session can query these datasets directly.
 
@@ -173,12 +173,12 @@ output/project/
 ```
 
 For an interactive export, use `project.available_inputs()` to discover concept and event selectors,
-then pass your selection to `load_concepts()`:
+then pass your selection to `scan_events()`:
 
 ```python
-from weavehr import load_concepts
+from weavehr import scan_events
 
-events = load_concepts(project_path, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset="mimic-iv/3.1")
+events = scan_events(project_path, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset="mimic-iv/3.1")
 print(events.head(10).collect())
 ```
 

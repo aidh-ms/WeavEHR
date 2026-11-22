@@ -197,7 +197,7 @@ def extension_column_dtypes(files: list[Path], columns: Sequence[str]) -> dict[s
     return dtypes
 
 
-def scan_events(path: Path, extensions: Mapping[str, pl.DataType], *provenance: pl.Expr) -> pl.LazyFrame:
+def scan_event_file(path: Path, extensions: Mapping[str, pl.DataType], *provenance: pl.Expr) -> pl.LazyFrame:
     """Scan one file into typed MEDS columns, provenance and the requested extensions."""
     events = pl.scan_parquet(path, glob=False)
     present = events.collect_schema() if extensions else {}

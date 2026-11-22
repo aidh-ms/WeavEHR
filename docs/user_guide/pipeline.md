@@ -43,7 +43,7 @@ Extraction and optional harmonisation produce the inputs to the export phase.
 | `ExtractionStep` | Raw source tables (CSV/CSV.GZ) | Dataset-level MEDS events |
 | `ConceptStep` | An extraction step's output | Harmonised, dataset-agnostic concept events |
 | Export with `ShardingStep` | A concept or extraction step's output | Subject-oriented MEDS shards on disk |
-| Export with `load_concepts()` | Selected concepts and/or extracted events for a cohort | An interactive Polars query |
+| Export with `scan_events()` | Selected concepts and/or extracted events for a cohort | An interactive Polars query |
 
 See the [export guide](export.md) for both options. An interactive query reads the completed project directly.
 

@@ -13,12 +13,12 @@ from weavehr.storage.events import (
     extension_column_dtypes,
     extraction_input_files,
     matching_concept_files,
-    scan_events,
+    scan_event_file,
     split_dataset,
 )
 from weavehr.storage.project import WeavEHRProject
 
-__all__ = ["ShardingStep", "load_concepts"]
+__all__ = ["ShardingStep", "scan_events"]
 
 
 def _names(value: str | Sequence[str]) -> list[str]:
@@ -48,7 +48,7 @@ def _select(files: list[InputFile], names: list[str], kind: str, dataset: str) -
     return list(selected.values())
 
 
-def load_concepts(
+def scan_events(
     project: WeavEHRProject | Path | str,
     concepts: str | Sequence[str] = (),
     *,
@@ -60,7 +60,7 @@ def load_concepts(
     concept_step: str = "concept",
     extraction_step: str = "extraction",
 ) -> pl.LazyFrame:
-    """Query harmonised concepts and/or extracted MEDS events from one dataset.
+    """Lazily scan harmonised concepts and/or extracted MEDS events from one dataset.
 
     Args:
         project: Existing project or its directory. Paths are opened read-only.
@@ -114,7 +114,7 @@ def load_concepts(
     dtypes = extension_column_dtypes([f.path for f in selected], extensions)
     scans = []
     for file in selected:
-        rows = scan_events(
+        rows = scan_event_file(
             file.path,
             dtypes,
             pl.lit(file.dataset).alias("dataset"),
