@@ -137,6 +137,11 @@ configure_logging(level="INFO")  # console logging to stdout (stops propagation 
 set_log_level("DEBUG")  # change verbosity later
 ```
 
-`INFO` reports step progress; registering individual configurations is logged at `DEBUG`.
+For each dataset, `INFO` reports how many tables were selected for extraction, how many source
+files were selected for persistence, and how many concepts are mapped or unmapped. Mapping counts describe configuration
+coverage. Individual unmapped concept names appear at `DEBUG`. Missing source files
+and extraction selections matching zero tables produce warnings.
 
-`DEBUG` traces every table, join, event, and written file — useful when developing new configurations.
+Each completed step reports its elapsed time and output directory. A reused step reports
+its existing output. Set `overwrite: true` in the step configuration to rerun it.
+Use `DEBUG` for individual tables, joins, events, and file writes.

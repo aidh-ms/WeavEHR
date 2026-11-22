@@ -8,6 +8,7 @@ dataset generation workflows.
 import shutil
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
+from time import perf_counter
 
 from weavehr.config.base import BaseConfig
 from weavehr.config.registry import BaseConfigRegistry
@@ -132,6 +133,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             and the step runs from scratch, so an interrupted run is redone
             rather than reused or appended to.
         """
+        started = perf_counter()
         completed = self.completion_marker.exists()
         output_exists = self.output_path.exists()
         skip = not self._config.overwrite and completed and output_exists
@@ -145,8 +147,8 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             skip,
         )
 
-        logger.info("Running step '%s'", self._step_name)
         if not skip:
+            logger.info("Running step '%s'", self._step_name)
             # Invalidate the earlier run before changing anything, so a crash at any
             # later point (config snapshot, reset, extraction, collection) makes the
             # next run start over instead of reusing the half-changed output.
@@ -165,14 +167,17 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             logger.debug("Step '%s': collecting results", self._step_name)
             self.collect()
             self.completion_marker.touch()
+            logger.info(
+                "Finished step '%s' in %.1fs. Output: %s", self._step_name, perf_counter() - started, self.output_path
+            )
         else:
             logger.info(
-                "Skipping step '%s' because overwrite=False and a completed run already exists",
+                "Reusing completed step '%s' (set overwrite: true to rerun). Output: %s",
                 self._step_name,
+                self.output_path,
             )
 
         assert isinstance(self._workspace_dir, WorkspaceDir)
-        logger.debug("Step '%s': finished successfully", self._step_name)
         return self._workspace_dir
 
     def setup_config(self) -> None:
@@ -184,10 +189,6 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
         configs directory.
         """
 
-        logger.info(
-            "Saving merged configuration to %s",
-            self._project.configs_path,
-        )
         self._registry.save(self._project.configs_path)
 
     def setup_project(self, reset: bool = False) -> None:
@@ -248,7 +249,7 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
             )
             return
 
-        logger.info(
+        logger.debug(
             "Collecting results for step '%s' into dataset at %s",
             self._step_name,
             self._dataset.data_path,
@@ -265,8 +266,3 @@ class ConfigurableBaseStep[SCT: BaseStepConfig, CT: BaseConfig](metaclass=ABCMet
 
         self._dataset.write_metadata(self._config.dataset.metadata)
         self._dataset.write_codes()
-
-        logger.info(
-            "Finished collecting results for step '%s'",
-            self._step_name,
-        )
