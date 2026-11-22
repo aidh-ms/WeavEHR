@@ -141,8 +141,6 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
             logger.warning("Skipping sharding step: no input files selected below %s", data_path)
             return
 
-        logger.info("Sharding %d input file(s)", len(files))
-
         datasets = [input_file.dataset for input_file in selected_files]
         namespaces = subject_namespaces(config.subject_groups)
 
@@ -155,7 +153,9 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
             return
 
         shard_count = (subject_keys.height + config.subjects_per_shard - 1) // config.subjects_per_shard
-        logger.info("Writing %d subject(s) to %d shard(s)", subject_keys.height, shard_count)
+        logger.info(
+            "Writing shards (input files: %d, subjects: %d, shards: %d)", len(files), subject_keys.height, shard_count
+        )
 
         # Assign every event its shard via a join and execute all shard sinks together, so the
         # shared scan and join are evaluated once instead of once per shard.
@@ -174,8 +174,6 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
             for shard_idx in range(shard_count)
         ]
         pl.collect_all(sinks, engine="streaming")
-
-        logger.info("Finished sharding step: wrote %d shard file(s)", shard_count)
 
     def _discover_input_files(self) -> tuple[Path, list[InputFile]] | None:
         """Find every input file of the configured concept or extraction step.

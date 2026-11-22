@@ -80,14 +80,19 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                         dataset_path=dataset.path,
                     )
 
+            logger.info("Persisting %s/%s (%d source files selected)", dataset.name, dataset.version, len(sources))
             for source_file, (table_name, dtypes) in sources.items():
-                self._persist_table(
-                    source_file=source_file,
-                    table_name=table_name,
-                    dtypes=dtypes,
-                    dataset_name=dataset.name,
-                    dataset_version=dataset.version,
-                )
+                try:
+                    self._persist_table(
+                        source_file=source_file,
+                        table_name=table_name,
+                        dtypes=dtypes,
+                        dataset_name=dataset.name,
+                        dataset_version=dataset.version,
+                    )
+                except Exception as exc:
+                    exc.add_note(f"While persisting {dataset.name}/{dataset.version}/{table_name}")
+                    raise
 
     def _persist_table(
         self,
@@ -110,7 +115,7 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
         output_file = self._workspace_dir.path / dataset_name / dataset_version / f"{table_name}.parquet"
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(
+        logger.debug(
             "Persisting %d configured columns from source table '%s' from %s to %s",
             len(dtypes),
             table_name,
@@ -153,7 +158,7 @@ class PersistenceStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
 
     def collect(self) -> None:
         """Skip MEDS collection for persisted source tables."""
-        logger.info(
+        logger.debug(
             "Skipping MEDS collection for step '%s'; persisted source tables remain in the workspace",
             self._step_name,
         )
