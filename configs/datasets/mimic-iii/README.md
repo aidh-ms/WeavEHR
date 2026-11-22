@@ -4,7 +4,7 @@ Native extraction and concept mappings for
 [MIMIC-III v1.4](https://physionet.org/content/mimiciii/1.4/), covering both
 CareVue and MetaVision. Related issue: [#26](https://github.com/aidh-ms/WeavEHR/issues/26).
 
-`1.4/` is the reference: 20 patient-event table configs and 136 concept mappings.
+`1.4/` is the reference: 20 patient-event table configs and 143 concept mappings.
 The [public demo](../mimic-iii-demo/README.md) and
 [official CareVue subset](../mimic-iii-carevue/README.md) inherit these configs.
 
@@ -66,8 +66,8 @@ recorded death, recorded GCS total, discharge notes and radiology notes.
 | `neutrophils_absolute` | Direct absolute-count item absent from III |
 | `immature_granulocytes` | Relevant IV item absent; other specimen types are not substituted |
 | `erythrocyte_distribution_width_sd` | No matching III RDW-SD item |
-| `norepinephrine_rate`, `norepinephrine_duration`, `epinephrine_rate`, `epinephrine_duration`, `dopamine_rate`, `dopamine_duration`, `dobutamine_rate`, `dobutamine_duration`, `phenylephrine_rate`, `vasopressin_rate` | Deferred: CareVue and MetaVision infusions are to be harmonised without a dataset-specific transformer (follow-up issue). Their source events are extracted |
-| `sofa_cardiovascular`, `sofa`, `sepsis3` | Deferred with the infusions: cardiovascular SOFA scores vasopressors, and SOFA and Sepsis-3 build on it |
+| `norepinephrine_duration`, `epinephrine_duration`, `dopamine_duration`, `dobutamine_duration` | Episode/duration reconstruction remains deferred; discrete rate observations, updates and stops are mapped separately |
+| `sofa_cardiovascular`, `sofa`, `sepsis3` | Deferred: the pressor rates exist, but `pressor_window` has not been chosen for III's CareVue charting |
 
 AKI, suspected infection and the respiratory, coagulation, liver, CNS and renal
 SOFA components reuse WeavEHR's existing transformers with III inputs. Their
@@ -75,6 +75,11 @@ continuous-time definitions do not claim equivalence to every hourly ricu score
 or published SQL outcome definition.
 
 ## Dataset-specific rules
+
+The six vasopressor rate concepts read MetaVision settings and stops and CareVue
+observations and stops through `vasopressor_infusion`. CareVue rates per minute take
+`patient_weight` of the same ICU stay. See
+[Vasopressor rates](../../../docs/user_guide/vasopressor_events.md).
 
 - Age is whole Julian years at admission, capped at 90. Shifted birth dates
   for the elderly are not treated as actual ages above 300.

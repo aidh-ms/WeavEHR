@@ -783,9 +783,10 @@ def test_vasopressor_rates_read_the_dose_rate_from_sig(tmp_path: Path) -> None:
     """AMSTEL's sig text becomes a norepinephrine rate in mcg/kg/min, per segment.
 
     The conversions hold by definition: 1 mg is 1000 µg, 1 h is 60 min, and a rate not per kg is
-    divided by the admission weight of its stay (85 kg; stay 20 has none). Each kept segment
-    starts at its rate and ends at 0, linked by drug_exposure_id. A segment without a dose rate
-    (a bolus, a pump rate only) is dropped, its end included.
+    divided by the latest admission weight before it (85 kg), even that of another admission:
+    stay 20 has none of its own. Each kept segment starts at its rate and ends at 0, one stream per
+    drug_exposure_id. A segment without a dose rate (a bolus, a pump rate only) is dropped, its end
+    included.
     """
     kept = {
         1: "4 mg @ 0.1 µg/kg/min = 3 ml/uur",
@@ -794,14 +795,15 @@ def test_vasopressor_rates_read_the_dose_rate_from_sig(tmp_path: Path) -> None:
         4: "4 mg @ 8.5 µg/min = 2 ml/uur",
         5: "4 mg @ 0.51 mg/uur = 6 ml/uur",
     }
-    dropped = [segment(6, "4 mg @ 8.5 µg/min = 2 ml/uur", 0, 1, stay=20), segment(7, "1 mg", 0, 1)]
+    other_stay = segment(6, "4 mg @ 8.5 µg/min = 2 ml/uur", 0, 1, stay=20)
+    dropped = [segment(7, "1 mg", 0, 1)]
     outputs = run_concepts(
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["patient_weight", "norepinephrine_rate"],
+        concepts=["vasopressor_infusion", "patient_weight", "norepinephrine_rate"],
         sources={
-            **drug_sources(*[segment(i, sig, 0, 1) for i, sig in kept.items()], *dropped),
+            **drug_sources(*[segment(i, sig, 0, 1) for i, sig in kept.items()], other_stay, *dropped),
             "measurement/MEASUREMENT": [ADMISSION_WEIGHT],
         },
     )
@@ -809,10 +811,15 @@ def test_vasopressor_rates_read_the_dose_rate_from_sig(tmp_path: Path) -> None:
     assert_rows(
         outputs["norepinephrine_rate"],
         [
-            {"code": "norepinephrine_rate//mcg/kg/min", "time": at(hours), "numeric_value": rate, **ids}
-            for i in kept
-            for hours, rate in [(0, 0.1), (1, 0.0)]
-            for ids in [{"drug_exposure_id": str(i), "stay_id": str(VISIT_ID)}]
+            *(
+                {"code": "norepinephrine_rate//mcg/kg/min", "time": at(hours), "numeric_value": rate, **ids}
+                for i in kept
+                for hours, rate in [(0, 0.1), (1, 0.0)]
+                for ids in [{"stream_id": f"drug_exposure:{i}", "stay_id": str(VISIT_ID)}]
+            ),
+            # Stay 20 takes stay 10's admission weight.
+            {"time": at(0), "numeric_value": 0.1, "stream_id": "drug_exposure:6", "stay_id": "20"},
+            {"time": at(1), "numeric_value": 0.0, "stream_id": "drug_exposure:6", "stay_id": "20"},
         ],
         context="norepinephrine_rate",
     )
@@ -823,7 +830,7 @@ def test_cardiovascular_sofa_follows_rate_segments_and_their_stop(tmp_path: Path
 
     Pump A changes its rate at 2 h: one segment ends and the next starts at the same time, and
     the new rate counts. Pump B, a new syringe, starts at 4 h before A stops at 5 h; since each
-    stop ends only the segment with its drug_exposure_id, B still counts after 5 h. Points follow
+    stop ends only the stream of its drug_exposure_id, B still counts after 5 h. Points follow
     Vincent et al. (1996): norepinephrine up to 0.1 mcg/kg/min scores 3, above 0.1 scores 4, and
     without vasopressors a MAP below 70 mmHg scores 1.
     """
@@ -833,6 +840,7 @@ def test_cardiovascular_sofa_follows_rate_segments_and_their_stop(tmp_path: Path
         version=VERSION,
         concepts=[
             "mean_arterial_pressure",
+            "vasopressor_infusion",
             "patient_weight",
             "norepinephrine_rate",
             "epinephrine_rate",
@@ -901,6 +909,7 @@ SOFA: Final = [
     "total_bilirubin",
     "sofa_liver",
     "mean_arterial_pressure",
+    "vasopressor_infusion",
     "patient_weight",
     "norepinephrine_rate",
     "epinephrine_rate",

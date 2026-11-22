@@ -71,3 +71,4 @@ events:
         infusionrate: col(infusionrate)
         drugamount: col(drugamount)
         volume: col(volumeoffluid)
+        rateuom: col(drugname).str.extract(r"\(([^()]*)\)$", 1)

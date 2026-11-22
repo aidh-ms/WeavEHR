@@ -1,9 +1,14 @@
+# Charted body weights in kg: Admission Weight (226512) and Daily Weight (224639), the two items
+# mimic-code's weight_durations reads; ricu reads only the admission weight. Not mapped: Feeding
+# Weight (226846), which neither reads, and the weight entered with an infusion (inputevents
+# patientweight), which on the demo is mostly the stay's admission weight, repeated with each
+# infusion rather than measured again (docs/user_guide/vasopressor_events.md).
 type: simple
 mappings:
   - pattern:
       table: chartevents
       event: CHART
-      code: ^(?:CHART//)?(?:226512)(?:$|//)
+      code: ^(?:CHART//)?(?:226512|224639)(?:$|//)
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)

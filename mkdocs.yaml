@@ -13,6 +13,7 @@ nav:
       - Dataset Versions and Variants: "user_guide/versioning.md"
       - Concept Configuration: "user_guide/concepts.md"
       - Sharding Configuration: "user_guide/sharding.md"
+      - Vasopressor Rates: "user_guide/vasopressor_events.md"
       - Expression Language: "user_guide/expressions.md"
   - Architecture:
       - Introduction and Goals: "arc/introduction.md"
