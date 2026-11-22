@@ -29,7 +29,7 @@ uv run jupyter lab            # example notebook: example/pipeline.ipynb
 
 The pipeline is **project + steps**, all processing on **Polars LazyFrames** (streaming `sink_parquet`), all configuration in **Pydantic v2** models loaded from YAML.
 
-Public API (`src/weavehr/__init__.py`): `WeavEHRProject`, `ExtractionStep`, `ConceptStep`, `ShardingStep`, `PersistenceStep`, `scan_events` (plus the config registries and `auto_load_configs`).
+Public API (`src/weavehr/__init__.py`): `WeavEHRProject`, `ExtractionStep`, `ConceptStep`, `ShardingStep`, `PersistenceStep`, `scan_events` (plus the config registries and `load_configs`).
 
 ```python
 with WeavEHRProject(project_path) as project:

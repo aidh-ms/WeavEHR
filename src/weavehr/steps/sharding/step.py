@@ -135,7 +135,7 @@ class ShardingStep(ConfigurableBaseStep[ShardingStepConfig, ShardingConfig]):
         validate_subject_groups(config.subject_groups, selected_versions, config.config_roots)
 
         files = [input_file.path for input_file in selected_files]
-        extension_dtypes = extension_column_dtypes(files, config.extension_columns)
+        extension_dtypes = extension_column_dtypes(selected_files, config.extension_columns)
 
         if not selected_files:
             logger.warning("Skipping sharding step: no input files selected below %s", data_path)

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import polars as pl
 
+from weavehr.config.base import ConceptReference
 from weavehr.logging import get_logger
-from weavehr.steps.concept.config.concept import ConceptConfig
 
 logger = get_logger(__name__)
 
@@ -49,8 +49,8 @@ class InputFile:
     def concept_identifier(self) -> str:
         """Return the YAML identifier of a discovered concept file."""
         assert self.concept is not None and self.concept_version is not None
-        return ConceptConfig.build_identifier(
-            (ConceptConfig.__weavehr_config_type__, self.concept.as_posix(), self.concept_version)
+        return ConceptReference.build_identifier(
+            (ConceptReference.__weavehr_config_type__, self.concept.as_posix(), self.concept_version)
         )
 
     @property
@@ -70,14 +70,14 @@ class InputFile:
 def is_concept_identifier(selector: str) -> bool:
     """A dotted name or the explicit YAML prefix selects an exact concept definition."""
     name = selector.replace("\\", "/").strip("/").lower()
-    return "." in name.rpartition("/")[2] or name.startswith(f"{ConceptConfig.prefix()}.")
+    return "." in name.rpartition("/")[2] or name.startswith(f"{ConceptReference.prefix()}.")
 
 
 def matching_concept_files(files: Sequence[InputFile], selector: str) -> list[InputFile]:
     """Match an exact YAML identifier or the existing unversioned name/path filter."""
     name = selector.replace("\\", "/").strip("/").lower()
     if is_concept_identifier(name):
-        identifier = ConceptConfig.ensure_prefix(name)
+        identifier = ConceptReference.ensure_prefix(name)
         return [f for f in files if f.concept is not None and f.concept_identifier == identifier]
     return [
         f for f in files if f.concept is not None and name in (f.concept.name.lower(), f.concept.as_posix().lower())
@@ -151,7 +151,12 @@ def input_schema(path: Path) -> pl.Schema:
     return pl.scan_parquet(path, glob=False).collect_schema()
 
 
-def extension_column_dtypes(files: list[Path], columns: Sequence[str]) -> dict[str, pl.DataType]:
+def _string_extension_dtype(dtype: pl.DataType) -> bool:
+    """A native scalar that the concept writer can represent as text."""
+    return dtype.is_numeric() or dtype.is_temporal() or dtype == pl.Boolean
+
+
+def extension_column_dtypes(files: list[InputFile], columns: Sequence[str]) -> dict[str, pl.DataType]:
     """Determine the dtype of each requested extension column across the selected files.
 
     Reads only the Parquet schemas. A column missing from some files is filled with
@@ -164,36 +169,37 @@ def extension_column_dtypes(files: list[Path], columns: Sequence[str]) -> dict[s
     Raises:
         ValueError: If a column is in none of the files (a typo or a missing
             extraction config change, which would otherwise yield an all-null
-            column), or the files disagree on its dtype (a silent cast could
-            break joins on the column downstream)
+            column), or the files have incompatible dtypes
     """
     if not columns:
         return {}
 
-    schemas = {file: input_schema(file) for file in files}
+    schemas = {file: input_schema(file.path) for file in files}
     dtypes: dict[str, pl.DataType] = {}
     for column in columns:
-        present = False
-        files_by_dtype: dict[str, list[Path]] = {}
-        dtype_by_name: dict[str, pl.DataType] = {}
-        for file, schema in schemas.items():
-            if column not in schema:
-                continue
-            present = True
-            dtype = schema[column]
-            if dtype == pl.Null:
-                continue
-            files_by_dtype.setdefault(str(dtype), []).append(file)
-            dtype_by_name[str(dtype)] = dtype
-
+        present = {file: schema[column] for file, schema in schemas.items() if column in schema}
         if not present:
             raise ValueError(f"extension column '{column}' is in none of the {len(files)} selected input files")
-        if len(files_by_dtype) > 1:
-            conflicts = ", ".join(
-                f"{name} in {[str(file) for file in conflict_files]}" for name, conflict_files in files_by_dtype.items()
-            )
-            raise ValueError(f"extension column '{column}' has conflicting dtypes: {conflicts}")
-        dtypes[column] = next(iter(dtype_by_name.values()), pl.Null())
+
+        typed = {file: dtype for file, dtype in present.items() if dtype != pl.Null}
+        types = set(typed.values())
+        if len(types) <= 1:
+            dtypes[column] = next(iter(types), pl.Null())
+            continue
+
+        # Concept output stores extensions as text. Only bridge a difference between layers.
+        concept_types = {dtype for file, dtype in typed.items() if file.concept is not None}
+        native_types = {dtype for file, dtype in typed.items() if file.event is not None}
+        if (
+            concept_types == {pl.String}
+            and len(native_types) == 1
+            and _string_extension_dtype(next(iter(native_types)))
+        ):
+            dtypes[column] = pl.String()
+            continue
+
+        conflicts = ", ".join(f"{dtype} in {file.path}" for file, dtype in typed.items())
+        raise ValueError(f"extension column '{column}' has conflicting dtypes: {conflicts}")
     return dtypes
 
 

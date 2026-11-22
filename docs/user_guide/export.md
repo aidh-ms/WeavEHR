@@ -75,8 +75,11 @@ if the analysis needs chronological order.
 - **Columns.** The result has the five core MEDS columns plus `dataset`, `version` and `source`.
   `version` is the release of the source dataset. `source` identifies the concept or extraction stream.
   Request extensions such as `extension_columns=["stay_id", "available_time"]` when needed.
-  Missing extensions in individual streams become typed nulls. An extension missing from every selected
-  stream raises an error, as do conflicting extension types.
+  A single-layer scan preserves the stored dtype. In a mixed scan, a concept extension stored as
+  text and its numeric, boolean or temporal extraction counterpart are returned as strings.
+  For example, integer stay ID `100` becomes `"100"` when combined with concept rows that store it
+  as text. Missing extensions in individual streams become typed nulls. An extension missing
+  from every selected stream, or conflicting types within a layer, raises an error.
 - **Missing data.** An unknown concept or event stream raises an error identifying the requested name
   and dataset. A valid selection with no matching subjects or codes returns zero rows.
 
@@ -87,7 +90,9 @@ can instead supply explicit join keys. Repeated keys select each matching event 
 `dataset` and `version` among the keys prevents collisions when reusing a multicentre cohort.
 
 For rows carrying a native stay ID, pass `cohort=stays.select("subject_id", "stay_id")` and
-`extension_columns="stay_id"`. Both keys must match. Where a concept carries only a subject and
+`extension_columns="stay_id"`. Both keys must match. Integer and string extension IDs are compared as text, so integer
+`100` matches `"100"` and a leading zero in `"0100"` is significant. A cohort's
+`subject_id` must be an integer column (or an empty/null column). Where a concept carries only a subject and
 timestamp, apply your study's stay windows explicitly. For example, given a table `stays` from
 the same dataset version with `subject_id`, `stay_id`, `start` and `end`:
 

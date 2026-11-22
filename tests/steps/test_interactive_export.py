@@ -41,6 +41,18 @@ def test_scan_events_from_a_completed_pipeline(tmp_path: Path, extraction_config
         "extraction/measurements/WEIGHT",
     ]
     assert sorted(rows.filter(pl.col("code") == "heart_rate//bpm")["numeric_value"].to_list()) == [80, 82]
+    # The same stay ID is stored as an integer by extraction and as a string by the concept step.
+    scan = partial(scan_events, project, dataset="testdb/1.0", extension_columns="stay_id")
+    chart = scan(events="CHART")
+    stay = chart.filter(pl.col("text_value") == "eighty").select("subject_id", "stay_id")
+    assert stay.collect_schema()["stay_id"] == pl.Int64
+    heart_rate = scan("heart_rate", cohort=stay)
+    assert heart_rate.collect()["stay_id"].to_list() == ["100", "100"]
+    native = scan(events="CHART", cohort=heart_rate.select("subject_id", "stay_id")).collect()
+    assert native["stay_id"].to_list() == [100, 100]
+    mixed = scan("heart_rate", events="CHART", cohort=stay).collect()
+    assert mixed["stay_id"].to_list() == ["100"] * 4
+    assert set(mixed["source"]) == {"concept/heart_rate/1.0.0", "extraction/vitals/CHART"}
     assert set(p.name for p in project.datasets_path.iterdir()) == {"extraction", "concept"}
 
 
@@ -160,6 +172,31 @@ def test_event_names_codes_and_scoped_cohorts(tmp_path: Path) -> None:
             query(events=unknown)
     with pytest.raises(ValueError, match="cohort keys"):
         query(events="MEAS", cohort=keys)
+
+
+def test_stay_cohort_preserves_leading_zeros_and_validates_subject_dtype(tmp_path: Path) -> None:
+    write_output(tmp_path, "extraction", {"db/1/t/X.parquet": event_frame([1], "X", stay_id=pl.Series([7]))})
+    query = partial(scan_events, tmp_path, dataset="db", events="X", extension_columns="stay_id")
+    keys = pl.DataFrame({"subject_id": [1], "stay_id": ["007"]})
+    assert query(cohort=keys).collect().is_empty()
+    with pytest.raises(TypeError, match=r"subject_id.*String.*Int64"):
+        query(cohort=keys.with_columns(pl.col("subject_id").cast(pl.String)).lazy())
+
+
+def test_mixed_query_rejects_conflicts_within_extraction(tmp_path: Path) -> None:
+    raw = event_frame([1], "x", stay_id=pl.Series([7]))
+    text = raw.with_columns(pl.col("stay_id").cast(pl.String))
+    write_output(tmp_path, "concept", {"heart_rate/1/db/1.parquet": text})
+    write_output(tmp_path, "extraction", {"db/1/t/X.parquet": raw, "db/1/t/Y.parquet": text})
+    with pytest.raises(ValueError, match="conflicting dtypes"):
+        scan_events(tmp_path, "heart_rate", events="db/t", dataset="db", extension_columns="stay_id")
+
+
+@pytest.mark.parametrize("bad_cohort", [1, "101", ["101"]])
+def test_invalid_subject_id_sequence_fails_at_scan_time(tmp_path: Path, bad_cohort: object) -> None:
+    write_output(tmp_path, "extraction", {"db/1/t/X.parquet": event_frame([1], "x")})
+    with pytest.raises(TypeError, match="(?i)cohort|subject"):
+        scan_events(tmp_path, dataset="db", events="X", cohort=bad_cohort)  # ty: ignore[invalid-argument-type]
 
 
 def test_versions_and_incomplete_output(tmp_path: Path) -> None:

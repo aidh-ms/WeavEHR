@@ -111,7 +111,7 @@ def scan_events(
     reserved = set(extensions) & QUERY_COLUMNS
     if reserved:
         raise ValueError(f"Already included in the result: {', '.join(sorted(reserved))}")
-    dtypes = extension_column_dtypes([f.path for f in selected], extensions)
+    dtypes = extension_column_dtypes(selected, extensions)
     scans = []
     for file in selected:
         rows = scan_event_file(
@@ -127,12 +127,39 @@ def scan_events(
 
     result = pl.concat(scans)
     if isinstance(cohort, (pl.DataFrame, pl.LazyFrame)):
-        keys = cohort.lazy().collect_schema().names()
-        if "subject_id" not in keys or set(keys) - {"subject_id", "dataset", "version", *extensions}:
-            raise ValueError(
-                "Select cohort keys including subject_id. Request any additional ID as an extension column."
-            )
-        return result.join(cohort.lazy(), on=keys, how="semi")
+        return _filter_cohort(result, cohort.lazy(), extensions)
     if cohort is not None:
+        if not isinstance(cohort, Sequence) or isinstance(cohort, (str, bytes, bytearray)):
+            raise TypeError("cohort must be a sequence of integer subject IDs or a Polars table")
+        if any(not isinstance(subject, int) or isinstance(subject, bool) for subject in cohort):
+            raise TypeError("cohort subject IDs must be integers")
         return result.filter(pl.col("subject_id").is_in(list(cohort)))
     return result
+
+
+def _filter_cohort(result: pl.LazyFrame, cohort: pl.LazyFrame, extensions: list[str]) -> pl.LazyFrame:
+    keys = cohort.collect_schema()
+    if "subject_id" not in keys or set(keys) - {"subject_id", "dataset", "version", *extensions}:
+        raise ValueError("Select cohort keys including subject_id. Request any additional ID as an extension column.")
+
+    schema = result.collect_schema()
+    left_keys, right_keys = [], []
+    for name, right in keys.items():
+        left = schema[name]
+        event_key = cohort_key = pl.col(name)
+        if left != right:
+            if left == pl.Null:
+                event_key = event_key.cast(right)
+            elif right == pl.Null:
+                cohort_key = cohort_key.cast(left)
+            elif (left.is_integer() and right.is_integer()) or (
+                name in extensions
+                and ((left == pl.String and right.is_integer()) or (right == pl.String and left.is_integer()))
+            ):
+                # Compare without parsing identifiers or changing the type returned by the scan.
+                event_key, cohort_key = event_key.cast(pl.String), cohort_key.cast(pl.String)
+            else:
+                raise TypeError(f"cohort key {name!r} has dtype {right}, incompatible with event dtype {left}")
+        left_keys.append(event_key)
+        right_keys.append(cohort_key)
+    return result.join(cohort, left_on=left_keys, right_on=right_keys, how="semi")
