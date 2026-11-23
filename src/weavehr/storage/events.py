@@ -1,10 +1,10 @@
 """Discover and scan collected concept and extraction files for export."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
+from pydantic import BaseModel
 
 from weavehr.config.base import ConceptReference
 from weavehr.logging import get_logger
@@ -23,8 +23,7 @@ def split_dataset(selector: str) -> tuple[str, str]:
     return name, version
 
 
-@dataclass(frozen=True)
-class InputFile:
+class InputFile(BaseModel, frozen=True):
     """A collected event file with the identity taken from its path.
 
     Attributes:
