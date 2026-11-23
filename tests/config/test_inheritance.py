@@ -5,14 +5,16 @@ from pathlib import Path
 
 import pytest
 
+from weavehr.config import inheritance
 from weavehr.config.inheritance import (
     deep_merge,
     has_extends,
     resolve_effective_config,
     resolve_effective_configs,
     resolve_version_chain,
+    set_search_roots,
 )
-from weavehr.config.registry import load_configs
+from weavehr.config.registry import _load_configs
 from weavehr.steps.extraction.config.table import TableConfig
 
 
@@ -86,6 +88,53 @@ class TestVersionChain:
         version_dir = make_version(tmp_path, "db", "2.0", {}, extends=("db", "1.0"))
         with pytest.raises(ValueError, match="Circular extends chain"):
             resolve_version_chain(version_dir)
+
+
+class TestSearchRoots:
+    @pytest.fixture(autouse=True)
+    def reset_search_roots(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(inheritance, "_search_roots", [])
+
+    def test_base_from_another_root(self, tmp_path: Path) -> None:
+        bundled = tmp_path / "bundled"
+        base = make_version(bundled / "datasets", "db", "1.0", {"t": "path: t.csv\n"})
+        leaf = make_version(tmp_path / "custom" / "datasets", "db-local", "1.0", {}, extends=("db", "1.0"))
+
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            resolve_version_chain(leaf)
+
+        set_search_roots([tmp_path / "custom", bundled])
+        assert resolve_version_chain(leaf) == [base, leaf]
+
+    def test_same_root_is_searched_first(self, tmp_path: Path) -> None:
+        custom = tmp_path / "custom"
+        make_version(tmp_path / "bundled" / "datasets", "db", "1.0", {})
+        base = make_version(custom / "datasets", "db", "1.0", {})
+        leaf = make_version(custom / "datasets", "db", "1.1", {}, extends=("db", "1.0"))
+        set_search_roots([tmp_path / "bundled"])
+
+        assert resolve_version_chain(leaf) == [base, leaf]
+
+    def test_version_extending_itself_overrides_the_next_root(self, tmp_path: Path) -> None:
+        bundled, custom = tmp_path / "bundled", tmp_path / "custom"
+        reference = make_version(bundled / "datasets", "db", "1.0", {"t": "path: t.csv\ntype: csv\n", "u": "path: u\n"})
+        base = make_version(bundled / "datasets", "db", "1.1", {}, extends=("db", "1.0"))
+        leaf = make_version(custom / "datasets", "db", "1.1", {"t": "path: local.csv\n"}, extends=("db", "1.1"))
+        set_search_roots([custom, bundled])
+
+        assert resolve_version_chain(leaf) == [reference, base, leaf]
+        assert resolve_effective_configs(leaf / "tables") == {
+            "t": {"path": "local.csv", "type": "csv"},
+            "u": {"path": "u"},
+        }
+
+    def test_version_extending_itself_without_other_root_is_circular(self, tmp_path: Path) -> None:
+        custom = tmp_path / "custom"
+        leaf = make_version(custom / "datasets", "db", "1.0", {}, extends=("db", "1.0"))
+        set_search_roots([custom])
+
+        with pytest.raises(ValueError, match="Circular extends chain"):
+            resolve_version_chain(leaf)
 
 
 class TestEffectiveConfigs:
@@ -196,7 +245,7 @@ class TestLoadConfigsWithInheritance:
         make_version(tmp_path, "db", "1.0", {"t": "path: t.csv\n"})
         version_dir = make_version(tmp_path, "db-demo", "2.0", {}, extends=("db", "1.0"))
 
-        configs = load_configs(version_dir / "tables", TableConfig)
+        configs = _load_configs(version_dir / "tables", TableConfig)
 
         assert len(configs) == 1
         assert configs[0].dataset == "db-demo"
@@ -209,10 +258,10 @@ class TestLoadConfigsWithInheritance:
         make_version(tmp_path, "db", "1.0", {"a": "path: a.csv\n", "b": "path: b.csv\n"})
         version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
 
-        configs = load_configs(version_dir / "tables", TableConfig, includes=["db-demo.1.0.a"])
+        configs = _load_configs(version_dir / "tables", TableConfig, includes=["db-demo.1.0.a"])
         assert [c.name for c in configs] == ["a"]
 
-        configs = load_configs(version_dir / "tables", TableConfig, excludes=["db-demo.1.0.a"])
+        configs = _load_configs(version_dir / "tables", TableConfig, excludes=["db-demo.1.0.a"])
         assert [c.name for c in configs] == ["b"]
 
     def test_invalid_inherited_config_is_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -220,7 +269,7 @@ class TestLoadConfigsWithInheritance:
         version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
 
         with caplog.at_level(logging.WARNING, logger="weavehr"):
-            configs = load_configs(version_dir / "tables", TableConfig)
+            configs = _load_configs(version_dir / "tables", TableConfig)
         assert [c.name for c in configs] == ["good"]
         # the warning names the config and the validation error
         assert "'bad'" in caplog.text
@@ -232,6 +281,6 @@ class TestLoadConfigsWithInheritance:
         version_dir = make_version(tmp_path, "db-demo", "1.0", {}, extends=("db", "1.0"))
 
         with caplog.at_level(logging.WARNING, logger="weavehr"):
-            configs = load_configs(version_dir / "tables", TableConfig)
+            configs = _load_configs(version_dir / "tables", TableConfig)
         assert [c.name for c in configs] == ["good"]
         assert "'listed'" in caplog.text and "not a mapping" in caplog.text

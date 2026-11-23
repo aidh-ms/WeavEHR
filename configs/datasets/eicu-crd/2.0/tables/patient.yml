@@ -165,6 +165,7 @@ events:
       text_value: col(unitdischargestatus)
       extension:
         available_time: col(discharge_timestamp)
+        discharge_location: col(unitdischargelocation)
 
   - name: HOSPITAL_DISCHARGE
     columns:

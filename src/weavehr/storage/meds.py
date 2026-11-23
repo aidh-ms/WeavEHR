@@ -89,7 +89,7 @@ class MEDSDataset(FileStorage):
 
         DatasetMetadataSchema.validate(metadata)
 
-        logger.info(
+        logger.debug(
             "Writing dataset metadata to %s",
             self.metadata_path / "dataset.json",
         )
@@ -131,7 +131,7 @@ class MEDSDataset(FileStorage):
                 )
             )
 
-        logger.info(
+        logger.debug(
             "Writing code vocabulary to %s",
             self.metadata_path / "codes.parquet",
         )

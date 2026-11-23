@@ -180,7 +180,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
 
         output_file = self._output_file(self._concept)
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        logger.info("Writing complex concept %s to %s", self._concept.identifier, output_file)
+        logger.debug("Writing complex concept %s to %s", self._concept.identifier, output_file)
         lf.sink_parquet(output_file)
 
     def _read_concept(self, concept_id: str) -> tuple[str, pl.LazyFrame] | None:

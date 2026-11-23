@@ -52,7 +52,7 @@ def run_checkout(root: Path, out: Path, data: dict[str, str]) -> None:
     import yaml
 
     from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
-    from weavehr.config.registry import load_configs
+    from weavehr.config.registry import _load_configs
     from weavehr.steps.concept.config.concept import ConceptConfig
     from weavehr.steps.concept.registry import concept_config_registry
     from weavehr.steps.extraction.config.table import TableConfig
@@ -61,7 +61,7 @@ def run_checkout(root: Path, out: Path, data: dict[str, str]) -> None:
     configs = root / "configs"
     datasets = [key for key in TABLES if "/".join(key) in data]
     for dataset, version in datasets:
-        for table in load_configs(configs / "datasets" / dataset / version / "tables", TableConfig):
+        for table in _load_configs(configs / "datasets" / dataset / version / "tables", TableConfig):
             if table.name in TABLES[(dataset, version)]:
                 dataset_config_registry.register(table)
     mapping_dirs = [configs / "datasets" / dataset / version / "mappings" for dataset, version in datasets]
