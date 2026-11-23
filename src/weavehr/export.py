@@ -1,7 +1,9 @@
 """Two ways to export a completed WeavEHR project: MEDS shards or an interactive selection."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from operator import index
 from pathlib import Path
+from typing import SupportsIndex
 
 import polars as pl
 
@@ -55,7 +57,7 @@ def scan_events(
     dataset: str,
     events: str | Sequence[str] = (),
     codes: str | Sequence[str] = (),
-    cohort: Sequence[int] | pl.DataFrame | pl.LazyFrame | None = None,
+    cohort: Iterable[SupportsIndex] | pl.Series | pl.DataFrame | pl.LazyFrame | None = None,
     extension_columns: str | Sequence[str] = (),
     concept_step: str = "concept",
     extraction_step: str = "extraction",
@@ -71,8 +73,9 @@ def scan_events(
             name selects matching streams across tables of the requested dataset.
         codes: Exact MEDS code(s) in extraction. With events, restrict those streams.
             With codes alone, search all extraction streams of the selected dataset.
-        cohort: Subject IDs or a Polars table of join keys including subject_id. All
-            supplied key columns must match. Select keys explicitly for a stay-level cohort.
+        cohort: An iterable of integer subject IDs, a Polars Series of IDs, or a Polars
+            table of join keys including subject_id. All supplied key columns must match.
+            Select keys explicitly for a stay-level cohort.
         extension_columns: Additional columns to read, e.g. stay_id or available_time.
             A column absent from some selected files is filled with typed nulls there.
         concept_step: Name of the step which produced the concept files.
@@ -129,12 +132,26 @@ def scan_events(
     if isinstance(cohort, (pl.DataFrame, pl.LazyFrame)):
         return _filter_cohort(result, cohort.lazy(), extensions)
     if cohort is not None:
-        if not isinstance(cohort, Sequence) or isinstance(cohort, (str, bytes, bytearray)):
-            raise TypeError("cohort must be a sequence of integer subject IDs or a Polars table")
-        if any(not isinstance(subject, int) or isinstance(subject, bool) for subject in cohort):
-            raise TypeError("cohort subject IDs must be integers")
-        return result.filter(pl.col("subject_id").is_in(list(cohort)))
+        return result.filter(pl.col("subject_id").is_in(_subject_ids(cohort).implode()))
     return result
+
+
+def _subject_ids(cohort: Iterable[SupportsIndex] | pl.Series) -> pl.Series:
+    if isinstance(cohort, pl.Series):
+        if cohort.dtype != pl.Null and not cohort.dtype.is_integer():
+            raise TypeError(f"cohort subject IDs must be integers, got {cohort.dtype}")
+        return cohort.cast(pl.Int64, strict=False)
+    if isinstance(cohort, (str, bytes, bytearray)):
+        raise TypeError("cohort subject IDs must be integers")
+    ids = []
+    try:
+        for subject in cohort:
+            if isinstance(subject, bool):
+                raise TypeError("boolean subject ID")
+            ids.append(index(subject))
+    except TypeError as exc:
+        raise TypeError("cohort must be an iterable of integer subject IDs or a Polars table") from exc
+    return pl.Series(ids, dtype=pl.Int64, strict=False)
 
 
 def _filter_cohort(result: pl.LazyFrame, cohort: pl.LazyFrame, extensions: list[str]) -> pl.LazyFrame:
@@ -150,11 +167,11 @@ def _filter_cohort(result: pl.LazyFrame, cohort: pl.LazyFrame, extensions: list[
         if left != right:
             if left == pl.Null:
                 event_key = event_key.cast(right)
-            elif right == pl.Null:
-                cohort_key = cohort_key.cast(left)
-            elif (left.is_integer() and right.is_integer()) or (
-                name in extensions
-                and ((left == pl.String and right.is_integer()) or (right == pl.String and left.is_integer()))
+            elif right == pl.Null or (left.is_integer() and right.is_integer()):
+                # Values outside the event key's range cannot match.
+                cohort_key = cohort_key.cast(left, strict=False)
+            elif name in extensions and (
+                (left == pl.String and right.is_integer()) or (right == pl.String and left.is_integer())
             ):
                 # Compare without parsing identifiers or changing the type returned by the scan.
                 event_key, cohort_key = event_key.cast(pl.String), cohort_key.cast(pl.String)

@@ -192,7 +192,32 @@ def test_mixed_query_rejects_conflicts_within_extraction(tmp_path: Path) -> None
         scan_events(tmp_path, "heart_rate", events="db/t", dataset="db", extension_columns="stay_id")
 
 
-@pytest.mark.parametrize("bad_cohort", [1, "101", ["101"]])
+def test_subject_ids_from_series_and_iterables(tmp_path: Path) -> None:
+    write_output(tmp_path, "extraction", {"db/1/t/X.parquet": event_frame([1, 2, 2], "x")})
+    query = partial(scan_events, tmp_path, dataset="db", events="X")
+    ids = pl.Series("ids", [2, None, 2], dtype=pl.Int32)
+    for cohort in (ids, {2}, iter([2, 2])):
+        assert query(cohort=cohort).collect()["subject_id"].to_list() == [2, 2]
+
+
+def test_numpy_subject_ids(tmp_path: Path) -> None:
+    np = pytest.importorskip("numpy")
+    write_output(tmp_path, "extraction", {"db/1/t/X.parquet": event_frame([-1, 2], "x")})
+    query = partial(scan_events, tmp_path, dataset="db", events="X")
+    ids = np.array([2, 2**64 - 1], dtype=np.uint64)
+    for cohort in (ids, list(ids)):
+        assert query(cohort=cohort).collect()["subject_id"].to_list() == [2]
+
+
+def test_cohort_integer_widths_preserve_subject_ids(tmp_path: Path) -> None:
+    write_output(tmp_path, "extraction", {"db/1/t/X.parquet": event_frame([-1, 2], "x")})
+    query = partial(scan_events, tmp_path, dataset="db", events="X")
+    # The unsigned ID lies outside the event ID range and must never match -1.
+    keys = pl.LazyFrame({"subject_id": [2, 2**64 - 1]}, schema={"subject_id": pl.UInt64})
+    assert query(cohort=keys).collect()["subject_id"].to_list() == [2]
+
+
+@pytest.mark.parametrize("bad_cohort", [1, "101", b"1", ["101"], [1, True], iter([1, 2.0]), pl.Series([1.0])])
 def test_invalid_subject_id_sequence_fails_at_scan_time(tmp_path: Path, bad_cohort: object) -> None:
     write_output(tmp_path, "extraction", {"db/1/t/X.parquet": event_frame([1], "x")})
     with pytest.raises(TypeError, match="(?i)cohort|subject"):

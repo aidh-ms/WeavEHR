@@ -85,8 +85,9 @@ if the analysis needs chronological order.
 
 ## Subjects and ICU stays
 
-`cohort=[101, 102]` selects subject IDs in the requested dataset version. A Polars cohort table
-can instead supply explicit join keys. Repeated keys select each matching event once. Keeping
+Pass an iterable of integer subject IDs, such as `cohort=[101, 102]` or a Polars Series
+(`cohort=df["subject_id"]`), to select subjects in the requested dataset version. A Polars
+cohort table can supply explicit join keys. Repeated keys select each matching event once. Keeping
 `dataset` and `version` among the keys prevents collisions when reusing a multicentre cohort.
 
 For rows carrying a native stay ID, pass `cohort=stays.select("subject_id", "stay_id")` and
