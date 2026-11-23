@@ -36,17 +36,20 @@ class MEDSDataset(FileStorage):
         self,
         dataset_path: Path,
         overwrite: bool = False,
+        *,
+        read_only: bool = False,
     ) -> None:
         """Initialize the MEDS dataset storage.
 
         Args:
             dataset_path: Base path for the MEDS dataset
             overwrite: If True, remove existing dataset before creating
+            read_only: Open the dataset without creating directories or writing metadata
         """
-        super().__init__(dataset_path, overwrite)
-        # Create the MEDS dataset directory if it doesn't exist
-        self.data_path.mkdir(parents=True, exist_ok=True)
-        self.metadata_path.mkdir(parents=True, exist_ok=True)
+        super().__init__(dataset_path, overwrite, read_only=read_only)
+        if not read_only:
+            self.data_path.mkdir(parents=True, exist_ok=True)
+            self.metadata_path.mkdir(parents=True, exist_ok=True)
 
     @property
     def data_path(self) -> Path:
@@ -79,6 +82,7 @@ class MEDSDataset(FileStorage):
         Raises:
             ValidationError: If metadata doesn't conform to MEDS DatasetMetadataSchema
         """
+        self.require_writable()
         metadata = {
             **metadata,
             "etl_name": "WeavEHR",
@@ -105,6 +109,7 @@ class MEDSDataset(FileStorage):
         parent_codes columns (set to null). This creates the MEDS-required
         code vocabulary file.
         """
+        self.require_writable()
         logger.debug("Extracting code vocabulary from parquet files in %s", self.data_path)
 
         dfs = []

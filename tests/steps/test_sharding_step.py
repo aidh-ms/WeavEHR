@@ -442,7 +442,7 @@ def test_sharding_extraction_input_writes_shards(tmp_path: Path) -> None:
 def test_sharding_extraction_input_requires_completion_marker(tmp_path: Path, write_dataset: bool) -> None:
     """Extraction output without a completed run is never sharded."""
     files = {"db/1.0/t/A.parquet": event_frame([1], "A")} if write_dataset else {}
-    with pytest.raises(FileNotFoundError, match="Extraction step 'Extraction' has no completed output"):
+    with pytest.raises(FileNotFoundError, match="Step 'Extraction' has no completed output"):
         shard_input(tmp_path, files, {"extraction_step": "Extraction"}, complete=False)
     assert_nothing_written(tmp_path)
 
