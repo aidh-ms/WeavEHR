@@ -6,7 +6,6 @@ throughout WeavEHR for managing directories with optional cleanup.
 
 from pathlib import Path
 from shutil import rmtree
-from stat import S_ISDIR
 
 from weavehr.logging import get_logger
 
@@ -44,7 +43,8 @@ class FileStorage:
         if read_only:
             if overwrite:
                 raise ValueError("Cannot overwrite read-only storage")
-            if not S_ISDIR(path.stat().st_mode):
+            if not path.is_dir():
+                path.stat()  # Propagate filesystem errors, including FileNotFoundError for a missing project.
                 raise NotADirectoryError(f"Expected a storage directory: {path}")
             return
 
