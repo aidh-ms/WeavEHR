@@ -1,0 +1,13 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   8878: Plateau druk [mbar]
+# mbar is converted to cmH2O (1 mbar = 1.019716 cmH2O); 1.5.0 approximates them as equal.
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(8878)(//.*)?$
+    columns:
+      numeric_value: numeric_value * 1.019716
+      text_value: col(text_value)

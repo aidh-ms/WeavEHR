@@ -1,0 +1,16 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6801: Albumine chemisch [g/l]
+#   9937: Alb.Chem (bloed) [g/l]
+#   9975: Albumine (imm.) (bloed) [g/l]
+#   11705: ALB.FR. (bloed) [Geen]
+#   14349: Alb-Fr (bloed) [g/l]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6801|9937|9975|11705|14349)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value) * 0.1
+      text_value: col(text_value)

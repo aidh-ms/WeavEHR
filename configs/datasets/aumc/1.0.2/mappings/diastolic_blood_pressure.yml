@@ -1,0 +1,15 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6643: ABP diastolisch [mmHg]
+#   6680: Niet invasieve bloeddruk diastolisch [mmHg]
+#   8842: ABP diastolisch II [mmHg]
+#   14057: PiCCO APd [mmHg]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6643|6680|8842|14057)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)

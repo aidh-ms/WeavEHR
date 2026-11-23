@@ -1,17 +1,139 @@
 # AmsterdamUMCdb (AUMCdb)
 
 Configurations for [AmsterdamUMCdb](https://github.com/AmsterdamUMC/AmsterdamUMCdb),
-the freely-accessible ICU database from Amsterdam UMC, after conversion to the
-OMOP CDM 5.4 by the [AMSTEL ETL](https://github.com/AmsterdamUMC/AMSTEL).
+the freely-accessible ICU database from Amsterdam UMC, in its original format
+or after conversion to OMOP CDM 5.4 by the [AMSTEL ETL](https://github.com/AmsterdamUMC/AMSTEL).
 
 ## Versions
 
+- `1.0.2/` — original release: seven native CSV table configs and 120 concept
+  mappings keyed on the original item IDs. It has its own configs because its
+  schema differs from the OMOP release.
 - `1.5.0/` — **extends `omop` 5.4** (see `1.5.0/extends.yml`). AUMCdb is read
   through its OMOP CDM 5.4 export, so all table configs are inherited unchanged
   from [`omop` 5.4](../omop/); this directory adds only the
   AUMCdb-specific concept `mappings/`.
 
-## Concept mappings
+## Original release (1.0.2)
+
+Point extraction at the directory containing the seven uncompressed source CSVs:
+
+```yaml
+name: Extraction
+version: 1.0.0
+config:
+  data:
+    - name: aumc
+      version: "1.0.2"
+      path: /data/AmsterdamUMCdb-1.0.2
+```
+
+Select `name: aumc`, `version: "1.0.2"` in the concept step's
+`config.mapping_configs` as for any other dataset version. No OMOP conversion
+or external dictionary file is required at runtime.
+
+| Source file | Events |
+| --- | --- |
+| `admissions.csv` | ICU admission/discharge, gender, age/weight/height groups, admission type, `MEDS_DEATH` |
+| `numericitems.csv` | `NUMERIC`, including the original unit, sign/comparison tag and fluid volume |
+| `listitems.csv` | `LIST`, retaining the answer label and `valueid` |
+| `freetextitems.csv` | `TEXT`, retaining the result and comment |
+| `drugitems.csv` | `DRUG_START`, `DRUG_END`, with dose, dose units, pump rate, order and route/category |
+| `processitems.csv` | `PROCESS_START`, `PROCESS_END`, linked by a stable interval ID |
+| `procedureorderitems.csv` | `PROCEDURE_ORDER`, dated at registration |
+
+`subject_id` is `patientid`; every other table joins admissions on `admissionid`
+to recover it. `admissionid` remains an extension, and the harmonised concepts
+that need stay identity expose it as `stay_id`. Codes retain native item IDs
+and labels: `aumc//numericitems//NUMERIC//<itemid>//<item>//<unit>` with the
+default extraction settings.
+
+### Time and demographics
+
+All native timestamps are **milliseconds since the patient's first ICU
+admission**, including events in repeat admissions. Extraction adds them once
+to a fixed synthetic origin, **2000-01-01 00:00:00**; it does not add the current
+admission's `admittedat` or reconstruct calendar years from year groups.
+Negative offsets and millisecond precision are preserved. These dates support
+within-patient timing, not calendar-year analyses or temporal holdouts. Observation
+`available_time` is `registeredat`; `updated_at` retains the final update time.
+
+Age, weight and height are admission-specific groups. Harmonisation uses ricu's
+representatives: age 18–39 → 30, 40–49 → 45, …, 80+ → 90 years; weight 59- →
+50, 60–69 → 65, …, 110+ → 120 kg; height 159- → 150, 160–169 → 165, …,
+190+ → 200 cm. The original group remains in `text_value`. Unknown groups stay
+unmapped. These are approximations, and differ from AMSTEL's representatives,
+particularly at open-ended groups. No birth date is inferred.
+
+`MEDS_DEATH` uses the reported `dateofdeath`, once per patient/date even when
+repeated across admissions. It is a date of death, not an exact death time.
+The source provides ICU/MCU admission and discharge, not hospital boundaries.
+
+### Clinical mappings
+
+All 118 concepts mapped for 1.5.0 have native counterparts, with height and RDW
+added from ricu. Numeric source selection and conversions follow the 1.5.0
+mappings, traced to original items using the legacy dictionary and the curated
+AMSTEL mappings distributed with reprodICU. In particular, the corrected kPa,
+HbA1c, fractional saturation/hematocrit and device-volume conversions also
+apply to the native release. Differences specific to the original format:
+
+- A separate `-` tag makes a positive base-excess magnitude negative; an
+  already-negative value stays negative.
+- Native urine volumes are kept individually. The deduplication needed for
+  AMSTEL's duplicated urine rows does not apply; bladder-irrigation output
+  (`8767`, Spoelblaas Uit) is excluded.
+- GCS maps the bedside items `6732/6734/6735` and `13077/13072/13066` using
+  their different `valueid` encodings. Intubated verbal assessments set
+  `gcs_unable`. Retrospective APACHE/NICE summary scores are not substituted
+  for bedside assessments. RASS uses `5 - valueid`, preserving +4 through -5.
+- Ventilation windows use ricu's `9328` (Beademen), `10740` (noninvasive) and
+  `12635` (Tracheostoma), with their recorded endpoints. Like 1.5.0 and ricu,
+  a tracheostomy counts as invasive support while in place. Airway intervals
+  use the active tube/tracheostomy processes `12634/12635`. Ventilator modes
+  and oxygen devices use list-item answers; a source answer with several
+  OMOP targets emits one support level, preferring noninvasive, then invasive,
+  then unspecified ventilator support.
+- The four SOFA vasopressors use syringe-pump category `65`. The dose rate is
+  formed from `dose`, `doseunit`, `doserateperkg` and `doserateunit`; `rate`
+  describes fluid flow and is not substituted. Boluses and incomplete rates
+  are excluded. Each source segment has a stable `record_id` from admission,
+  order, item and endpoints, so rate changes sharing an order and overlapping
+  pumps keep separate stops. Conversion uses only that admission's weight
+  recorded at or before the segment. The 1.5.0 mapping allows a prior stay's
+  weight; the native mapping does not.
+- Antibiotics use the same systemic drug products as 1.5.0, including route
+  restrictions. SDD/MRSA/research culture orders remain `screening`; only
+  `diagnostic` sampling feeds suspected infection. SOFA and Sepsis-3 use the
+  existing shared transformers, including the component-based SOFA-rise rule.
+- Pressures recorded in mbar are converted to cmH2O with a factor of 1.019716;
+  the 1.5.0 mappings approximate these units as equal.
+
+As for 1.5.0, differential percentages are read from percentage items; they are
+not reconstructed from absolute counts and white blood cells. Other drug rates,
+drug durations and hospital outcomes are not mapped. No prothrombin-time-in-seconds
+mapping is added for item `6789`, whose values in the source review underlying
+the 1.5.0 configs were INR-like. All source rows remain available in extraction.
+
+### References and validation
+
+The implementation was checked against these source revisions:
+
+- [AmsterdamUMCdb legacy table definitions and dictionary, `5422b94`](https://github.com/AmsterdamUMC/AmsterdamUMCdb/tree/5422b94dbaba6c1d9b7c301f059c425ca1fc13ce),
+  including the official `amsterdamumcdb/sql/common/legacy/gcs.sql`.
+- [ricu native source schema and concepts, `c0efac7`](https://github.com/eth-mds/ricu/tree/c0efac720dbe72caaf63b361b6978a24383835bf/inst/extdata/config),
+  and its AUMC callbacks in `R/callback-itm.R`.
+- [reprodICU native extraction, `1dfb0c2`](https://github.com/CUB-CORR/reprodICU/blob/1dfb0c2bf5ce020ecb3d9f863ff82530c583e974/src/reprodICU/helpers/A_extract/A_extract_umcdb.py)
+  and its curated mappings in `mappings/umcdb/AMSTEL_data_mappings/`.
+
+Shipped-config checks validate every table/mapping, column reference, numeric-ID
+boundary and duplicate-selection invariant. `tests/datasets/test_aumc_legacy.py`
+exercises synthetic native CSVs, timestamp reconstruction, demographic groups,
+unit conversions, GCS/RASS, support classification, infusion stops and SOFA,
+and culture/antibiotic pairing. No credentialed 1.0.2 data was available for a
+full-data comparison against ricu or reprodICU.
+
+## OMOP concept mappings (1.5.0)
 
 The shared concepts in `configs/concepts/` are ricu-derived. Because AUMCdb is
 read as OMOP, each mapping keys on the **OMOP `*_concept_id`** that AMSTEL

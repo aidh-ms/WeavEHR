@@ -1,0 +1,124 @@
+# dose is the prescribed dose or dose rate; rate is a fluid pump rate and is retained separately.
+# record_id identifies a segment rather than a whole order, so one stop cannot end a later segment.
+path: drugitems.csv
+columns:
+  - name: admissionid
+    type: int64
+  - name: orderid
+    type: int64
+  - name: ordercategoryid
+    type: int64
+  - name: ordercategory
+    type: string
+  - name: itemid
+    type: int64
+  - name: item
+    type: string
+  - name: isadditive
+    type: int64
+  - name: isconditional
+    type: int64
+  - name: rate
+    type: float64
+  - name: rateunit
+    type: string
+  - name: rateunitid
+    type: int64
+  - name: ratetimeunitid
+    type: int64
+  - name: doserateperkg
+    type: int64
+  - name: dose
+    type: float64
+  - name: doseunit
+    type: string
+  - name: doserateunit
+    type: string
+  - name: doseunitid
+    type: int64
+  - name: doserateunitid
+    type: int64
+  - name: administered
+    type: float64
+  - name: administeredunit
+    type: string
+  - name: administeredunitid
+    type: int64
+  - name: action
+    type: string
+  - name: start
+    type: int64
+  - name: stop
+    type: int64
+  - name: duration
+    type: int64
+  - name: solutionitemid
+    type: int64
+  - name: solutionitem
+    type: string
+  - name: solutionadministered
+    type: float64
+  - name: solutionadministeredunit
+    type: string
+  - name: fluidin
+    type: float64
+  - name: iscontinuous
+    type: int64
+join:
+  - path: admissions.csv
+    columns:
+      - name: admissionid
+        type: int64
+      - name: patientid
+        type: int64
+    both_on:
+      - admissionid
+event_defaults:
+  subject_id: col(patientid)
+  numeric_value: col(dose)
+  extension:
+    admissionid: col(admissionid)
+    orderid: col(orderid)
+    ordercategoryid: col(ordercategoryid)
+    ordercategory: col(ordercategory)
+    isadditive: col(isadditive)
+    isconditional: col(isconditional)
+    rate: col(rate)
+    rateunit: col(rateunit)
+    doserateperkg: col(doserateperkg)
+    dose: col(dose)
+    doseunit: col(doseunit)
+    doserateunit: col(doserateunit)
+    doseunitid: col(doseunitid)
+    doserateunitid: col(doserateunitid)
+    administered: col(administered)
+    administeredunit: col(administeredunit)
+    action: col(action)
+    duration: col(duration)
+    solutionitemid: col(solutionitemid)
+    solutionitem: col(solutionitem)
+    solutionadministered: col(solutionadministered)
+    solutionadministeredunit: col(solutionadministeredunit)
+    fluidin: col(fluidin)
+    iscontinuous: col(iscontinuous)
+    record_id: concat_str("drugitems:", admissionid, ":", orderid, ":", itemid, ":", start, ":", replace(stop ==
+      None, "open", cast(stop, "string")))
+events:
+  - name: DRUG_START
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), start, offset_unit="milliseconds")
+      code:
+        - col(itemid)
+        - col(item)
+        - col(doseunit)
+    filters:
+      - drop_na(time)
+  - name: DRUG_END
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), stop, offset_unit="milliseconds")
+      code:
+        - col(itemid)
+        - col(item)
+        - col(doseunit)
+    filters:
+      - drop_na(time)

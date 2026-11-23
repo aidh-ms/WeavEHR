@@ -1,0 +1,68 @@
+# Native timestamps already share the patient timeline; do not add admittedat to them.
+path: numericitems.csv
+columns:
+  - name: admissionid
+    type: int64
+  - name: itemid
+    type: int64
+  - name: item
+    type: string
+  - name: tag
+    type: string
+  - name: value
+    type: float64
+  - name: unitid
+    type: int64
+  - name: unit
+    type: string
+  - name: comment
+    type: string
+  - name: measuredat
+    type: int64
+  - name: registeredat
+    type: int64
+  - name: updatedat
+    type: int64
+  - name: registeredby
+    type: string
+  - name: updatedby
+    type: string
+  - name: islabresult
+    type: int64
+  - name: fluidout
+    type: float64
+join:
+  - path: admissions.csv
+    columns:
+      - name: admissionid
+        type: int64
+      - name: patientid
+        type: int64
+    both_on:
+      - admissionid
+event_defaults:
+  subject_id: col(patientid)
+  time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), measuredat, offset_unit="milliseconds")
+  extension:
+    admissionid: col(admissionid)
+events:
+  - name: NUMERIC
+    columns:
+      code:
+        - col(itemid)
+        - col(item)
+        - col(unit)
+      extension:
+        available_time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), registeredat, offset_unit="milliseconds")
+        updated_at: add_offset(to_datetime(2000, 1, 1, "00:00:00"), updatedat, offset_unit="milliseconds")
+        registeredby: col(registeredby)
+        updatedby: col(updatedby)
+        islabresult: col(islabresult)
+        tag: col(tag)
+        unit: col(unit)
+        unitid: col(unitid)
+        comment: col(comment)
+        fluidout: col(fluidout)
+      numeric_value: col(value)
+    filters:
+      - drop_na(time)

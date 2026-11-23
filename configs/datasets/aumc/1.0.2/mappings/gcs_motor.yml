@@ -1,0 +1,22 @@
+# Bedside GCS items from ricu and the official legacy gcs.sql; valueid direction differs.
+# Retrospective APACHE/NICE summary scores are deliberately not used as bedside measurements.
+type: simple
+mappings:
+  - pattern:
+      table: listitems
+      event: LIST
+      code: ^(6734)(//.*)?$
+    columns:
+      numeric_value: 7 - valueid
+      text_value: col(text_value)
+    filters:
+      - (numeric_value >= 1) and (numeric_value <= 6)
+  - pattern:
+      table: listitems
+      event: LIST
+      code: ^(13072)(//.*)?$
+    columns:
+      numeric_value: col(valueid)
+      text_value: col(text_value)
+    filters:
+      - (numeric_value >= 1) and (numeric_value <= 6)

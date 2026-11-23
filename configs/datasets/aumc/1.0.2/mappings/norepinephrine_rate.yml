@@ -1,0 +1,9 @@
+# Shared infusion conversion; weight is the representative of this admission, never a later/prior stay.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.infusion.InfusionRateTransformer
+concepts:
+  - vasopressor_infusion.1.0.0
+  - patient_weight.1.0.0
+kwargs:
+  drug: norepinephrine
+  match_stay: true

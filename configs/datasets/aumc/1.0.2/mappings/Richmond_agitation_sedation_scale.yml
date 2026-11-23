@@ -1,0 +1,12 @@
+# Legacy RASS value IDs run from 1 (+4) to 10 (-5), as in reprodICU and the item dictionary.
+type: simple
+mappings:
+  - pattern:
+      table: listitems
+      event: LIST
+      code: ^(14444)(//.*)?$
+    columns:
+      numeric_value: 5 - valueid
+      text_value: col(text_value)
+    filters:
+      - (valueid >= 1) and (valueid <= 10)

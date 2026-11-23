@@ -1,0 +1,121 @@
+# AmsterdamUMCdb 1.0.2 native CSVs. See ../../README.md for timestamp and demographic conventions.
+# dateofdeath is a reported date, not an exact time; no hospital admission/discharge is available.
+path: admissions.csv
+columns:
+  - name: patientid
+    type: int64
+  - name: admissionid
+    type: int64
+  - name: admissioncount
+    type: int64
+  - name: location
+    type: string
+  - name: urgency
+    type: int64
+  - name: origin
+    type: string
+  - name: admittedat
+    type: int64
+  - name: admissionyeargroup
+    type: string
+  - name: dischargedat
+    type: int64
+  - name: lengthofstay
+    type: int64
+  - name: destination
+    type: string
+  - name: gender
+    type: string
+  - name: agegroup
+    type: string
+  - name: dateofdeath
+    type: int64
+  - name: weightgroup
+    type: string
+  - name: weightsource
+    type: string
+  - name: heightgroup
+    type: string
+  - name: heightsource
+    type: string
+  - name: specialty
+    type: string
+event_defaults:
+  subject_id: col(patientid)
+  extension:
+    admissionid: col(admissionid)
+events:
+  - name: ICU_ADMISSION
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), admittedat, offset_unit="milliseconds")
+      code:
+        - col(location)
+        - col(origin)
+      extension:
+        available_time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), admittedat, offset_unit="milliseconds")
+        admissioncount: col(admissioncount)
+        admissionyeargroup: col(admissionyeargroup)
+    filters:
+      - drop_na(time)
+  - name: ICU_DISCHARGE
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), dischargedat, offset_unit="milliseconds")
+      code:
+        - col(destination)
+      extension:
+        available_time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), dischargedat, offset_unit="milliseconds")
+    filters:
+      - drop_na(time)
+  - name: GENDER
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), admittedat, offset_unit="milliseconds")
+      code:
+        - col(gender)
+    filters:
+      - drop_na(time)
+  - name: AGE
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), admittedat, offset_unit="milliseconds")
+      code:
+        - const("AGE")
+      text_value: col(agegroup)
+    filters:
+      - drop_na(time)
+      - drop_na(text_value)
+  - name: WEIGHT
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), admittedat, offset_unit="milliseconds")
+      code:
+        - const("WEIGHT")
+      text_value: col(weightgroup)
+      extension:
+        source: col(weightsource)
+    filters:
+      - drop_na(time)
+      - drop_na(text_value)
+  - name: HEIGHT
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), admittedat, offset_unit="milliseconds")
+      code:
+        - const("HEIGHT")
+      text_value: col(heightgroup)
+      extension:
+        source: col(heightsource)
+    filters:
+      - drop_na(time)
+      - drop_na(text_value)
+  - name: ADMISSION_TYPE
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), admittedat, offset_unit="milliseconds")
+      code:
+        - col(specialty)
+      extension:
+        urgency: col(urgency)
+    filters:
+      - drop_na(time)
+  - name: MEDS_DEATH
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), dateofdeath, offset_unit="milliseconds")
+    filters:
+      - drop_na(time)
+      - first_distinct(subject_id, time)

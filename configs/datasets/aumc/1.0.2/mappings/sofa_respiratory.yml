@@ -1,0 +1,10 @@
+# Shared transformer and settings as in AUMCdb 1.5.0, applied to native inputs.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaRespiratoryTransformer
+concepts:
+  - O2_partial_pressure.1.0.0
+  - fraction_of_inspired_oxygen.1.0.0
+  - ventilation_start.1.0.0
+  - ventilation_end.1.0.0
+kwargs:
+  ventilation_id_column: record_id

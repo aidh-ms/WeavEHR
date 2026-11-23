@@ -1,0 +1,14 @@
+# Shared transformer and settings as in AUMCdb 1.5.0, applied to native inputs.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.Sepsis3Transformer
+concepts:
+  - suspected_infection.1.0.0
+  - sofa_respiratory.1.0.0
+  - sofa_coagulation.1.0.0
+  - sofa_liver.1.0.0
+  - sofa_cardiovascular.1.0.0
+  - sofa_cns.1.0.0
+  - sofa_renal.1.0.0
+kwargs:
+  sofa_increase: 2
+  rise: components

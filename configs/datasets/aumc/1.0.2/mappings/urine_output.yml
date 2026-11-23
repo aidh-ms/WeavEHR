@@ -1,0 +1,21 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   8794: UrineCAD [ml]
+#   8796: UrineSupraPubis [ml]
+#   8798: UrineSpontaan [ml]
+#   8800: UrineIncontinentie [ml]
+#   8803: UrineUP [ml]
+#   10743: Nefrodrain li Uit [ml]
+#   10745: Nefrodrain re Uit [ml]
+#   19921: UrineSplint Li [ml]
+#   19922: UrineSplint Re [ml]
+# Irrigation output 8767 is excluded. No deduplication: the OMOP ETL duplication is absent here.
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(8794|8796|8798|8800|8803|10743|10745|19921|19922)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)

@@ -1,0 +1,15 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6835: Kalium [mmol/l]
+#   9556: Kalium Astrup [mmol/l]
+#   9927: Kalium (bloed) [mmol/l]
+#   10285: K (onv.ISE) (bloed) [mmol/l]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6835|9556|9927|10285)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)

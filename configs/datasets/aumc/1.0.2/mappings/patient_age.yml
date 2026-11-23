@@ -1,0 +1,16 @@
+# Admission group representatives from ricu; original group is kept as text_value.
+type: simple
+mappings:
+  - pattern:
+      table: admissions
+      event: AGE
+      code: ^AGE$
+    columns:
+      numeric_value: replace(text_value == "18-39", 30, replace(text_value == "40-49", 45, replace(text_value ==
+        "50-59", 55, replace(text_value == "60-69", 65, replace(text_value == "70-79", 75, replace(text_value ==
+        "80+", 90, None))))))
+      text_value: col(text_value)
+      extension:
+        stay_id: col(admissionid)
+    filters:
+      - drop_na(numeric_value)
