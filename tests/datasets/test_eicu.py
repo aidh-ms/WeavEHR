@@ -183,6 +183,22 @@ def test_fio2_normalises_fractions_and_percentage_text(tmp_path: Path, table: st
 
 # --- Extraction behaviour ---------------------------------------------------------------------------------
 
+
+def test_icu_discharge_keeps_unit_status_and_destination(tmp_path: Path) -> None:
+    """A hospital death can be recorded before an ICU discharge to the floor."""
+    row = {
+        **PATIENT,
+        "unitdischargeoffset": 600,
+        "hospitaldischargeoffset": 590,
+        "unitdischargestatus": "Alive",
+        "unitdischargelocation": "Floor",
+        "hospitaldischargestatus": "Expired",
+        "hospitaldischargelocation": "Death",
+    }
+    events = extract_native(tmp_path, dataset=DATASET, version=VERSION, table="patient", rows=[row])
+    assert_rows(events["ICU_DISCHARGE"], [{"stay_id": STAY_ID, "text_value": "Alive", "discharge_location": "Floor"}])
+
+
 # Unit stays of the patient table: subject (hospital stay), unit stay, unit and hospital
 # discharge status, unit and hospital discharge offset.
 DEATH_STAYS = [
