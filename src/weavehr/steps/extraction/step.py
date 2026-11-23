@@ -82,7 +82,8 @@ class ExtractionStep(ConfigurableBaseStep[ExtractionStepConfig, TableConfig]):
                 )
                 continue
             logger.info("Extracting %s/%s (%d tables selected)", cfg.name, cfg.version, len(tables))
-            for table in tables:
+            dataset = f"{cfg.name}/{cfg.version}"
+            for table in self._progress.track(dataset, "tables", len(tables), tables, lambda t: t.name):
                 logger.debug("Extracting table %s/%s/%s", cfg.name, cfg.version, table.name)
                 try:
                     self._extract(table, cfg.path)

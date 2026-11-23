@@ -7,6 +7,7 @@ code patterns, and outputs MEDS-compliant Parquet files.
 
 import gc
 import shutil
+from collections.abc import Iterator
 from functools import cached_property
 from graphlib import TopologicalSorter
 from pathlib import Path
@@ -64,8 +65,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         for (dataset, version), dataset_config in datasets.items():
             logger.info("Processing concepts for dataset %s (version %s)", dataset, version)
-            depend_concepts = dict()
-            unmapped_count = 0
+            dataset_id = f"{dataset}/{version}"
+            self._progress.detail = f"{dataset_id} | Preparing shared sources"
 
             assert self._workspace_dir is not None
             routed_cache_dir = Path(self._workspace_dir.path).parent / "_concept_routed_sources"
@@ -78,55 +79,20 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 routed_cache_dir,
             )
 
-            def extract_mapped(concept: ConceptConfig, mappings: list[DatasetConceptConfigUnion]) -> None:
+            mappings = {c.identifier: c.get_dataset_concepts(dataset, version) for c in self._registry.values()}
+            mapped_count = sum(bool(configs) for configs in mappings.values())
+            ordered = self._ordered_concepts(dataset, version, mappings)
+            for concept in self._progress.track(dataset_id, "concepts", mapped_count, ordered, lambda c: c.name):
                 try:
                     self.extract_concept(
                         concept,
-                        mappings,
+                        mappings[concept.identifier],
                         routed_sources=routed_sources,
                         dataset_extension_columns=dataset_config.extension_columns,
                     )
                 except Exception as exc:
                     exc.add_note(f"While harmonising {concept.name}/{concept.version} for {dataset}/{version}")
                     raise
-
-            for concept in self._registry.values():
-                dataset_concepts = concept.get_dataset_concepts(dataset, version)
-                if not dataset_concepts:
-                    unmapped_count += 1
-                    logger.debug(
-                        "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
-                        concept.name,
-                        dataset,
-                        version,
-                    )
-                    continue
-
-                if all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts):
-                    extract_mapped(concept, dataset_concepts)
-                else:
-                    logger.debug(
-                        "Registering dependent concept %s for dataset %s",
-                        concept.identifier,
-                        dataset,
-                    )
-                    depend_concepts[concept.identifier] = self.concept_dependencies(dataset_concepts)
-
-            for concept_id in TopologicalSorter(depend_concepts).static_order():
-                concept = self._registry.get(concept_id)
-                assert concept is not None, f"concept {concept_id} not found in registry"
-
-                # Only dependent concepts mapped for this dataset still need extraction.
-                if concept_id not in depend_concepts:
-                    continue
-
-                dataset_concepts = concept.get_dataset_concepts(dataset, version)
-                logger.debug(
-                    "Processing dependent concept %s for dataset %s",
-                    concept_id,
-                    dataset,
-                )
-                extract_mapped(concept, dataset_concepts)
 
             if routed_cache_dir.exists():
                 shutil.rmtree(routed_cache_dir)
@@ -135,9 +101,40 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 "Concept mappings for %s/%s: %d mapped, %d unmapped",
                 dataset,
                 version,
-                len(self._registry) - unmapped_count,
-                unmapped_count,
+                mapped_count,
+                len(mappings) - mapped_count,
             )
+
+    def _ordered_concepts(
+        self, dataset: str, version: str, mappings: dict[str, list[DatasetConceptConfigUnion]]
+    ) -> Iterator[ConceptConfig]:
+        """Yield simple mapped concepts first, then derived concepts in dependency order."""
+        depend_concepts = {}
+        for concept in self._registry.values():
+            dataset_concepts = mappings[concept.identifier]
+            if not dataset_concepts:
+                logger.debug(
+                    "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
+                    concept.name,
+                    dataset,
+                    version,
+                )
+                continue
+
+            if all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts):
+                yield concept
+            else:
+                logger.debug("Registering dependent concept %s for dataset %s", concept.identifier, dataset)
+                depend_concepts[concept.identifier] = self.concept_dependencies(dataset_concepts)
+
+        for concept_id in TopologicalSorter(depend_concepts).static_order():
+            concept = self._registry.get(concept_id)
+            assert concept is not None, f"concept {concept_id} not found in registry"
+
+            # Only dependent concepts mapped for this dataset still need extraction.
+            if concept_id in depend_concepts:
+                logger.debug("Processing dependent concept %s for dataset %s", concept_id, dataset)
+                yield concept
 
     @staticmethod
     def concept_dependencies(dataset_concepts: list[DatasetConceptConfigUnion]) -> set[str]:
