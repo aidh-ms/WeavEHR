@@ -35,6 +35,7 @@ from weavehr.steps.concept.transformer.windowed import (
     SegmentedRollingSum,
     WindowedLocf,
     WindowedSumTransformer,
+    below,
 )
 
 
@@ -98,7 +99,13 @@ class SofaRenalTransformer(SofaComponent):
             .when(creatinine.is_not_null())
             .then(0)
             .otherwise(None),
-            pl.when(urine < 200).then(4).when(urine < 500).then(3).when(urine.is_not_null()).then(0).otherwise(None),
+            pl.when(below(urine, 200))
+            .then(4)
+            .when(below(urine, 500))
+            .then(3)
+            .when(urine.is_not_null())
+            .then(0)
+            .otherwise(None),
         )
 
 
@@ -278,13 +285,13 @@ class SofaRespiratoryTransformer(SofaComponent):
         pafi = self._pafi()
         ventilated = pl.col("ventilation_state") > 0
         return (
-            pl.when((pafi < 100) & ventilated)
+            pl.when(below(pafi, 100) & ventilated)
             .then(4)
-            .when((pafi < 200) & ventilated)
+            .when(below(pafi, 200) & ventilated)
             .then(3)
-            .when(pafi < 300)
+            .when(below(pafi, 300))
             .then(2)
-            .when(pafi < 400)
+            .when(below(pafi, 400))
             .then(1)
             .otherwise(0)
         )

@@ -50,6 +50,25 @@ _SUBJECT = "subject_id"
 _TIME = "time"
 
 
+# Relative tolerance for a computed value to compare equal to a cutoff.
+_CUTOFF_TOLERANCE = 1e-9
+
+
+def _grid_value() -> pl.Expr:
+    """Round MEDS Float32 inputs to six significant digits before Float64 window arithmetic."""
+    return pl.col("numeric_value").cast(pl.Float64).round_sig_figs(6)
+
+
+def at_least(value: pl.Expr, cutoff: float) -> pl.Expr:
+    """``value >= cutoff``, where a computed value within rounding error of the cutoff equals it."""
+    return value >= cutoff - _CUTOFF_TOLERANCE * abs(cutoff)
+
+
+def below(value: pl.Expr, cutoff: float) -> pl.Expr:
+    """``value < cutoff``, where a computed value within rounding error of the cutoff equals it."""
+    return value < cutoff - _CUTOFF_TOLERANCE * abs(cutoff)
+
+
 def _event(name: str) -> str:
     return f"__event_{name}"
 
@@ -215,7 +234,7 @@ class ActiveState(Aggregation):
             events.select(
                 pl.col(_SUBJECT).cast(pl.Int64),
                 pl.col(_TIME).cast(pl.Datetime("us")),
-                pl.col("numeric_value").cast(pl.Float32).alias("__value"),
+                _grid_value().alias("__value"),
                 _optional_string(self._stay_column).alias("__stay"),
                 _optional_string(self._id_column).alias("__state"),
                 self._stop_when.fill_null(False).alias("__is_stop"),
@@ -612,7 +631,7 @@ class WindowedConceptTransformer(BaseConceptTransformer):
                 lf.select(
                     pl.col(_SUBJECT).cast(pl.Int64),
                     pl.col(_TIME).cast(pl.Datetime(time_unit="us")),
-                    pl.col("numeric_value").cast(pl.Float32).alias(name),
+                    _grid_value().alias(name),
                     pl.lit(1, dtype=pl.Int32).alias(_event(name)),
                     *[_optional_string(column).alias(_context(column)) for column in context],
                 )

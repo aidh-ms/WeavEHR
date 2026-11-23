@@ -579,6 +579,19 @@ class TestRespiration:
         )
         assert result == [expected_on if vent else expected_off]
 
+    @pytest.mark.parametrize("cutoff", [100, 200, 300, 400])
+    @pytest.mark.parametrize("offset", [-1, 0, 1])
+    def test_pafi_at_fractional_fio2(self, cutoff: int, offset: int) -> None:
+        fio2_tenths = 301
+        pao2_tenths = cutoff * fio2_tenths // 100 + offset
+        expected = sum(100 * pao2_tenths < limit * fio2_tenths for limit in (100, 200, 300, 400))
+        assert score(
+            make(SofaRespiratoryTransformer),
+            O2_partial_pressure=pao2_tenths / 10,
+            fraction_of_inspired_oxygen=fio2_tenths / 10,
+            ventilation_start=1.0,
+        ) == [expected]
+
     def test_unknown_ventilation_degrades_to_lower_tiers(self) -> None:
         # pafi 60 with no ventilation record -> cannot reach tier 3/4, scores 2
         transformer = make(SofaRespiratoryTransformer)
@@ -824,6 +837,17 @@ class TestRenalCreatinineScore:
 
 
 class TestRenalUrineScore:
+    @pytest.mark.parametrize(("cutoff_ml", "hourly_tenths"), [(200, 83), (500, 208)])
+    @pytest.mark.parametrize("offset", [-1, 0, 1])
+    def test_accumulated_volume_at_cutoff(
+        self, renal: SofaRenalTransformer, cutoff_ml: int, hourly_tenths: int, offset: int
+    ) -> None:
+        total = 10 * cutoff_ml + offset
+        volumes = [hourly_tenths] * 23 + [total - 23 * hourly_tenths]
+        urine = covered_urine(*[(hour, volume / 10) for hour, volume in enumerate(volumes, start=1)])
+        expected = 4 if total < 2000 else 3 if total < 5000 else 0
+        assert renal_scores(renal, frame(), urine) == [expected]
+
     @pytest.mark.parametrize(
         ("value", "expected"),
         [
