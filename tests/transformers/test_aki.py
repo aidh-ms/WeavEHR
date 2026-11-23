@@ -93,6 +93,7 @@ class TestCreatinineCriterion:
 
     @pytest.mark.parametrize(("value", "expected"), [(3.99, 1), (3.999999, 3), (4.0, 3)])
     def test_absolute_stage_three_at_grid_precision(self, value: float, expected: int) -> None:
+        # At six significant digits 3.999999 rounds to 4.0 before the stage rule is evaluated.
         creatinine = series((0, 3.5), (24, value))
         assert stages(make(AkiCreatinineTransformer), {"creatinine": creatinine})[24] == expected
 

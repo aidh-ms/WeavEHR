@@ -27,6 +27,7 @@ latter is measured from a component event, not from its underlying raw inputs.
 
 import polars as pl
 
+from weavehr.steps.concept.transformer import threshold
 from weavehr.steps.concept.transformer.windowed import (
     ActiveState,
     Aggregation,
@@ -35,7 +36,6 @@ from weavehr.steps.concept.transformer.windowed import (
     SegmentedRollingSum,
     WindowedLocf,
     WindowedSumTransformer,
-    below,
 )
 
 
@@ -99,9 +99,9 @@ class SofaRenalTransformer(SofaComponent):
             .when(creatinine.is_not_null())
             .then(0)
             .otherwise(None),
-            pl.when(below(urine, 200))
+            pl.when(threshold.less_than(urine, 200))
             .then(4)
-            .when(below(urine, 500))
+            .when(threshold.less_than(urine, 500))
             .then(3)
             .when(urine.is_not_null())
             .then(0)
@@ -285,13 +285,13 @@ class SofaRespiratoryTransformer(SofaComponent):
         pafi = self._pafi()
         ventilated = pl.col("ventilation_state") > 0
         return (
-            pl.when(below(pafi, 100) & ventilated)
+            pl.when(threshold.less_than(pafi, 100) & ventilated)
             .then(4)
-            .when(below(pafi, 200) & ventilated)
+            .when(threshold.less_than(pafi, 200) & ventilated)
             .then(3)
-            .when(below(pafi, 300))
+            .when(threshold.less_than(pafi, 300))
             .then(2)
-            .when(below(pafi, 400))
+            .when(threshold.less_than(pafi, 400))
             .then(1)
             .otherwise(0)
         )

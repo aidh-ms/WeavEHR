@@ -50,23 +50,9 @@ _SUBJECT = "subject_id"
 _TIME = "time"
 
 
-# Relative tolerance for a computed value to compare equal to a cutoff.
-_CUTOFF_TOLERANCE = 1e-9
-
-
 def _grid_value() -> pl.Expr:
     """Round MEDS Float32 inputs to six significant digits before Float64 window arithmetic."""
     return pl.col("numeric_value").cast(pl.Float64).round_sig_figs(6)
-
-
-def at_least(value: pl.Expr, cutoff: float) -> pl.Expr:
-    """``value >= cutoff``, where a computed value within rounding error of the cutoff equals it."""
-    return value >= cutoff - _CUTOFF_TOLERANCE * abs(cutoff)
-
-
-def below(value: pl.Expr, cutoff: float) -> pl.Expr:
-    """``value < cutoff``, where a computed value within rounding error of the cutoff equals it."""
-    return value < cutoff - _CUTOFF_TOLERANCE * abs(cutoff)
 
 
 def _event(name: str) -> str:
