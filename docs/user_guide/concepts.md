@@ -327,6 +327,21 @@ uses one-minute windows expanded onto its time grid.
 dataset provenance. Regenerate these concepts and dependent CNS, SOFA and
 sepsis outputs after this change.
 
+### Precision at score cutoffs
+
+Windowed transformers round their numeric inputs to six significant digits and
+calculate in 64-bit floating point. For AKI and SOFA, a calculated value within
+`1e-9` of a cutoff relative to its magnitude counts as equal. A creatinine rise
+from 1.0 to 1.3 mg/dL therefore meets the inclusive 0.3 cutoff, while a urine
+rate of exactly 0.5 mL/kg/h stays outside the strict six-hour AKI criterion.
+For a cutoff on a computed grid value, use the operator from
+`weavehr.steps.concept.transformer.threshold`, for example
+`threshold.greater_equal(rise, 0.3)`. The YAML comparison callbacks use exact
+operators. The rounding applies only inside the transformer.
+
+Regenerate `aki_creatinine`, `aki_urine_output`, `sofa_renal` and
+`sofa_respiratory`, then their dependent `aki`, `sofa` and `sepsis3` outputs.
+
 ### SOFA measurement alignment
 
 SOFA components carry the latest point measurements forward for **one hour**

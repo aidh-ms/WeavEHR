@@ -28,6 +28,7 @@ day. Two departures from the guideline text are worth stating:
 
 import polars as pl
 
+from weavehr.steps.concept.transformer import threshold
 from weavehr.steps.concept.transformer.windowed import (
     Aggregation,
     Exists,
@@ -99,7 +100,7 @@ class AkiCreatinineTransformer(AkiComponent):
         creatinine = pl.col("creatinine")
         ratio = creatinine / pl.col("creatinine_baseline")
         rise = creatinine - pl.col("creatinine_acute_minimum")
-        acute = (ratio >= 1.5) | (rise >= 0.3)
+        acute = threshold.greater_equal(ratio, 1.5) | threshold.greater_equal(rise, 0.3)
         # the ungated reading drops the gate on the absolute threshold only; stage 1 still needs a rise
         absolute = creatinine >= 4.0
         if self._kwargs.get("require_acute_rise", True):
@@ -107,11 +108,11 @@ class AkiCreatinineTransformer(AkiComponent):
         return (
             pl.when(pl.col("renal_replacement_therapy"))
             .then(3)
-            .when(ratio >= 3.0)
+            .when(threshold.greater_equal(ratio, 3.0))
             .then(3)
             .when(absolute)
             .then(3)
-            .when(ratio >= 2.0)
+            .when(threshold.greater_equal(ratio, 2.0))
             .then(2)
             .when(acute)
             .then(1)
@@ -200,11 +201,11 @@ class AkiUrineOutputTransformer(AkiComponent):
             # anuria for >=12h: a fully observed 12h window with no urine at all
             pl.when(pl.col("urine_output_12h") <= 0)
             .then(3)
-            .when(self._rate("24h") < 0.3)
+            .when(threshold.less_than(self._rate("24h"), 0.3))
             .then(3)
-            .when(self._rate("12h") < 0.5)
+            .when(threshold.less_than(self._rate("12h"), 0.5))
             .then(2)
-            .when(self._rate("6h") < 0.5)
+            .when(threshold.less_than(self._rate("6h"), 0.5))
             .then(1)
             .otherwise(0)
         )
