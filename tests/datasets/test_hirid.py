@@ -16,7 +16,7 @@ variable ID and copy its value, so a test of them would only restate the YAML.
   the header names ricu reads, including "Source Table" and "Variable Name") and run
   through the shipped table configs; for creatinine and sex, on through the shipped mapping.
 - Concept pipelines: the lymphocyte percentage (derived, ricu's ``blood_cell_ratio``) and
-  urine output from the charted running total (complex, ricu's ``hirid_urine``), each run
+  urine output estimated from timed hourly rate measurements, each run
   through a real concept step (`run_concepts`).
 
 - Concept pipeline: native pharma records through the rate each record states until the next
@@ -365,32 +365,53 @@ def test_lymphocyte_percentage_is_the_count_over_the_white_cell_count_at_the_sam
     )
 
 
-def test_urine_output_is_the_increase_of_the_charted_running_total_per_patient(tmp_path: Path) -> None:
-    """HiRID charts urine as a running total; ricu's hirid_urine takes its increases per stay.
-
-    The first reading counts in full and a decrease (a reset of the total) gives 0. The
-    running total itself stays available as urine_output_cumulative.
-    """
-    totals = [(1, 0, 100.0), (1, 1, 250.0), (1, 2, 50.0), (1, 3, 120.0), (2, 0, 40.0)]
-
+def test_urine_output_uses_current_rate_over_the_preceding_interval(tmp_path: Path) -> None:
+    rates = [
+        (1, 3, 50),
+        (1, 0, 20),
+        (1, 4.5, 10),
+        (1, 12, 20),
+        (1, 18, 2),
+        (2, 0, 5),
+        (2, 1, 0),
+        (2, 2, 5),
+        (2, 2, 9),
+        (2, 3, 10),
+        (2, 4, 20),
+        (3, 0, 10),
+        (3, 1, -1),
+        (3, 2, 10),
+        (3, 3, float("nan")),
+        (3, 4, float("inf")),
+        (3, 5, None),
+        (3, 6, 10),
+        (3, 7, 3),
+    ]
+    rows = [
+        {
+            "subject_id": subject,
+            "time": ADMISSION + timedelta(hours=hour),
+            "code": observation_code(10020000, "ml/h"),
+            "numeric_value": rate,
+        }
+        for subject, hour, rate in rates
+    ]
+    # The ricu fluid-balance counter is neither a urine amount nor a rate interval boundary.
+    rows.append(
+        {
+            "subject_id": 1,
+            "time": ADMISSION + timedelta(hours=2),
+            "code": observation_code(30005110, "ml"),
+            "numeric_value": 800,
+        }
+    )
     outputs = run_concepts(
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["urine_output_cumulative", "urine_output"],
-        sources={
-            "observations/OBSERVATION": [
-                {
-                    "subject_id": subject,
-                    "time": ADMISSION + timedelta(hours=hour),
-                    "code": observation_code(30005110, "ml"),
-                    "numeric_value": total,
-                }
-                for subject, hour, total in totals
-            ]
-        },
+        concepts=["urine_output"],
+        sources={"observations/OBSERVATION": rows},
     )
-
     assert_rows(
         outputs["urine_output"],
         [
@@ -402,15 +423,20 @@ def test_urine_output_is_the_increase_of_the_charted_running_total_per_patient(t
                 "dataset": "hirid",
                 "table": "observations",
             }
-            for subject, hour, amount in [(1, 0, 100.0), (1, 1, 150.0), (1, 2, 0.0), (1, 3, 70.0), (2, 0, 40.0)]
+            for subject, hour, amount in [
+                (1, 3, 150),
+                (1, 4.5, 15),
+                (1, 12, 120),
+                (1, 18, 12),
+                (2, 1, 0),
+                (2, 4, 20),
+                (3, 7, 3),
+            ]
         ],
-        context="urine_output",
+        context="HiRID urine volume",
     )
-    assert_rows(
-        outputs["urine_output_cumulative"],
-        [{"numeric_value": total} for _, _, total in totals],
-        context="urine_output_cumulative",
-    )
+
+
 def test_each_record_states_the_rate_until_the_next_record_of_its_infusion(tmp_path: Path) -> None:
     """Native pharma records through vasopressor_infusion and norepinephrine_rate.
 

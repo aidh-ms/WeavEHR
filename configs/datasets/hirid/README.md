@@ -68,13 +68,20 @@ lists lymphocytes only as a count ("Lymphocytes [#/volume] in Blood",
 `lymphocytes_absolute`); `lymphocytes` (%) is `derived` from it as ricu's
 `blood_cell_ratio`: 100 × count / white-cell count recorded at the same time
 (ricu: the median white-cell count of the same hour).
-Variableid 30005110, a running total that ricu uses as urine output, is mapped
-unchanged as `urine_output_cumulative`. `urine_output` is `complex`: the increase
-since the patient's previous reading, as ricu's `hirid_urine`. The first reading
-counts in full, and a decrease gives 0. Unverified: the benchmark's variable
-reference names 30005110 "OUT/c" ("Fluid balance"), not urine, and its paper
-describes such outputs as cumulative over 12-hour periods, so a decrease may be
-a periodic reset, after which the first reading's amount is not counted.
+
+HiRID `urine_output` estimates mL from the current hourly urinary output rate
+(10020000, mL/h) multiplied by the time since the previous measurement in the
+same stay. The amount is recorded at the end of the interval. Coverage is capped
+at the preceding six hours. In a HiRID 1.1.1 charting audit, roughly 12% of
+intervals exceeded six hours and 42% exceeded two hours. The cutoff is a
+harmonisation assumption. Earlier hours of a longer gap have unknown output.
+The first reading has no interval. Missing or invalid rates and duplicate
+timestamps give no volume and cannot anchor the next interval.
+
+The [HiRID benchmark variable table](https://github.com/ratschlab/HIRID-ICU-Benchmark/blob/bee770094bf8389920bc09823895b87e09a563dd/preprocessing/resources/varref.tsv#L35-L45)
+identifies 10020000 as hourly urine volume and 30005110 as cumulative fluid
+balance output. This mapping therefore differs from ricu's `hirid_urine`,
+which takes increments of 30005110.
 
 Norepinephrine, epinephrine, dobutamine and vasopressin rates come from the
 `pharma` records through `vasopressor_infusion` and the shared rate transformer.

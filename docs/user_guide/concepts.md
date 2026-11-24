@@ -729,19 +729,6 @@ airway, like every other tube. No high-flow nasal cannula or room-air item is
 mapped yet. Rows keep the source code, concept ID and source value, in
 `text_value`.
 
-### Running totals
-
-Some datasets chart an amount as a running total. `CumulativeIncrementsTransformer`
-turns its one dependency, the running total, into the amount added since each
-subject's previous reading, as
-[ricu's `hirid_urine`](https://github.com/eth-mds/ricu/blob/c0efac720dbe72caaf63b361b6978a24383835bf/R/callback-itm.R#L701).
-The first reading counts in full, and a decrease gives 0. Readings without a
-value are skipped. HiRID's `urine_output` is computed this way from
-`urine_output_cumulative`. If a total restarts periodically (the
-[HiRID-ICU-Benchmark](https://arxiv.org/abs/2111.08536) describes HiRID's fluid
-outputs as cumulative over 12-hour periods), the amount of the first reading
-after a restart is not counted; this follows ricu.
-
 ### Heart rhythm and ectopy
 
 `heart_rhythm` records each charted rhythm, grouped into the levels
