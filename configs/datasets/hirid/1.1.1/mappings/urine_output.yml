@@ -1,5 +1,6 @@
 # HiRID 10020000 is hourly urinary output (mL/h). Estimate mL at the chart time
-# using the current rate over the preceding interval, up to six hours.
+# using the current rate over the preceding interval, up to 12 hours.
+# The HiRID benchmark accepts source rates from 0 to 1000 mL/h, inclusive.
 # Missing/invalid rates and ambiguous timestamps break the sequence.
 type: simple
 mappings:
@@ -8,10 +9,10 @@ mappings:
       event: OBSERVATION
       code: "^(10020000)(//.*)?$"
     callbacks:
-      - replace(numeric_value >= 0 and numeric_value < cast("inf", "float64"), time, None, output=valid_time)
+      - replace(numeric_value >= 0 and numeric_value <= 1000, time, None, output=valid_time)
       - previous_record(valid_time, time, by=[subject_id], output=previous_time)
       - datetime_diff(previous_time, valid_time, unit="hours", output=hours_covered)
     columns:
-      numeric_value: numeric_value * replace(hours_covered > 6, 6, hours_covered)
+      numeric_value: numeric_value * replace(hours_covered > 12, 12, hours_covered)
     filters:
       - drop_na(hours_covered)

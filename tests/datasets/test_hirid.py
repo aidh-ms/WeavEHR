@@ -372,6 +372,10 @@ def test_urine_output_uses_current_rate_over_the_preceding_interval(tmp_path: Pa
         (1, 4.5, 10),
         (1, 12, 20),
         (1, 18, 2),
+        (1, 30, 1000),
+        (1, 50, 50),
+        (1, 51, 1001),
+        (1, 52, 10),
         (2, 0, 5),
         (2, 1, 0),
         (2, 2, 5),
@@ -426,14 +430,39 @@ def test_urine_output_uses_current_rate_over_the_preceding_interval(tmp_path: Pa
             for subject, hour, amount in [
                 (1, 3, 150),
                 (1, 4.5, 15),
-                (1, 12, 120),
+                (1, 12, 150),
                 (1, 18, 12),
+                (1, 30, 12000),
+                (1, 50, 600),
                 (2, 1, 0),
                 (2, 4, 20),
                 (3, 7, 3),
             ]
         ],
         context="HiRID urine volume",
+    )
+
+
+def test_renal_sofa_requires_a_covered_urine_window(tmp_path: Path) -> None:
+    rows = [
+        {"time": ADMISSION + timedelta(hours=h), "code": observation_code(10020000, "ml/h"), "numeric_value": 0.0}
+        for h in [0, 1, 13, 25, 38, 50, 62]
+    ]
+    rows.append(
+        {"time": ADMISSION + timedelta(hours=39), "code": observation_code(20000600, "umol/l"), "numeric_value": 200.0}
+    )
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["urine_output", "creatinine", "sofa_renal"],
+        sources={"observations/OBSERVATION": rows},
+    )
+    # First segment covers [1,25]. A 13h gap resets it; creatinine can score during the new segment.
+    assert_rows(
+        outputs["sofa_renal"],
+        [{"time": ADMISSION + timedelta(hours=h), "numeric_value": score} for h, score in [(25, 4), (39, 2), (62, 4)]],
+        context="HiRID renal SOFA coverage",
     )
 
 
