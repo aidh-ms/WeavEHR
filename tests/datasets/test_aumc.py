@@ -1076,3 +1076,30 @@ def test_sepsis3_ignores_a_blood_gas_scored_after_the_blood_pressure(tmp_path: P
 
     assert onsets({}) == [(2, at(5))]
     assert onsets({"sepsis3": SEPSIS3_ON_TOTAL}) == [(1, at(1)), (2, at(5))]
+
+
+def test_aki_uses_admission_weight_and_counts_each_urine_collection_once(tmp_path: Path) -> None:
+    weight = code("MEASUREMENT", 3013762, "weight", "kg")
+    urine = code("MEASUREMENT", 3014315, "UrineCAD", "ml")
+    creatinine = code("MEASUREMENT", 3020564)
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["creatinine", "patient_weight", "urine_output", "aki_creatinine", "aki_urine_output", "aki"],
+        sources={
+            "measurement/MEASUREMENT": [
+                {"time": at(0), "code": weight, "numeric_value": 75.0, "visit_occurrence_id": VISIT_ID},
+                *[{"time": at(h), "code": urine, "numeric_value": 25.0} for h in range(7) for _ in range(2)],
+                {"time": at(0), "code": creatinine, "numeric_value": 100.0},
+                {"time": at(7), "code": creatinine, "numeric_value": 220.0},
+            ]
+        },
+    )
+    # 150 mL in six hours at 75 kg is stage 1. Counting both copies would give stage 0.
+    assert_rows(outputs["aki_urine_output"], [{"time": at(6), "numeric_value": 1}], context="AUMC urine AKI")
+    assert_rows(
+        outputs["aki"],
+        [{"time": at(h), "numeric_value": stage} for h, stage in [(0, 0), (6, 1), (7, 2)]],
+        context="AUMC combined AKI",
+    )

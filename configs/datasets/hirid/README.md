@@ -136,6 +136,15 @@ urine source can affect renal SOFA and downstream Sepsis-3 comparisons with YAIB
 Extreme values also occur in the counter, which this
 mapping does not use. [HiRID benchmark variable reference](https://github.com/ratschlab/HIRID-ICU-Benchmark/blob/bee770094bf8389920bc09823895b87e09a563dd/preprocessing/resources/varref.tsv#L35-L45)
 
+### Acute kidney injury
+
+`aki` combines `aki_creatinine` with `aki_urine_output`. The urine criterion
+uses measured body weight and the interval volumes described above. Each volume
+counts in full at its chart time, including volumes that cross a window boundary.
+A gap over 6 h between emitted volumes breaks coverage for all three urine
+windows (6, 12 and 24 h). This keeps the maximum gap within the shortest
+assessment window. Creatinine can still provide a stage during these gaps.
+
 ### Other mappings
 
 Norepinephrine, epinephrine, dobutamine and vasopressin rates come from the
