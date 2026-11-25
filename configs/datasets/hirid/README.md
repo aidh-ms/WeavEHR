@@ -99,6 +99,22 @@ between emitted urine volumes starts a new segment. The urine component becomes
 available once that segment spans 24 h and the latest volume is at most 12 h old.
 Creatinine can still supply the renal score while urine coverage is incomplete.
 
+A sensitivity analysis evaluated each distinct urine-volume or creatinine event,
+including events in the first 24 h of a stay and stays with only creatinine.
+A patient-day counted as covered if at least one event on that day had a urine score.
+
+| Maximum gap | Event windows with a urine score | Patient-days with any urine score |
+| --- | --- | --- |
+| 6 h | 15–<20% | 15–<20% |
+| 12 h | 50–<55% | 40–<45% |
+| 24 h | 60–<65% | 50–<55% |
+
+Allowing a 24 h gap yielded about 37,900 additional windows and 6,700 additional
+patient-days compared with a 12 h gap. At a fixed 12 h gap, removing the volume
+cap gave the same urine-class counts to the precision of the audit. At a fixed
+24 h gap, about 18,200 windows fell below 500 mL with the cap and 17,900 without
+it. The audit measured the urine component alone.
+
 For comparison, ricu derives HiRID urine from increments of 30005110. The counter
 usually restarted at noon: 63,592 of its 68,864 decreases occurred at 12:00,
 with a median of 24 h between decreases. On days without gaps over 6 h, median
