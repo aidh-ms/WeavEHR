@@ -28,6 +28,28 @@ only Parquet schema metadata for matching inputs in completed steps. A stream wi
 an entry. An absent stream has none. For custom step names, pass `concept_step` or `extraction_step`
 as you would to `scan_events()`.
 
+## Read birth and death from extraction
+
+Use `codes=` to find an exact code across all extracted tables in one dataset. You can run this
+query before concept harmonisation. For example, to load recorded deaths from the eICU demo:
+
+```python
+from weavehr import scan_events
+
+deaths = scan_events("output/project", dataset="eicu-demo/2.0", codes="MEDS_DEATH").collect()
+```
+
+The bundled extraction configs use two standard MEDS marker codes where the source supports them:
+
+| Exact code | Meaning of `time` |
+| --- | --- |
+| `MEDS_BIRTH` | Birth timestamp as represented in the dataset. Some datasets, including eICU, estimate it from age. |
+| `MEDS_DEATH` | Death timestamp as represented in the dataset. In eICU it can come from an ICU or hospital discharge recorded as expired. |
+
+Pass `codes=["MEDS_BIRTH", "MEDS_DEATH"]` to retrieve both. The `source` column identifies the
+table and event stream for each row. For other events, such as `ICU_ADMISSION`, use the stream's
+selector from `project.available_inputs()` in `events=`.
+
 ## Query a cohort
 
 Pass an existing project or its path to `scan_events()`. A path is opened read-only. You can also
@@ -35,7 +57,7 @@ open it explicitly with `WeavEHRProject(path, read_only=True)` for a series of q
 
 This example selects subjects with a recorded creatinine measurement, then retrieves their heart
 rate measurements and recorded deaths. Setting `dataset` to `"eicu-demo"` runs the same query
-against eICU. Selecting the exact MEDS code `MEDS_DEATH` works across source tables in each dataset.
+against eICU.
 
 ```python
 import polars as pl
