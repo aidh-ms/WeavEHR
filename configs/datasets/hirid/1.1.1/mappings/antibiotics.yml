@@ -1,0 +1,18 @@
+# HiRID v1.1.1 -- pharma pharmaid(s) [ricu abx; the same 81 ids as YAIB-cohorts' hirid abx_duration]
+#
+# Every administration record of a listed drug is an antibiotic marker. HiRID records no
+# treatment end, so each record covers one minute from its own time, as YAIB-cohorts gives
+# every HiRID record a one-minute window (ts_to_win_tbl(mins(1L))). Sustained treatment
+# (suspected_infection) therefore needs records no more than 24h apart.
+#
+# As in ricu and YAIB, records are not filtered by givendose, typeid or recordstatus.
+type: simple
+mappings:
+  - pattern:
+      table: pharma
+      event: PHARMA
+      code: "^(163|176|181|186|189|300|326|331|351|405|1000234|1000272|1000273|1000274|1000284|1000299|1000300|1000302|1000304|1000305|1000306|1000315|1000317|1000318|1000320|1000321|1000322|1000335|1000348|1000352|1000363|1000365|1000390|1000407|1000408|1000424|1000425|1000426|1000437|1000483|1000507|1000508|1000518|1000519|1000549|1000601|1000648|1000666|1000670|1000671|1000760|1000781|1000791|1000797|1000812|1000825|1000829|1000830|1000837|1000838|1000854|1000855|1000893|1000894|1001005|1001068|1001075|1001079|1001084|1001086|1001095|1001096|1001097|1001098|1001168|1001169|1001170|1001171|1001173|1001193|1001198)(//.*)?$"
+    columns:
+      numeric_value: const(1)
+      extension:
+        coverage_end: add_offset(time, 1, offset_unit="minutes")

@@ -1,0 +1,12 @@
+# HiRID records no microbiology, so ricu has no hirid samp source and antibiotics cannot be
+# paired with body-fluid sampling. As YAIB-cohorts does for HiRID (si_mode = "abx"),
+# suspicion is sustained antibiotic treatment: no gap over 24h in the 72h after a start,
+# shortened by death (see docs/user_guide/concepts.md).
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.SustainedAntibioticsTransformer
+concepts:
+  - antibiotics.1.0.0
+  - death.1.0.0
+kwargs:
+  antibiotic_window: 72h
+  max_gap: 24h

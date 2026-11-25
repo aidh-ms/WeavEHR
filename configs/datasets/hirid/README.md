@@ -62,12 +62,18 @@ concept's declared `unit` before being applied.
 
 Currently mapped (`simple` unless noted): the laboratory panels (blood gas,
 chemistry, haematology) from `observations`, vital signs, GCS components
-(eye/motor/verbal) and RASS, height/weight, and the demographics from `general`
-(`patient_sex`, `patient_age`). The HiRID-ICU-Benchmark variable reference
-lists lymphocytes only as a count ("Lymphocytes [#/volume] in Blood",
-`lymphocytes_absolute`); `lymphocytes` (%) is `derived` from it as ricu's
-`blood_cell_ratio`: 100 × count / white-cell count recorded at the same time
-(ricu: the median white-cell count of the same hour).
+(eye/motor/verbal) and RASS, height/weight, the demographics (`patient_sex`,
+`patient_age`) and `death` from `general`, antibiotics from `pharma`, and
+ventilation start/end and the GCS correction from the ventilator mode. The
+HiRID-ICU-Benchmark variable reference lists lymphocytes only as a count
+("Lymphocytes [#/volume] in Blood", `lymphocytes_absolute`); `lymphocytes` (%)
+is `derived` from it as ricu's `blood_cell_ratio`: 100 × count / white-cell
+count recorded at the same time (ricu: the median white-cell count of the same
+hour).
+
+The Sepsis-3 chain is mapped (`complex`): `gcs`, the six SOFA components,
+`sofa`, `suspected_infection` and `sepsis3` (see [Sepsis-3](#sepsis-3)). Renal
+SOFA scores creatinine and urine output, described next.
 
 ### Urine output and renal SOFA
 
@@ -139,16 +145,41 @@ against aggregate summaries of HiRID 1.1.1, not record by record. See
 [Vasopressor rates](../../../docs/user_guide/vasopressor_events.md).
 
 Not yet mapped / not cleanly mappable as `simple`:
-- **Other drug rates / durations** (antibiotics, corticosteroids, insulin,
-  dextrose, vasopressor durations): live in `pharma` and need `derived`/`complex`
+- **Other drug rates / durations** (corticosteroids, insulin, dextrose,
+  vasopressor durations): live in `pharma` and need `derived`/`complex`
   handling of HiRID's per-record dosing.
-- **GCS total**: derived from the GCS components; not yet mapped.
-- **Ventilation** windows / start / end, airway markers and **length-of-stay**
-  outcomes: `derived`/`complex`.
+- Airway markers and **length-of-stay** outcomes: `derived`/`complex`.
 - Concepts with **no HiRID source** in ricu (not invented here): `troponin_I`,
   `hematocrit`, `basophils`, `eosinophils`, `erythrocyte_distribution_width`,
   `prothrombine_time`, `red_blood_cell_count`, `Hemoglobin_A1C`, `totcal_CO2`,
   `patient_admission_type`.
+
+### Sepsis-3
+
+- **Suspected infection** is sustained antibiotic treatment, as in YAIB-cohorts'
+  HiRID cohort (`si_mode = "abx"`): HiRID records no microbiology, so ricu has no
+  HiRID `samp` and antibiotics cannot be paired with cultures. Each antibiotic
+  record (ricu's `abx` `pharmaid`s) covers one minute, as in YAIB, so treatment
+  is sustained while records are at most 24h apart over 72h, or until death.
+- **Ventilation** comes from the charted ventilator mode (variableid 15001552),
+  ricu's only HiRID source of `mech_vent`: modes 1-2 are invasive and 3-6
+  noninvasive ventilation (both count for respiratory SOFA); any other mode ends
+  ventilation. HiRID records no episodes, so a mode holds until the next one and
+  at most 12h (`ventilation_window`). ricu holds a mode until the next one if that
+  is at most 12h later and otherwise for 4h, so the last mode of a run is held
+  longer here. The codes are ricu's, not checked against `ordinal_vars_ref.csv`.
+- **GCS**: HiRID records no total, so `gcs` sums the current components; invasive
+  ventilation (`gcs_unable`, ricu's `ett_gcs`) sets it to 15.
+- **Renal SOFA** scores creatinine and urine output. Urine comes from the hourly
+  rate (10020000), not from ricu's increments of the 30005110 counter, so renal
+  SOFA, and with it Sepsis-3, can differ from YAIB (see
+  [Urine output and renal SOFA](#urine-output-and-renal-sofa)).
+- **Cardiovascular SOFA** reads MAP and the norepinephrine, epinephrine and
+  dobutamine rates. ricu has no HiRID dopamine rate, so dopamine is no input.
+  Each rate holds until the next record of its infusion, so `pressor_window: 48h`
+  (the MIMIC-IV value) only bounds a longer interval between two records. In
+  aggregate summaries of HiRID 1.1.1, 99% of intervals between records of one
+  infusion of these drugs were under 30 minutes; the longest lasted 15 to 23 days.
 
 ## Conventions
 
@@ -166,9 +197,9 @@ Not yet mapped / not cleanly mappable as `simple`:
   invalidated and administered, bits 2 and 32 unset), `infusion_start` (bit 4)
   and `infusion_stop` (bit 256).
 - The `ordinal_vars_ref.csv` reference (which decodes coded ordinal/categorical
-  observation values into text) is not wired in yet — it is only needed for the
-  deferred categorical concepts (e.g. ventilation mode), so it will land with
-  that batch.
+  observation values into text) is not wired in yet. The ventilator mode codes
+  that ventilation and `gcs_unable` read are ricu's; the other categorical
+  concepts wait for it.
 
 ## Layout
 

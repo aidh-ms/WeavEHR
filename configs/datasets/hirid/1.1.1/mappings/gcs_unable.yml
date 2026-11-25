@@ -1,0 +1,19 @@
+# HiRID v1.1.1 -- observations variableid 15001552, the ventilator mode [ricu ett_gcs]
+#
+# ricu's hirid ett_gcs is invasive ventilation (mech_vent == "invasive"): the GCS of an
+# intubated patient is not assessable and is set to 15. With ricu's mode codes (see
+# ventilation_start):
+#   1, 2           -> 1: invasive ventilation, the correction applies
+#   any other mode -> 0: clears the correction
+# A mode without a value is dropped. The flag holds for the gcs lookback (6h) after the
+# latest charted mode; ricu holds each mode until the next one (4h if that is over 12h later).
+type: simple
+mappings:
+  - pattern:
+      table: observations
+      event: OBSERVATION
+      code: "^(15001552)(//.*)?$"
+    columns:
+      numeric_value: replace((numeric_value == 1) | (numeric_value == 2), 1, replace(numeric_value != None, 0, None))
+    filters:
+      - drop_na(numeric_value)

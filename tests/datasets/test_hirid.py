@@ -6,8 +6,10 @@ the YAML does not show by itself, taken from ``configs/datasets/hirid/README.md`
 ``hirid`` concept dictionary (where the README says the mappings come from) or the
 concept definitions: unit conversions of the laboratory mappings, the age cap and sex
 labels of the demographics, the variable reference join of the event tables, and the
-times and pseudo date of birth the extraction reconstructs. The other mappings select a
-variable ID and copy its value, so a test of them would only restate the YAML.
+times and pseudo date of birth the extraction reconstructs, the classification of the
+ventilator mode (ricu's ``mech_vent`` and ``ett_gcs``) and the one-minute antibiotic
+coverage of YAIB-cohorts. The other mappings select a variable ID and copy its value, so a
+test of them would only restate the YAML.
 
 - Behaviour cases: one extracted source row per :class:`Case`, grouped by rule and run
   through the shipped simple mapping by one parametrised test.
@@ -15,18 +17,19 @@ variable ID and copy its value, so a test of them would only restate the YAML.
   by the configured glob; ``general_table.csv`` and ``hirid_variable_reference.csv`` with
   the header names ricu reads, including "Source Table" and "Variable Name") and run
   through the shipped table configs; for creatinine and sex, on through the shipped mapping.
-- Concept pipelines: the lymphocyte percentage (derived, ricu's ``blood_cell_ratio``) and
-  urine output estimated from timed hourly rate measurements, each run
-  through a real concept step (`run_concepts`).
-
-- Concept pipeline: native pharma records through the rate each record states until the next
-  one to a vasopressor rate concept, with weights from ``patient_weight``.
+- Concept pipelines, each run through a real concept step (`run_concepts`): the lymphocyte
+  percentage (derived, ricu's ``blood_cell_ratio``); urine output estimated from timed hourly
+  rate measurements, and the renal SOFA score it feeds; the sepsis chain, the respiratory SOFA
+  score and the GCS, whose HiRID rules live in their mappings' inputs and ``kwargs``; and
+  native pharma records through the rate each record states until the next one to a
+  vasopressor rate concept, with weights from ``patient_weight``.
 
 No HiRID data or variable reference is available to check codes against: variable names are a
 placeholder, and the units in codes are the SI units that ricu's conversions to the
 concept units imply, spelled in ASCII; neither claims the reference table's spelling.
 """
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Final
@@ -34,7 +37,9 @@ from typing import Any, Final
 import pytest
 
 from tests.datasets.support import (
+    DEFAULT_TIME,
     NOTHING,
+    SOFA_COMPONENTS,
     Case,
     assert_rows,
     case_id,
@@ -42,6 +47,7 @@ from tests.datasets.support import (
     extract_native,
     map_rows,
     run_concepts,
+    sofa_component_stubs,
 )
 
 DATASET: Final = "hirid"
@@ -67,6 +73,18 @@ def observation_code(variableid: int, unit: str) -> str:
     ``test_extracted_observations_reach_the_mapping_of_their_variable_id``).
     """
     return f"OBSERVATION//{variableid}//{VARIABLE}//{unit}"
+
+
+def at(hours: float) -> datetime:
+    """The default time of a synthetic extracted row plus some hours."""
+    return DEFAULT_TIME + timedelta(hours=hours)
+
+
+VENTILATOR_MODE: Final = 15001552
+"""The ventilator mode variable, ricu's only HiRID source of ``mech_vent`` and ``ett_gcs``."""
+
+VENTILATOR_MODE_CODE: Final = f"OBSERVATION//{VENTILATOR_MODE}//{VARIABLE}"
+"""Extracted code of a charted ventilator mode, an ordinal variable without a unit."""
 
 
 def lab(concept: str, variableid: int, unit: str, value: float, expected: float, note: str, rel: float) -> Case:
@@ -142,7 +160,65 @@ AGE_CAP = [
     ]
 ]
 
-CASES = [*EXACT_CONVERSIONS, *MOLAR_CONVERSIONS, *AGE_CAP]
+ANTIBIOTICS = [
+    Case(
+        concept="antibiotics",
+        table="pharma",
+        event="PHARMA",
+        code=f"PHARMA//163//{VARIABLE}//mg",
+        value=500.0,
+        expect=[{"time": DEFAULT_TIME, "numeric_value": 1, "coverage_end": DEFAULT_TIME + timedelta(minutes=1)}],
+        note="YAIB-cohorts gives every HiRID antibiotic record a one-minute window, whatever its dose",
+    ),
+]
+
+
+def ventilator_mode(concept: str, mode: float | None, expect: Sequence[Mapping[str, Any]], note: str) -> Case:
+    """A behaviour case for one charted ventilator mode."""
+    return Case(
+        concept=concept,
+        table="observations",
+        event="OBSERVATION",
+        code=VENTILATOR_MODE_CODE,
+        value=mode,
+        expect=expect,
+        note=note,
+    )
+
+
+# ricu's hirid mech_vent maps the modes 1-2 to invasive and 3-6 to noninvasive ventilation; any other
+# code is no ventilation. Its ett_gcs (the GCS correction to 15) is invasive ventilation.
+VENTILATOR_MODES = [
+    *[
+        ventilator_mode(
+            "ventilation_start",
+            mode,
+            [{"code": f"ventilation_start//{level}", "ventilator_mode": str(float(mode))}],
+            f"mode {mode:g} is {level} ventilation",
+        )
+        for mode, level in [(1, "invasive"), (2, "invasive"), (3, "noninvasive"), (6, "noninvasive")]
+    ],
+    ventilator_mode("ventilation_start", 7, NOTHING, "a mode ricu does not map starts no ventilation"),
+    ventilator_mode(
+        "ventilation_end",
+        7,
+        [{"code": "ventilation_end", "ventilator_mode": "7.0"}],
+        "a mode ricu does not map ends the ventilation of the mode before it",
+    ),
+    *[
+        ventilator_mode("ventilation_end", mode, NOTHING, f"mode {mode:g} is ventilation, so it ends nothing")
+        for mode in (1, 6)
+    ],
+    ventilator_mode("ventilation_end", None, NOTHING, "a mode without a value ends nothing"),
+    ventilator_mode("gcs_unable", 2, [{"numeric_value": 1}], "invasive ventilation sets the GCS to 15"),
+    *[
+        ventilator_mode("gcs_unable", mode, [{"numeric_value": 0}], f"mode {mode:g} clears the GCS correction")
+        for mode in (3, 7)
+    ],
+    ventilator_mode("gcs_unable", None, NOTHING, "a mode without a value neither applies nor clears it"),
+]
+
+CASES = [*EXACT_CONVERSIONS, *MOLAR_CONVERSIONS, *AGE_CAP, *ANTIBIOTICS, *VENTILATOR_MODES]
 
 
 @pytest.mark.parametrize("case", CASES, ids=case_id)
@@ -555,3 +631,115 @@ def test_each_record_states_the_rate_until_the_next_record_of_its_infusion(tmp_p
         ],
         context="norepinephrine_rate",
     )  # fmt: skip
+
+
+# --- Concept pipelines ---------------------------------------------------------------------------------
+
+
+def test_sepsis_chain_uses_sustained_antibiotics_and_death(tmp_path: Path) -> None:
+    """HiRID records no cultures, so suspicion is sustained antibiotic treatment (YAIB-cohorts' HiRID rule).
+
+    Each record covers one minute, so the records of subject 1, 20h apart and the last 12h
+    before the end of its 72h window, sustain treatment; later starts do not, their windows
+    ending over 24h after the last record. Subject 2's single record does not. Subject 3's
+    single record does, because death 20h later shortens its window.
+    """
+    records = [(1, hour) for hour in (0, 20, 40, 60)] + [(2, 0), (3, 0)]
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["antibiotics", "death", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
+        mapping_overrides=sofa_component_stubs(),
+        sources={
+            "pharma/PHARMA": [
+                {
+                    "subject_id": subject,
+                    "time": at(hour),
+                    "code": f"PHARMA//163//{VARIABLE}//mg",
+                    "numeric_value": 500.0,
+                }
+                for subject, hour in records
+            ],
+            "general/MEDS_DEATH": [{"subject_id": 3, "time": at(20), "code": "MEDS_DEATH"}],
+            "assessments/SOFA": [
+                {"subject_id": subject, "time": at(hour), "code": "SOFA", "numeric_value": score}
+                for subject in (1, 2, 3)
+                for hour, score in ((0, 0.0), (1, 2.0))
+            ],
+        },
+    )
+
+    assert_rows(outputs["death"], [{"subject_id": 3, "time": at(20)}], context="death")
+    for name, time in [("suspected_infection", at(0)), ("sepsis3", at(1))]:
+        assert_rows(outputs[name], [{"subject_id": subject, "time": time} for subject in (1, 3)], context=name)
+
+
+def test_respiratory_sofa_counts_the_charted_ventilator_mode_as_ventilation(tmp_path: Path) -> None:
+    """A charted mode holds until the next one, as in ricu's hirid_vent, and expires 12h after the last.
+
+    PaO2 60 mmHg at FiO2 40% is a ratio of 150: 3 points while ventilated, 2 otherwise.
+    Invasive mode 1 holds for the 7h until the gases, with the next mode charted 10h after it;
+    mode 7, which is no ventilation, ends it; noninvasive mode 3 counts as ventilation, but not
+    13h later, past the 12h fallback (and ricu's 4h after the last mode of a run).
+    """
+    modes = [(0, 1.0), (10, 1.0), (12, 7.0), (20, 3.0)]
+    gases = [7, 12.5, 21, 33]
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=[
+            "O2_partial_pressure",
+            "fraction_of_inspired_oxygen",
+            "ventilation_start",
+            "ventilation_end",
+            "sofa_respiratory",
+        ],
+        sources={
+            "observations/OBSERVATION": [
+                *[{"time": at(hour), "code": VENTILATOR_MODE_CODE, "numeric_value": mode} for hour, mode in modes],
+                *[
+                    {"time": at(hour), "code": observation_code(variableid, unit), "numeric_value": value}
+                    for hour in gases
+                    for variableid, unit, value in [(20000200, "mmHg", 60.0), (2010, "%", 40.0)]
+                ],
+            ]
+        },
+    )
+
+    # The modes themselves are assessed only while gases are current (2h), which none of them are.
+    assert_rows(
+        outputs["sofa_respiratory"],
+        [{"time": at(hour), "numeric_value": score} for hour, score in zip(gases, (3, 2, 3, 2), strict=True)],
+        context="sofa_respiratory",
+    )
+
+
+def test_invasive_ventilation_sets_the_gcs_to_15(tmp_path: Path) -> None:
+    """ricu's hirid ett_gcs: the GCS of an invasively ventilated patient is 15; noninvasive ventilation is assessed."""
+    components = [(10000300, "eye"), (10000200, "motor"), (10000100, "verbal")]
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["gcs_eye", "gcs_motor", "gcs_verbal", "gcs_unable", "gcs"],
+        sources={
+            "observations/OBSERVATION": [
+                *[
+                    {"time": at(hour), "code": observation_code(variableid, unit), "numeric_value": 1.0}
+                    for hour in (0, 1)
+                    for variableid, unit in components
+                ],
+                *[
+                    {"time": at(hour), "code": VENTILATOR_MODE_CODE, "numeric_value": mode}
+                    for hour, mode in [(0, 1.0), (1, 3.0)]
+                ],
+            ]
+        },
+    )
+
+    assert_rows(outputs["gcs"], [{"time": at(0), "numeric_value": 15}, {"time": at(1), "numeric_value": 3}])

@@ -1,0 +1,31 @@
+# HiRID v1.1.1 -- observations variableid 15001552, the ventilator mode [ricu mech_vent]
+#
+# HiRID records no ventilation episodes, only the charted ventilator mode. ricu holds each
+# charted mode until the next one (hirid_vent) and maps its code:
+#   1, 2   -> invasive
+#   3 to 6 -> noninvasive
+#   other  -> no ventilation: see ventilation_end
+# Both kinds count as ventilation for respiratory SOFA, as in ricu's vent_ind. The codes are
+# ricu's; they are not checked against HiRID's ordinal_vars_ref.csv, which is not wired in.
+#
+# The markers carry no value; the charted code is kept as the ventilator_mode extension.
+type: simple
+mappings:
+  - pattern:
+      table: observations
+      event: OBSERVATION
+      code: "^(15001552)(//.*)?$"
+    level: invasive
+    columns: &mode
+      extension:
+        ventilator_mode: col(numeric_value)
+    filters:
+      - (ventilator_mode == 1) | (ventilator_mode == 2)
+  - pattern:
+      table: observations
+      event: OBSERVATION
+      code: "^(15001552)(//.*)?$"
+    level: noninvasive
+    columns: *mode
+    filters:
+      - (ventilator_mode == 3) | (ventilator_mode == 4) | (ventilator_mode == 5) | (ventilator_mode == 6)
