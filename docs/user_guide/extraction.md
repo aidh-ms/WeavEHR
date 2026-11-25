@@ -96,17 +96,18 @@ Each event produces one output file. The `columns` block maps source columns (or
 - `code` — a list of code *parts*. The final code is assembled as
 
     ```
-    <dataset>//<table>//<code_prefix parts>//[event name//]<code parts>//<code_suffix parts>
+    <code_prefix parts>//[event name//]<code parts>//<code_suffix parts>
     ```
 
-    The dataset and table prefixes are added automatically. By default, the technical event name is also included after `code_prefix`; `include_event_name_in_code` can disable it globally or per table. Typical code parts are the item ID, its label, and the unit of measurement.
+    By default, extraction includes the event name after `code_prefix`, unless it already matches the first code part. `include_event_name_in_code` can disable it globally or per table. Typical code parts are the item ID, its label, and the unit of measurement.
 
 - `extension` — a mapping of additional output columns, preserved alongside the MEDS standard columns (IDs like `hadm_id`/`stay_id`, data-availability timestamps, reference ranges, …).
 
 MIMIC-III, MIMIC-IV and NWICU carry `hospital_expire_flag` on `HOSPITAL_DISCHARGE`.
 For the admission identified by `hadm_id`, `1` means the patient died in hospital and
 `0` means they survived to discharge. A value requires both a recorded flag and a
-discharge time. Use `MEDS_DEATH` for the patient's recorded death time.
+discharge time. For the patient's recorded death time,
+[read `MEDS_DEATH` directly from extraction](export.md#read-birth-and-death-from-extraction).
 
 Every column an expression references must exist at that point: declared under `columns` (of the table or a joined table) or created earlier by a callback's `output=`. An unknown name, such as a typo like `col(enter_timestamp)` for a column created as `entered_timestamp`, fails the extraction with an error that suggests close matches. It never turns silently into a text value (see [column references and literals](expressions.md#column-references-and-literals)).
 
