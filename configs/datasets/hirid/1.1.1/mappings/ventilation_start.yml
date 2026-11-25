@@ -1,14 +1,18 @@
-# HiRID v1.1.1 -- observations variableid 15001552, the ventilator mode [ricu mech_vent]
+# HiRID v1.1.1 -- observations variableid 15001552, the airway code [ricu mech_vent]
 #
-# HiRID records no ventilation episodes, only the charted ventilator mode. ricu holds each
-# charted mode until the next one (hirid_vent) and maps its code:
+# The HiRID-ICU-Benchmark variable reference names 15001552 "Ventilator Airway Code"
+# (AirwayCode); the ventilator mode is a different variable (3845). HiRID records no
+# ventilation episodes, and ricu reads this code as its only HiRID source of mech_vent,
+# holding each charted code until the next one (hirid_vent):
 #   1, 2   -> invasive
 #   3 to 6 -> noninvasive
 #   other  -> no ventilation: see ventilation_end
-# Both kinds count as ventilation for respiratory SOFA, as in ricu's vent_ind. The codes are
-# ricu's; they are not checked against HiRID's ordinal_vars_ref.csv, which is not wired in.
+# Both kinds count as ventilation for respiratory SOFA, as in ricu's vent_ind and so in YAIB.
+# The benchmark's ventilation endpoint instead reads 1, 2 as an airway present and 3 to 6 as
+# no airway, against ventilation. The code labels are not checked against HiRID's
+# ordinal_vars_ref.csv, which is not wired in.
 #
-# The markers carry no value; the charted code is kept as the ventilator_mode extension.
+# The markers carry no value; the charted code is kept as the airway_code extension.
 type: simple
 mappings:
   - pattern:
@@ -16,16 +20,16 @@ mappings:
       event: OBSERVATION
       code: "^(15001552)(//.*)?$"
     level: invasive
-    columns: &mode
+    columns: &airway
       extension:
-        ventilator_mode: col(numeric_value)
+        airway_code: col(numeric_value)
     filters:
-      - (ventilator_mode == 1) | (ventilator_mode == 2)
+      - (airway_code == 1) | (airway_code == 2)
   - pattern:
       table: observations
       event: OBSERVATION
       code: "^(15001552)(//.*)?$"
     level: noninvasive
-    columns: *mode
+    columns: *airway
     filters:
-      - (ventilator_mode == 3) | (ventilator_mode == 4) | (ventilator_mode == 5) | (ventilator_mode == 6)
+      - (airway_code == 3) | (airway_code == 4) | (airway_code == 5) | (airway_code == 6)

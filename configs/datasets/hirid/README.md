@@ -64,7 +64,7 @@ Currently mapped (`simple` unless noted): the laboratory panels (blood gas,
 chemistry, haematology) from `observations`, vital signs, GCS components
 (eye/motor/verbal) and RASS, height/weight, the demographics (`patient_sex`,
 `patient_age`) and `death` from `general`, antibiotics from `pharma`, and
-ventilation start/end and the GCS correction from the ventilator mode. The
+ventilation start/end and the GCS correction from the airway code. The
 HiRID-ICU-Benchmark variable reference lists lymphocytes only as a count
 ("Lymphocytes [#/volume] in Blood", `lymphocytes_absolute`); `lymphocytes` (%)
 is `derived` from it as ricu's `blood_cell_ratio`: 100 × count / white-cell
@@ -165,13 +165,20 @@ Not yet mapped / not cleanly mappable as `simple`:
   HiRID `samp` and antibiotics cannot be paired with cultures. Each antibiotic
   record (ricu's `abx` `pharmaid`s) covers one minute, as in YAIB, so treatment
   is sustained while records are at most 24h apart over 72h, or until death.
-- **Ventilation** comes from the charted ventilator mode (variableid 15001552),
-  ricu's only HiRID source of `mech_vent`: modes 1-2 are invasive and 3-6
-  noninvasive ventilation (both count for respiratory SOFA); any other mode ends
-  ventilation. HiRID records no episodes, so a mode holds until the next one and
-  at most 12h (`ventilation_window`). ricu holds a mode until the next one if that
-  is at most 12h later and otherwise for 4h, so the last mode of a run is held
-  longer here. The codes are ricu's, not checked against `ordinal_vars_ref.csv`.
+- **Ventilation** comes from the charted airway code (variableid 15001552),
+  ricu's only HiRID source of `mech_vent`. The HiRID-ICU-Benchmark
+  [variable reference](https://github.com/ratschlab/HIRID-ICU-Benchmark/blob/bee770094bf8389920bc09823895b87e09a563dd/preprocessing/resources/varref.tsv#L158-L165) names it "Ventilator Airway Code" and lists the
+  ventilator mode separately (3845). ricu reads codes 1-2 as invasive and 3-6 as
+  noninvasive ventilation, and both count for its respiratory SOFA (`vent_ind`),
+  so YAIB's HiRID cohorts count them too; any other code ends ventilation. This
+  mapping follows ricu. The benchmark's [ventilation endpoint](https://github.com/ratschlab/HIRID-ICU-Benchmark/blob/bee770094bf8389920bc09823895b87e09a563dd/icu_benchmarks/endpoints/endpoint_benchmark.py#L719-L725)
+  instead reads 1-2 as an airway present and 3-6 as no airway, against
+  ventilation. The code labels are not checked against `ordinal_vars_ref.csv`, so
+  whether 3-6 are noninvasive ventilation is open; counting them lets respiratory
+  SOFA reach 3-4 without an airway. HiRID records no episodes, so a code holds
+  until the next one and at most 12h (`ventilation_window`). ricu holds a code
+  until the next one if that is at most 12h later and otherwise for 4h, so the
+  last code of a run is held longer here.
 - **GCS**: HiRID records no total, so `gcs` sums the current components; invasive
   ventilation (`gcs_unable`, ricu's `ett_gcs`) sets it to 15.
 - **Renal SOFA** scores creatinine and urine output. Urine comes from the hourly
@@ -201,9 +208,9 @@ Not yet mapped / not cleanly mappable as `simple`:
   invalidated and administered, bits 2 and 32 unset), `infusion_start` (bit 4)
   and `infusion_stop` (bit 256).
 - The `ordinal_vars_ref.csv` reference (which decodes coded ordinal/categorical
-  observation values into text) is not wired in yet. The ventilator mode codes
-  that ventilation and `gcs_unable` read are ricu's; the other categorical
-  concepts wait for it.
+  observation values into text) is not wired in yet. The airway codes that
+  ventilation and `gcs_unable` read are ricu's; the other categorical concepts
+  wait for it.
 
 ## Layout
 

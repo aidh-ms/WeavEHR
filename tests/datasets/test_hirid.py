@@ -6,8 +6,8 @@ the YAML does not show by itself, taken from ``configs/datasets/hirid/README.md`
 ``hirid`` concept dictionary (where the README says the mappings come from) or the
 concept definitions: unit conversions of the laboratory mappings, the age cap and sex
 labels of the demographics, the variable reference join of the event tables, and the
-times and pseudo date of birth the extraction reconstructs, the classification of the
-ventilator mode (ricu's ``mech_vent`` and ``ett_gcs``) and the one-minute antibiotic
+times and pseudo date of birth the extraction reconstructs, ricu's classification of the
+airway code (``mech_vent`` and ``ett_gcs``) and the one-minute antibiotic
 coverage of YAIB-cohorts. The other mappings select a variable ID and copy its value, so a
 test of them would only restate the YAML.
 
@@ -80,11 +80,11 @@ def at(hours: float) -> datetime:
     return DEFAULT_TIME + timedelta(hours=hours)
 
 
-VENTILATOR_MODE: Final = 15001552
-"""The ventilator mode variable, ricu's only HiRID source of ``mech_vent`` and ``ett_gcs``."""
+AIRWAY_CODE: Final = 15001552
+"""The airway code ("Ventilator Airway Code"), ricu's only HiRID source of ``mech_vent`` and ``ett_gcs``."""
 
-VENTILATOR_MODE_CODE: Final = f"OBSERVATION//{VENTILATOR_MODE}//{VARIABLE}"
-"""Extracted code of a charted ventilator mode, an ordinal variable without a unit."""
+AIRWAY_CODE_CODE: Final = f"OBSERVATION//{AIRWAY_CODE}//{VARIABLE}"
+"""Extracted code of a charted airway code, an ordinal variable without a unit."""
 
 
 def lab(concept: str, variableid: int, unit: str, value: float, expected: float, note: str, rel: float) -> Case:
@@ -173,52 +173,52 @@ ANTIBIOTICS = [
 ]
 
 
-def ventilator_mode(concept: str, mode: float | None, expect: Sequence[Mapping[str, Any]], note: str) -> Case:
-    """A behaviour case for one charted ventilator mode."""
+def airway_code(concept: str, code: float | None, expect: Sequence[Mapping[str, Any]], note: str) -> Case:
+    """A behaviour case for one charted airway code."""
     return Case(
         concept=concept,
         table="observations",
         event="OBSERVATION",
-        code=VENTILATOR_MODE_CODE,
-        value=mode,
+        code=AIRWAY_CODE_CODE,
+        value=code,
         expect=expect,
         note=note,
     )
 
 
-# ricu's hirid mech_vent maps the modes 1-2 to invasive and 3-6 to noninvasive ventilation; any other
-# code is no ventilation. Its ett_gcs (the GCS correction to 15) is invasive ventilation.
-VENTILATOR_MODES = [
+# ricu's hirid mech_vent maps the airway codes 1-2 to invasive and 3-6 to noninvasive ventilation; any
+# other code is no ventilation. Its ett_gcs (the GCS correction to 15) is invasive ventilation.
+AIRWAY_CODES = [
     *[
-        ventilator_mode(
+        airway_code(
             "ventilation_start",
-            mode,
-            [{"code": f"ventilation_start//{level}", "ventilator_mode": str(float(mode))}],
-            f"mode {mode:g} is {level} ventilation",
+            code,
+            [{"code": f"ventilation_start//{level}", "airway_code": str(float(code))}],
+            f"code {code:g} is {level} ventilation",
         )
-        for mode, level in [(1, "invasive"), (2, "invasive"), (3, "noninvasive"), (6, "noninvasive")]
+        for code, level in [(1, "invasive"), (2, "invasive"), (3, "noninvasive"), (6, "noninvasive")]
     ],
-    ventilator_mode("ventilation_start", 7, NOTHING, "a mode ricu does not map starts no ventilation"),
-    ventilator_mode(
+    airway_code("ventilation_start", 7, NOTHING, "a code ricu does not map starts no ventilation"),
+    airway_code(
         "ventilation_end",
         7,
-        [{"code": "ventilation_end", "ventilator_mode": "7.0"}],
-        "a mode ricu does not map ends the ventilation of the mode before it",
+        [{"code": "ventilation_end", "airway_code": "7.0"}],
+        "a code ricu does not map ends the ventilation of the code before it",
     ),
     *[
-        ventilator_mode("ventilation_end", mode, NOTHING, f"mode {mode:g} is ventilation, so it ends nothing")
-        for mode in (1, 6)
+        airway_code("ventilation_end", code, NOTHING, f"code {code:g} is ventilation, so it ends nothing")
+        for code in (1, 6)
     ],
-    ventilator_mode("ventilation_end", None, NOTHING, "a mode without a value ends nothing"),
-    ventilator_mode("gcs_unable", 2, [{"numeric_value": 1}], "invasive ventilation sets the GCS to 15"),
+    airway_code("ventilation_end", None, NOTHING, "a code without a value ends nothing"),
+    airway_code("gcs_unable", 2, [{"numeric_value": 1}], "invasive ventilation sets the GCS to 15"),
     *[
-        ventilator_mode("gcs_unable", mode, [{"numeric_value": 0}], f"mode {mode:g} clears the GCS correction")
-        for mode in (3, 7)
+        airway_code("gcs_unable", code, [{"numeric_value": 0}], f"code {code:g} clears the GCS correction")
+        for code in (3, 7)
     ],
-    ventilator_mode("gcs_unable", None, NOTHING, "a mode without a value neither applies nor clears it"),
+    airway_code("gcs_unable", None, NOTHING, "a code without a value neither applies nor clears it"),
 ]
 
-CASES = [*EXACT_CONVERSIONS, *MOLAR_CONVERSIONS, *AGE_CAP, *ANTIBIOTICS, *VENTILATOR_MODES]
+CASES = [*EXACT_CONVERSIONS, *MOLAR_CONVERSIONS, *AGE_CAP, *ANTIBIOTICS, *AIRWAY_CODES]
 
 
 @pytest.mark.parametrize("case", CASES, ids=case_id)
@@ -725,15 +725,15 @@ def test_sepsis_chain_uses_sustained_antibiotics_and_death(tmp_path: Path) -> No
         assert_rows(outputs[name], [{"subject_id": subject, "time": time} for subject in (1, 3)], context=name)
 
 
-def test_respiratory_sofa_counts_the_charted_ventilator_mode_as_ventilation(tmp_path: Path) -> None:
-    """A charted mode holds until the next one, as in ricu's hirid_vent, and expires 12h after the last.
+def test_respiratory_sofa_counts_the_charted_airway_code_as_ventilation(tmp_path: Path) -> None:
+    """A charted code holds until the next one, as in ricu's hirid_vent, and expires 12h after the last.
 
     PaO2 60 mmHg at FiO2 40% is a ratio of 150: 3 points while ventilated, 2 otherwise.
-    Invasive mode 1 holds for the 7h until the gases, with the next mode charted 10h after it;
-    mode 7, which is no ventilation, ends it; noninvasive mode 3 counts as ventilation, but not
-    13h later, past the 12h fallback (and ricu's 4h after the last mode of a run).
+    Invasive code 1 holds for the 7h until the gases, with the next code charted 10h after it;
+    code 7, which is no ventilation, ends it; noninvasive code 3 counts as ventilation, but not
+    13h later, past the 12h fallback (and ricu's 4h after the last code of a run).
     """
-    modes = [(0, 1.0), (10, 1.0), (12, 7.0), (20, 3.0)]
+    codes = [(0, 1.0), (10, 1.0), (12, 7.0), (20, 3.0)]
     gases = [7, 12.5, 21, 33]
 
     outputs = run_concepts(
@@ -749,7 +749,7 @@ def test_respiratory_sofa_counts_the_charted_ventilator_mode_as_ventilation(tmp_
         ],
         sources={
             "observations/OBSERVATION": [
-                *[{"time": at(hour), "code": VENTILATOR_MODE_CODE, "numeric_value": mode} for hour, mode in modes],
+                *[{"time": at(hour), "code": AIRWAY_CODE_CODE, "numeric_value": code} for hour, code in codes],
                 *[
                     {"time": at(hour), "code": observation_code(variableid, unit), "numeric_value": value}
                     for hour in gases
@@ -759,7 +759,7 @@ def test_respiratory_sofa_counts_the_charted_ventilator_mode_as_ventilation(tmp_
         },
     )
 
-    # The modes themselves are assessed only while gases are current (2h), which none of them are.
+    # The codes themselves are assessed only while gases are current (2h), which none of them are.
     assert_rows(
         outputs["sofa_respiratory"],
         [{"time": at(hour), "numeric_value": score} for hour, score in zip(gases, (3, 2, 3, 2), strict=True)],
@@ -784,8 +784,8 @@ def test_invasive_ventilation_sets_the_gcs_to_15(tmp_path: Path) -> None:
                     for variableid, unit in components
                 ],
                 *[
-                    {"time": at(hour), "code": VENTILATOR_MODE_CODE, "numeric_value": mode}
-                    for hour, mode in [(0, 1.0), (1, 3.0)]
+                    {"time": at(hour), "code": AIRWAY_CODE_CODE, "numeric_value": code}
+                    for hour, code in [(0, 1.0), (1, 3.0)]
                 ],
             ]
         },

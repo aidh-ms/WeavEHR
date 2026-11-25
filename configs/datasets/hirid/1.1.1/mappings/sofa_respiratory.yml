@@ -1,8 +1,8 @@
-# The ventilator mode (ventilation_start, ventilation_end) is a charted state without an
-# episode identifier: each charted mode holds until the next one, and ventilation_window
-# ends a mode that no other mode follows within 12h. ricu (hirid_vent) holds a mode until
+# The airway code (ventilation_start, ventilation_end) is a charted state without an
+# episode identifier: each charted code holds until the next one, and ventilation_window
+# ends a code that no other code follows within 12h. ricu (hirid_vent) holds a code until
 # the next one if that is at most 12h later, and otherwise for 4h. So this follows ricu
-# between modes charted up to 12h apart, but holds the last mode of a run for 12h, not 4h.
+# between codes charted up to 12h apart, but holds the last code of a run for 12h, not 4h.
 type: complex
 concept_transformer: weavehr.steps.concept.transformer.sofa.SofaRespiratoryTransformer
 concepts:

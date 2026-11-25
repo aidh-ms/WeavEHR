@@ -436,15 +436,18 @@ with its own start and stop. The markers carry `record_id`, the record's
 sets `ventilation_id_column: record_id` with no fallback expiry, as ricu
 uses these windows as they are. See the AUMCdb README.
 
-HiRID records only the charted ventilator mode (variableid 15001552), ricu's
-only HiRID source of `mech_vent`. Modes 1-2 start invasive and 3-6 noninvasive
-ventilation; any other charted mode is an end. Each mode holds until the next
-one, and the HiRID mapping sets `ventilation_window: 12h`. ricu's `hirid_vent`
-holds a mode until the next one if that is at most 12 hours later and otherwise
-for four hours, so the two agree between modes charted up to 12 hours apart, but
-the last mode of a run is held for up to 12 hours rather than four. The same
-modes supply HiRID's `gcs_unable` (ricu's `ett_gcs`): 1 for invasive ventilation,
-0 for any other mode.
+HiRID's ventilation comes from the charted airway code (variableid 15001552,
+"Ventilator Airway Code" in the HiRID-ICU-Benchmark variable reference), ricu's
+only HiRID source of `mech_vent`. As in ricu, codes 1-2 start invasive and 3-6
+noninvasive ventilation; any other charted code is an end. The benchmark's
+ventilation endpoint reads 3-6 as no airway instead, and the code labels are not
+checked yet (see the HiRID README). Each code holds until the next one, and the
+HiRID mapping sets `ventilation_window: 12h`. ricu's `hirid_vent` holds a code
+until the next one if that is at most 12 hours later and otherwise for four
+hours, so the two agree between codes charted up to 12 hours apart, but the last
+code of a run is held for up to 12 hours rather than four. The same codes supply
+HiRID's `gcs_unable` (ricu's `ett_gcs`): 1 for invasive ventilation, 0 for any
+other code.
 
 ### Cardiovascular SOFA
 
