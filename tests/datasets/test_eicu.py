@@ -435,16 +435,20 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
         ("L/min", None),
         ("l/min", None),
         (" L / min ", None),
+        ("mm(hg)", None),
+        (" MM (Hg) ", None),
+        ("mmHg", None),
+        ("mm Hg", None),
         ("%", 40.0),
         (None, 40.0),
     ],
 )
-def test_fio2_excludes_explicit_litres_per_minute(
+def test_fio2_filters_lab_rows_by_reported_unit(
     tmp_path: Path,
     interface_unit: str | None,
     expected: float | None,
 ) -> None:
-    """Lab oxygen flow must not be interpreted as FiO2 concentration."""
+    """Exclude flow and pressure readings from lab FiO2, even when the system unit is %."""
     row = FIO2_SOURCES["lab"](Fio2Text("40", 40, 40, "unit filtering"))
     row["labmeasurenameinterface"] = interface_unit
 
@@ -479,6 +483,8 @@ def test_fio2_excludes_explicit_litres_per_minute(
                 }
             ],
         )
+
+
 def test_infusion_rates_need_a_weight_and_take_the_admission_weight_but_zeros_need_none(tmp_path: Path) -> None:
     """Native infusiondrug rows through vasopressor_infusion, patient_weight and the rate concepts.
 

@@ -29,7 +29,11 @@ mappings:
       event: LAB
       code: ^(FiO2)(//.*)?$
     columns: *fio2_columns
-    # L/min describes oxygen flow, not inspired oxygen concentration.
-    # Retain rows with missing unit information.
+    # The interface unit can identify flow (L/min) or pressure (mmHg, mm(hg))
+    # even when the system unit is %. Keep lab rows with no reported unit.
     filters:
-      - replace(labmeasurenameinterface == None, True, not str_contains(labmeasurenameinterface, "(?i)^\\s*l\\s*/\\s*min\\s*$"))
+      - >-
+        replace(
+          labmeasurenameinterface == None, True,
+          not str_contains(labmeasurenameinterface, "(?i)^\\s*(?:l\\s*/\\s*min|mm\\s*(?:hg|\\(hg\\)))\\s*$")
+        )

@@ -118,10 +118,9 @@ it. The audit measured the urine component alone.
 For comparison, ricu derives HiRID urine from increments of 30005110. The counter
 usually restarted at noon: 63,592 of its 68,864 decreases occurred at 12:00,
 with a median of 24 h between decreases. On days without gaps over 6 h, median
-daily volumes were 4,184 mL from ricu and 3,148 mL from the rate. Very few ricu
-days fell below 500 mL, compared with about 11.5% under the earlier 6 h urine
-mapping in the audit comparison. Renal SOFA and downstream Sepsis-3 labels can therefore
-differ from YAIB by design. Extreme values also occur in the counter, which this
+daily volumes were 4,184 mL from ricu and 3,148 mL from the rate. This choice of
+urine source can affect renal SOFA and downstream Sepsis-3 comparisons with YAIB.
+Extreme values also occur in the counter, which this
 mapping does not use. [HiRID benchmark variable reference](https://github.com/ratschlab/HIRID-ICU-Benchmark/blob/bee770094bf8389920bc09823895b87e09a563dd/preprocessing/resources/varref.tsv#L35-L45)
 
 ### Other mappings
