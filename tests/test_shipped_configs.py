@@ -15,6 +15,10 @@ extracted rows, through the concept step's own code matching (`ConceptStep.match
 a numeric ID in a code pattern must not also match a longer ID, and one concept must not
 select the same source row through two mappings. A dataset version whose violation cannot
 be fixed at once can be recorded in ``KNOWN_VIOLATIONS`` and then runs as a strict xfail.
+
+Each complex mapping's transformer runs on empty inputs of the declared concepts and events and
+must not log a warning, so a transformer input that a mapping does not provide fails here rather
+than in a real run.
 """
 
 import logging
@@ -22,7 +26,7 @@ import re
 from collections.abc import Callable, Sequence
 from itertools import combinations, product
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 import pytest
@@ -45,6 +49,7 @@ from weavehr.steps.concept.config.concept import ConceptConfig, DatasetConceptCo
 from weavehr.steps.concept.config.derived import BaseConceptTable, DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import MappingConfig, MappingPatternConfig, SimpleDatasetConceptConfig
 from weavehr.steps.concept.step import ConceptStep
+from weavehr.steps.concept.transformer.base import BaseConceptTransformer
 from weavehr.steps.extraction.config.table import BaseTableConfig, TableConfig
 
 # Version dirs may be marker-only (just an extends.yml, no physical tables/
@@ -258,6 +263,40 @@ def test_concept_mapping_column_references_resolve(concept_file: Path) -> None:
                 assert_resolves(
                     lambda: empty_event_input(dataset, version, pattern, source), f"{source} events {name!r}"
                 )
+
+
+@pytest.mark.parametrize("concept_file", CONCEPT_FILES, ids=relative_id)
+def test_complex_mappings_run_on_empty_inputs_without_warnings(
+    concept_file: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Every complex mapping's transformer runs on empty inputs of its concepts and events without a warning.
+
+    A transformer warns when the mapping does not provide an input it declares, which usually means
+    a misnamed dependency. A mapping whose dataset lacks an input of a windowed transformer names it
+    in ``kwargs.optional_inputs``.
+    """
+    concept = ConceptConfig.load(concept_file, dataset_paths=DATASET_CONCEPT_DIRS)
+
+    for dataset_concept in concept.dataset_concepts:
+        if not isinstance(dataset_concept, ComplexDatasetConceptConfig):
+            continue
+        dataset, version = dataset_concept.dataset, dataset_concept.version
+        source = f"{relative_id(concept_file)} [{dataset} {version}]"
+        inputs = {
+            reference.split(".", 1)[0]: pl.LazyFrame(schema=concept_output_schema(reference, dataset, version))
+            for reference in dataset_concept.concepts
+        }
+        inputs |= {
+            name: empty_event_input(dataset, version, pattern, source)
+            for name, pattern in dataset_concept.events.items()
+        }
+        transformer = cast(BaseConceptTransformer, dataset_concept.build_transformer(cast(ConceptStep, None)))
+
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="weavehr"):
+            transformer.transform(inputs).collect()
+        warnings = [record.getMessage() for record in caplog.records]
+        assert not warnings, f"{source}: {warnings}"
 
 
 @pytest.mark.parametrize("concept_file", CONCEPT_FILES, ids=relative_id)

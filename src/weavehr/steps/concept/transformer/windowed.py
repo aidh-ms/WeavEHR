@@ -28,7 +28,7 @@ single expression, so multi-stage features (segmentation, completeness flags)
 are expressible; helper columns are namespaced ``__`` and dropped again.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from copy import copy
 from logging import ERROR, WARNING
 from re import escape
@@ -464,7 +464,10 @@ class WindowedConceptTransformer(BaseConceptTransformer):
 
     A declared input that is absent from the dependency mapping is treated as
     never measured, so a concept degrades gracefully on datasets that do not
-    carry all of its inputs.
+    carry all of its inputs. Such an input is logged as a warning, since it
+    usually means a dependency is misnamed, unless it is optional: the class
+    declares it so, or the mapping's ``optional_inputs`` names the inputs its
+    dataset does not have.
     """
 
     #: concept name -> aggregation carrying it onto the grid
@@ -486,8 +489,20 @@ class WindowedConceptTransformer(BaseConceptTransformer):
         *,
         inputs: dict[str, Aggregation] | None = None,
         triggers: set[str] | None = None,
+        optional_inputs: Collection[str] | None = None,
         **kwargs,
     ) -> None:
+        """Bind the transformer and settle its inputs.
+
+        Args:
+            inputs: Replace the class's ``inputs``; otherwise ``build_inputs`` supplies them.
+            triggers: Replace the class's ``triggers``.
+            optional_inputs: Further inputs the mapping's dataset does not have, exempt
+                from the missing-input warning; each must be one of the inputs.
+
+        Raises:
+            ValueError: ``optional_inputs`` names something that is not an input.
+        """
         super().__init__(concept, complex_config, step, **kwargs)
         if inputs is not None:
             self.inputs = inputs
@@ -495,6 +510,13 @@ class WindowedConceptTransformer(BaseConceptTransformer):
             self.triggers = set(triggers)
         if not self.inputs:
             self.inputs = self.build_inputs()
+        if optional_inputs is not None:
+            if unknown := sorted(set(optional_inputs) - set(self.inputs)):
+                raise ValueError(
+                    f"{type(self).__name__}: optional_inputs {unknown} are not inputs of this transformer; "
+                    f"its inputs are {sorted(self.inputs)}"
+                )
+            self.optional_inputs = self.optional_inputs | set(optional_inputs)
 
     @property
     def window(self) -> str:
