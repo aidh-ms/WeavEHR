@@ -667,7 +667,7 @@ The antibiotic window must be a positive Polars temporal duration string and
 the maximum gap must be non-negative. Index-count units (`i`) are not supported;
 invalid values fail at construction. All three sepsis-related transformers
 reject unknown parameters at construction.
-The `death` input is a thin mapping of extracted `MEDS_DEATH` events. Any recorded
+The eICU mapping reads `MEDS_DEATH` directly from the extracted `patient` table. Any recorded
 death shortens the horizon and excludes antibiotics starting after death. This
 intentionally extends YAIB's ICU-death exception to deaths after ICU discharge.
 Death applies across the subject's hospital admission. Missing death events leave the full horizon.
