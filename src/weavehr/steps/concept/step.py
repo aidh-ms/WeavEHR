@@ -65,6 +65,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         for (dataset, version), dataset_config in datasets.items():
             logger.info("Processing concepts for dataset %s (version %s)", dataset, version)
             depend_concepts = dict()
+            unmapped_count = 0
 
             assert self._workspace_dir is not None
             routed_cache_dir = Path(self._workspace_dir.path).parent / "_concept_routed_sources"
@@ -77,10 +78,23 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 routed_cache_dir,
             )
 
+            def extract_mapped(concept: ConceptConfig, mappings: list[DatasetConceptConfigUnion]) -> None:
+                try:
+                    self.extract_concept(
+                        concept,
+                        mappings,
+                        routed_sources=routed_sources,
+                        dataset_extension_columns=dataset_config.extension_columns,
+                    )
+                except Exception as exc:
+                    exc.add_note(f"While harmonising {concept.name}/{concept.version} for {dataset}/{version}")
+                    raise
+
             for concept in self._registry.values():
                 dataset_concepts = concept.get_dataset_concepts(dataset, version)
                 if not dataset_concepts:
-                    logger.warning(
+                    unmapped_count += 1
+                    logger.debug(
                         "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
                         concept.name,
                         dataset,
@@ -89,12 +103,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     continue
 
                 if all(isinstance(dc, SimpleDatasetConceptConfig) for dc in dataset_concepts):
-                    self.extract_concept(
-                        concept,
-                        dataset_concepts,
-                        routed_sources=routed_sources,
-                        dataset_extension_columns=dataset_config.extension_columns,
-                    )
+                    extract_mapped(concept, dataset_concepts)
                 else:
                     logger.debug(
                         "Registering dependent concept %s for dataset %s",
@@ -107,34 +116,28 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                 concept = self._registry.get(concept_id)
                 assert concept is not None, f"concept {concept_id} not found in registry"
 
-                dataset_concepts = concept.get_dataset_concepts(dataset, version)
-                if not dataset_concepts:
-                    logger.warning(
-                        "skipping concept %s for dataset %s (version %s): no dataset-specific config found",
-                        concept.name,
-                        dataset,
-                        version,
-                    )
-                    continue
-
-                # Concepts with only simple mappings were extracted above.
+                # Only dependent concepts mapped for this dataset still need extraction.
                 if concept_id not in depend_concepts:
                     continue
 
+                dataset_concepts = concept.get_dataset_concepts(dataset, version)
                 logger.debug(
                     "Processing dependent concept %s for dataset %s",
                     concept_id,
                     dataset,
                 )
-                self.extract_concept(
-                    concept,
-                    dataset_concepts,
-                    routed_sources=routed_sources,
-                    dataset_extension_columns=dataset_config.extension_columns,
-                )
+                extract_mapped(concept, dataset_concepts)
 
             if routed_cache_dir.exists():
                 shutil.rmtree(routed_cache_dir)
+
+            logger.info(
+                "Concept mappings for %s/%s: %d mapped, %d unmapped",
+                dataset,
+                version,
+                len(self._registry) - unmapped_count,
+                unmapped_count,
+            )
 
     @staticmethod
     def concept_dependencies(dataset_concepts: list[DatasetConceptConfigUnion]) -> set[str]:
@@ -243,25 +246,6 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             logger.warning("skipping concept step: extraction codes.parquet not found")
             return pl.DataFrame()
         return pl.read_parquet(codes_path)
-
-    def apply_limits(self, concept: ConceptConfig, lf: pl.LazyFrame) -> pl.LazyFrame:
-        if concept.limits.min is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") < concept.limits.min)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        if concept.limits.max is not None:
-            lf = lf.with_columns(
-                pl.when(pl.col("numeric_value") > concept.limits.max)
-                .then(None)
-                .otherwise(pl.col("numeric_value"))
-                .alias("numeric_value")
-            )
-
-        return lf
 
     @staticmethod
     def _code_matches(event_name: str, regex: str) -> pl.Expr:
@@ -599,7 +583,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     dataset_extension_columns=dataset_extension_columns,
                 )
 
-                lf = self.apply_limits(concept, lf)
+                lf = concept.limits.apply(lf)
 
                 tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
                 logger.debug(
@@ -616,7 +600,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
 
         files = list(output_dataset_path.glob("*.parquet"))
         if files:
-            logger.info(
+            logger.debug(
                 "Writing merged concept file for %s to %s",
                 concept.identifier,
                 output_file,
@@ -666,6 +650,10 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         lf = lf.with_columns(pl.lit(version).alias("version"))
         lf = lf.with_columns(pl.lit(table).alias("table"))
         lf = lf.with_columns(pl.lit(event_name).alias("event"))
+
+        # Helper columns, on every matched row: no filter has dropped one yet. The final select drops them.
+        for expr in mapping.callbacks:
+            lf = lf.with_columns(parse_expr(lf, expr))
 
         extension_columns = concept.extension_columns.copy()
         extension_columns.update(dataset_extension_columns or {})
@@ -841,12 +829,12 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             )
             return
 
-        lf = self.apply_limits(concept, lf)
+        lf = concept.limits.apply(lf)
 
         output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        logger.info(
+        logger.debug(
             "Writing derived concept %s to %s",
             concept.identifier,
             output_file,

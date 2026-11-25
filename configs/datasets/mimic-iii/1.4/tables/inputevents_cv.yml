@@ -76,7 +76,7 @@ events:
     numeric_value: col(RATE)
     text_value: col(STOPPED)
     extension:
-      available_time: col(STORETIME)
+      available_time: max(STORETIME, CHARTTIME, output=available_time)
       rateuom: col(RATEUOM)
       amount: col(AMOUNT)
       amountuom: col(AMOUNTUOM)

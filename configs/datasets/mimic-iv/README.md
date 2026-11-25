@@ -55,3 +55,8 @@ codes.
 New MIMIC-IV versions should extend the closest existing version via an
 `extends.yml` marker and state only their differences — see
 `docs/user_guide/versioning.md`.
+
+## Extraction rules
+
+Rewritten rows of `inputevents` and `procedureevents`, entries made in error and
+replaced by a corrected row, are dropped, as for MIMIC-III. The 2.2 demo contains none.

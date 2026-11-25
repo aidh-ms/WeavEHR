@@ -1,6 +1,14 @@
+# Infusion rate in mcg/kg/min, converted from vasopressor_infusion//dobutamine by InfusionRateTransformer,
+# which also adds the state-stream extension columns (stream_id, stay_id, available_time).
+# Each event is the rate from its time on; 0 means off.
+# See docs/user_guide/vasopressor_events.md.
 name: dobutamine_rate
 version: 1.0.0
 unit: mcg/kg/min
+# Upper limit as ricu's concept dictionary; values above it are mislabelled or implausible.
+limits:
+  min: 0
+  max: 50
 extension_columns:
   dataset: col("dataset")
   table: col("table")

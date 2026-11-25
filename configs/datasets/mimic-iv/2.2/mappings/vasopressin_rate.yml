@@ -1,18 +1,8 @@
-type: simple
-mappings:
-  - pattern:
-      table: inputevents
-      event: INFUSION_END
-      code: ^(?:INFUSION_END//)?(?:222315)(?:$|//)
-      extensions:
-        rateuom: units/hour
-    columns:
-      numeric_value: col(rate) / 60
-  - pattern:
-      table: inputevents
-      event: INFUSION_END
-      code: ^(?:INFUSION_END//)?(?:222315)(?:$|//)
-      extensions:
-        rateuom: units/min
-    columns:
-      numeric_value: col(rate)
+# vasopressor_infusion//vasopressin in the concept unit. The transformer is the same for every
+# dataset; see docs/user_guide/vasopressor_events.md.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.infusion.InfusionRateTransformer
+concepts:
+  - vasopressor_infusion.1.0.0
+kwargs:
+  drug: vasopressin

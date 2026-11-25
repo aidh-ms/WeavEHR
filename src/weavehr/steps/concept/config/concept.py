@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import Annotated, Self
 
+import polars as pl
 import yaml
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, computed_field, field_validator, model_validator
 
-from weavehr.config.base import BaseConfig
+from weavehr.config.base import ConceptReference
 from weavehr.config.inheritance import has_extends, load_config_file, resolve_effective_config
 from weavehr.logging import logger
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
@@ -75,8 +76,17 @@ class ConceptLimits(BaseModel):
     min: float | None = Field(None, description="Minimum value for the concept.")
     max: float | None = Field(None, description="Maximum value for the concept.")
 
+    def apply(self, lf: pl.LazyFrame) -> pl.LazyFrame:
+        """Set ``numeric_value`` to null where it lies outside the limits; the rows are kept."""
+        value = pl.col("numeric_value")
+        if self.min is not None:
+            value = pl.when(value < self.min).then(None).otherwise(value)
+        if self.max is not None:
+            value = pl.when(value > self.max).then(None).otherwise(value)
+        return lf.with_columns(value.alias("numeric_value"))
 
-class ConceptConfig(BaseConfig):
+
+class ConceptConfig(ConceptReference):
     """Configuration for a concept table.
 
     Attributes:
@@ -92,8 +102,6 @@ class ConceptConfig(BaseConfig):
         limits: Configuration for concept limits
         dataset_concepts: Dataset-specific mappings; a dataset version may have several
     """
-
-    __weavehr_config_type__ = "concept"
 
     unit: str | None = Field(None, description="Unit of measurement for the concept values; omitted if unitless.")
     levels: list[str] = Field(default_factory=list, description="Allowed levels; each adds `//<level>` to the code.")

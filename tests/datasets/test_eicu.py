@@ -15,8 +15,9 @@ code paths (see ``tests/datasets/support.py``). Three kinds of test live here:
 from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, cast
 
+import polars as pl
 import pytest
 
 from tests.datasets.support import (
@@ -181,6 +182,22 @@ def test_fio2_normalises_fractions_and_percentage_text(tmp_path: Path, table: st
 
 
 # --- Extraction behaviour ---------------------------------------------------------------------------------
+
+
+def test_icu_discharge_keeps_unit_status_and_destination(tmp_path: Path) -> None:
+    """A hospital death can be recorded before an ICU discharge to the floor."""
+    row = {
+        **PATIENT,
+        "unitdischargeoffset": 600,
+        "hospitaldischargeoffset": 590,
+        "unitdischargestatus": "Alive",
+        "unitdischargelocation": "Floor",
+        "hospitaldischargestatus": "Expired",
+        "hospitaldischargelocation": "Death",
+    }
+    events = extract_native(tmp_path, dataset=DATASET, version=VERSION, table="patient", rows=[row])
+    assert_rows(events["ICU_DISCHARGE"], [{"stay_id": STAY_ID, "text_value": "Alive", "discharge_location": "Floor"}])
+
 
 # Unit stays of the patient table: subject (hospital stay), unit stay, unit and hospital
 # discharge status, unit and hospital discharge offset.
@@ -379,3 +396,74 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
             [{"subject_id": subject, "time": time, "numeric_value": 1} for subject in subjects],
             context=name,
         )
+
+
+def test_infusion_rates_need_a_weight_and_take_the_admission_weight_but_zeros_need_none(tmp_path: Path) -> None:
+    """Native infusiondrug rows through vasopressor_infusion, patient_weight and the rate concepts.
+
+    The drug name carries the unit in brackets (ricu's eICU regexes). Weights come from
+    patient_weight, the patient table's admission weight (ricu's eICU weight); the weight on an
+    infusion row is not mapped to it, so not used. Without any weight a per-minute rate
+    cannot become mcg/kg/min, but a zero is off whatever the weight. A volume rate has no known
+    concentration.
+    """
+    second = {**PATIENT, "patienthealthsystemstayid": 2, "patientunitstayid": 20}
+    infusions = [
+        (STAY_ID, "Norepinephrine (mcg/min)", 8, None),
+        (STAY_ID, "Norepinephrine (mcg/min)", 0, None),
+        (STAY_ID, "Norepinephrine (mcg/kg/min)", 0.1, None),
+        (20, "Norepinephrine (mcg/min)", 8, None),
+        (20, "Norepinephrine (mcg/min)", 0, None),
+        (20, "Norepinephrine (mcg/min)", 8, 40),
+        (20, "Norepinephrine (ml/hr)", 8, None),
+        # 150 mcg/kg/min if taken at its word: above ricu's limit, so the event keeps no value.
+        (20, "Epinephrine (mg/kg/min)", 0.15, None),
+    ]
+    extracted = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="infusiondrug",
+        rows=[
+            {"patientunitstayid": stay, "infusionoffset": 10 * (i + 1), "drugname": name,
+             "drugrate": str(rate), "patientweight": weight}
+            for i, (stay, name, rate, weight) in enumerate(infusions)
+        ],
+        joins={"patient.csv.gz": [PATIENT, second]},
+    )  # fmt: skip
+    first_infusion = cast(datetime, extracted["INFUSION"].filter(pl.col("subject_id") == 2)["time"].min())
+    admission = first_infusion - timedelta(minutes=40)
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["vasopressor_infusion", "patient_weight", "norepinephrine_rate", "epinephrine_rate"],
+        sources={
+            "infusiondrug/INFUSION": extracted["INFUSION"],
+            "patient/SUBJECT_WEIGHT": [
+                {"subject_id": 2, "time": admission, "code": "SUBJECT_WEIGHT//kg", "numeric_value": 80.0}
+            ],
+        },
+    )
+
+    assert_rows(
+        outputs["norepinephrine_rate"],
+        [
+            # Already per kg: no weight is needed.
+            {"subject_id": 1, "numeric_value": 0.1},
+            # No weight for subject 1: its 8 mcg/min is dropped, its zero kept.
+            {"subject_id": 1, "numeric_value": 0},
+            # 8 mcg/min with the admission weight of 80 kg.
+            {"subject_id": 2, "numeric_value": 0.1},
+            {"subject_id": 2, "numeric_value": 0},
+            # The row's own 40 kg is not a patient_weight: the admission weight applies.
+            {"subject_id": 2, "numeric_value": 0.1},
+        ],
+        context="norepinephrine_rate",
+    )  # fmt: skip
+    assert_rows(
+        outputs["epinephrine_rate"],
+        [{"subject_id": 2, "numeric_value": None}],
+        context="epinephrine_rate",
+    )

@@ -36,15 +36,18 @@ step = ExtractionStep.load(project, Path("config/extraction.yml"))
 step.run()
 ```
 
-Two steps are currently available, with a third in development:
+Extraction and optional harmonisation produce the inputs to the export phase.
 
 | Step | Input | Output |
 | --- | --- | --- |
 | `ExtractionStep` | Raw source tables (CSV/CSV.GZ) | Dataset-level MEDS events |
 | `ConceptStep` | An extraction step's output | Harmonised, dataset-agnostic concept events |
-| `ShardingStep` *(in development)* | A concept or extraction step's output | Analysis-ready, subject-oriented data shards ([details](sharding.md)) |
+| Export with `ShardingStep` | A concept or extraction step's output | Subject-oriented MEDS shards on disk |
+| Export with `scan_events()` | Selected concepts and/or extracted events for a cohort | An interactive Polars query |
 
-Every step's `run()` follows the same lifecycle:
+See the [export guide](export.md) for both options. An interactive query reads the completed project directly.
+
+Steps executed with `run()` follow the same lifecycle:
 
 1. **Load configurations** — each entry in the step's `config_files` list is read recursively from disk into the step's configuration registry, honouring `includes`/`excludes` and `overwrite`. The merged registry is saved to `<project>/configs/`.
 2. **Set up directories** — a workspace directory (`workspace/<step name>`) and a MEDS dataset (`datasets/<step name>`) are created.
@@ -95,22 +98,28 @@ For dataset-bound configs the name, dataset, and version are inferred from the f
 
 ## Loading configurations
 
-Importing `weavehr` does not load any configuration. The dataset and concept configurations bundled in `configs/` are loaded into the global registries (`dataset_config_registry`, `concept_config_registry`) when the first step is created, once per process. To control loading yourself:
+Importing `weavehr` does not load any configuration. The dataset and concept configurations bundled in `configs/` are loaded into the global registries (`dataset_config_registry`, `concept_config_registry`) when the first step is created, once per process. To load custom configurations as well, call `auto_load_configs` once at startup, before creating a step:
 
 ```python
 from pathlib import Path
 
-from weavehr import auto_load_configs, dataset_config_registry
+from weavehr import auto_load_configs
 
-# Register custom configs first: bundled configs never replace a config already
-# registered under the same identifier.
-dataset_config_registry.load(Path("my_configs/datasets/my-icu/1.0/tables"))
-
-auto_load_configs()  # load the bundled configs now
-auto_load_configs(Path("my_configs"))  # or load a directory with the same layout as configs/
+auto_load_configs(
+    load_bundled=True,  # also load the bundled configs (default)
+    custom_config_path=Path("my_configs"),  # or a list of paths; same layout as configs/
+    dataset_filter=["my-icu", "mimic-iv"],  # optional: only load these datasets' tables and mappings
+)
 ```
 
-Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call always loads.
+- Custom roots take precedence over the bundled configs, and earlier roots over later ones. A concept defined in several roots is taken from the first.
+- A dataset version directory in a custom root (`my_configs/datasets/mimic-iv/3.1/`) replaces the same version of the bundled configs entirely. To change only some files, add an `extends.yml` that references the same dataset and version (`dataset: mimic-iv`, `version: "3.1"`): the base is then taken from the next root that has it, and the custom directory only needs the files it changes ([versioning](versioning.md) describes how files merge). This works with `load_bundled=False` too.
+- Mappings in a custom root attach to concepts of any root, e.g. a `my_configs/datasets/my-icu/1.0/mappings/heart_rate.yml` adds `my-icu` to the bundled `heart_rate` concept.
+- `dataset_filter` lists dataset names; every other dataset is skipped in all roots. All concepts are still loaded.
+- Configurations are loaded once per process: later `auto_load_configs` calls log a warning, ignore their arguments and return `True`, and steps no longer load the bundled configs. `load_bundled=False` without a `custom_config_path` raises a `ValueError`.
+- The sharding step's subject-group check finds `extends.yml` chains in the custom roots loaded here, so they need not be repeated in its `config_roots`.
+
+Set the environment variable `WEAVEHR_AUTO_LOAD_CONFIGS=0` (also `false`, `no`, `off`) to disable loading on step creation entirely, e.g. in tests or when you register every config yourself. An explicit `auto_load_configs()` call ignores it.
 
 ## The MEDS output
 
@@ -131,6 +140,11 @@ configure_logging(level="INFO")  # console logging to stdout (stops propagation 
 set_log_level("DEBUG")  # change verbosity later
 ```
 
-`INFO` reports step progress; registering individual configurations is logged at `DEBUG`.
+For each dataset, `INFO` reports how many tables were selected for extraction, how many source
+files were selected for persistence, and how many concepts are mapped or unmapped. Mapping counts describe configuration
+coverage. Individual unmapped concept names appear at `DEBUG`. Missing source files
+and extraction selections matching zero tables produce warnings.
 
-`DEBUG` traces every table, join, event, and written file — useful when developing new configurations.
+Each completed step reports its elapsed time and output directory. A reused step reports
+its existing output. Set `overwrite: true` in the step configuration to rerun it.
+Use `DEBUG` for individual tables, joins, events, and file writes.

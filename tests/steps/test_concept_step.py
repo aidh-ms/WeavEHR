@@ -1,13 +1,16 @@
 """End-to-end tests for the concept step on synthetic fixture data."""
 
 import gzip
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import polars as pl
 import pytest
+import yaml
 
 from weavehr import ConceptStep, ExtractionStep, WeavEHRProject
+from weavehr.callbacks import UnknownColumnError
 from weavehr.steps.concept.config.concept import ConceptConfig
 from weavehr.steps.concept.config.derived import DerivedDatasetConceptConfig
 from weavehr.steps.concept.config.simple import MappingConfig
@@ -35,6 +38,50 @@ def project(tmp_path: Path, extraction_config: Path, concept_config: Path) -> We
 
 def concept_path(project: WeavEHRProject, name: str) -> Path:
     return project.datasets_path / "concept" / "data" / name / "1.0.0" / "testdb" / "1.0.parquet"
+
+
+def test_unmapped_concepts_are_summarised_once_per_dataset(
+    tmp_path: Path, extraction_config: Path, concept_config: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    config = tmp_path / "config"
+    dictionary = tmp_path / "summary_concepts"
+    dictionary.mkdir()
+    for name in ("heart_rate", "unmapped_a", "unmapped_b"):
+        (dictionary / f"{name}.yml").write_text(f"name: {name}\nversion: 1.0.0\n")
+    load_extracation_config(config / "testdb" / "1.0" / "tables")
+    load_concept_config(dictionary, [config / "testdb" / "1.0" / "mappings"])
+    project = WeavEHRProject(tmp_path / "project")
+    ExtractionStep.load(project, extraction_config).run()
+    with caplog.at_level(logging.DEBUG, logger="weavehr"):
+        ConceptStep.load(project, concept_config).run()
+
+    progress = [r.getMessage() for r in caplog.records if r.levelno >= logging.INFO]
+    assert progress.count("Concept mappings for testdb/1.0: 1 mapped, 2 unmapped") == 1
+    for name in ("unmapped_a", "unmapped_b"):
+        assert any(name in message for message in caplog.messages)
+        assert all(name not in message for message in progress)
+
+
+@pytest.mark.parametrize("concept_name", ["heart_rate", "bmi"], ids=["simple", "derived"])
+def test_mapping_error_identifies_the_concept(
+    tmp_path: Path, extraction_config: Path, concept_config: Path, concept_name: str
+) -> None:
+    config = tmp_path / "config"
+    dataset = config / "testdb" / "1.0"
+    path = dataset / "mappings" / f"{concept_name}.yml"
+    mapping = yaml.safe_load(path.read_text())
+    columns = mapping["mappings"][0]["columns"] if mapping["type"] == "simple" else mapping["event"]
+    columns["numeric_value"] = "col(missing_column)"
+    path.write_text(yaml.safe_dump(mapping))
+
+    load_extracation_config(dataset / "tables")
+    load_concept_config(config / "concepts", [dataset / "mappings"])
+    project = WeavEHRProject(tmp_path / "project")
+    ExtractionStep.load(project, extraction_config).run()
+    with pytest.raises(UnknownColumnError, match="Unknown column 'missing_column'") as error:
+        ConceptStep.load(project, concept_config).run()
+
+    assert f"While harmonising {concept_name}/1.0.0 for testdb/1.0" in error.value.__notes__
 
 
 def test_gcs_unable_correction_reaches_cns_sofa(
@@ -245,6 +292,34 @@ class TestSimpleConcepts:
 
         assert df["code"].to_list() == [code]
 
+    def test_mapping_callbacks_see_every_matched_row_and_are_not_written(self) -> None:
+        concept = ConceptConfig(name="rate", version="1.0.0")
+        mapping = MappingConfig.model_validate(
+            {
+                "pattern": {"table": "t", "code": "x"},
+                "callbacks": ["next_record(numeric_value, time, by=[subject_id], output=next_value)"],
+                "columns": {"numeric_value": "col(next_value)"},
+                "filters": ["col(keep)"],
+            }
+        )
+        events = pl.LazyFrame(
+            {
+                "subject_id": [1, 1, 1],
+                "time": [datetime(2024, 1, 1, hour) for hour in range(3)],
+                "code": ["x"] * 3,
+                "numeric_value": [1.0, 5.0, 3.0],
+                "keep": [True, False, True],
+            }
+        )
+
+        df = ConceptStep.build_mapping_frame(
+            events, concept, mapping, dataset="testdb", version="1.0", table="t", event_name="E"
+        ).collect()
+
+        # The first row takes the value of the row the filter drops; the last has no next row.
+        assert df["numeric_value"].to_list() == [5.0, None]
+        assert "next_value" not in df.columns
+
     @pytest.mark.parametrize(
         ("level", "code"),
         [("invasive", "ventilation_start//invasive"), (None, "ventilation_start")],
@@ -266,115 +341,6 @@ class TestSimpleConcepts:
         df = ConceptStep.build_derived_frame(concept, derived, lambda _: source).collect()
 
         assert df["code"].to_list() == [code]
-
-    @pytest.mark.parametrize("dataset", ["mimic-iv", "eicu-crd"])
-    @pytest.mark.parametrize(
-        ("drug", "itemid"),
-        [("norepinephrine", 221906), ("epinephrine", 221289), ("dopamine", 221662), ("dobutamine", 221653)],
-    )
-    def test_shipped_pressor_mappings_preserve_native_infusion_metadata(
-        self, tmp_path: Path, extraction_config: Path, concept_config: Path, dataset: str, drug: str, itemid: int
-    ) -> None:
-        config_dir = tmp_path / "config"
-        concept_dir = config_dir / "concepts"
-        mapping_dir = config_dir / "testdb" / "1.0" / "mappings"
-        configs = Path(__file__).parents[2] / "configs"
-        name = f"{drug}_rate"
-        version = "2.2" if dataset == "mimic-iv" else "2.0"
-        (concept_dir / f"{name}.yml").write_text((configs / "concepts" / "medications" / f"{name}.yml").read_text())
-        (mapping_dir / f"{name}.yml").write_text(
-            (configs / "datasets" / dataset / version / "mappings" / f"{name}.yml").read_text()
-        )
-        # Metadata must come from the mappings, without dataset-wide extensions.
-        concept_config.write_text(
-            "name: Concept\nversion: 1.0.0\nconfig:\n  extraction_step: Extraction\n"
-            '  mapping_configs:\n    - name: testdb\n      version: "1.0"\n'
-        )
-
-        project = WeavEHRProject(tmp_path / "project")
-        load_extracation_config(config_dir / "testdb" / "1.0" / "tables")
-        load_concept_config(concept_dir, [mapping_dir])
-        ExtractionStep.load(project, extraction_config).run()
-        table = "inputevents" if dataset == "mimic-iv" else "infusiondrug"
-        source = project.datasets_path / "extraction" / "data" / "testdb" / "1.0" / table
-        source.mkdir()
-
-        if dataset == "mimic-iv":
-            # Extraction-shaped records: a dose change keeps its linkorderid,
-            # overlapping infusions retain distinct IDs, and IDs may repeat
-            # for another patient. A missing linkorderid stays missing.
-            records = {
-                "INFUSION_START": [
-                    (1, 10, "100", "101", "101", 0.25, None),
-                    (1, 10, "100", "201", "201", 0.125, None),
-                    (1, 11, "100", "102", "101", 0.0625, None),
-                    (1, 14, "100", "301", None, 0.125, None),
-                    (2, 10, "200", "101", "101", 0.125, None),
-                ],
-                "INFUSION_END": [
-                    (1, 11, "100", "101", "101", None, "ChangeDose/Rate"),
-                    (1, 12, "100", "102", "101", None, "Stopped"),
-                    (1, 13, "100", "201", "201", None, "Stopped"),
-                    (1, 15, "100", "301", None, None, "Stopped"),
-                    (2, 12, "200", "101", "101", None, "Stopped"),
-                ],
-            }
-            for event, rows in records.items():
-                pl.DataFrame(
-                    {
-                        "subject_id": [row[0] for row in rows],
-                        "time": [datetime(2024, 1, 1, row[1]) for row in rows],
-                        "stay_id": [row[2] for row in rows],
-                        "orderid": [row[3] for row in rows],
-                        "linkorderid": [row[4] for row in rows],
-                        "originalrate": [str(row[5]) if row[5] is not None else None for row in rows],
-                        "text_value": [row[6] for row in rows],
-                        "numeric_value": [None] * len(rows),
-                        "rateuom": ["mcg/kg/min"] * len(rows),
-                        "code": [f"{event}//{itemid}//{drug}"] * len(rows),
-                    },
-                    schema_overrides={"numeric_value": pl.Float32, "text_value": pl.String},
-                ).write_parquet(source / f"{event}.parquet")
-        else:
-            pl.DataFrame(
-                {
-                    "subject_id": [1, 1, 1],
-                    "time": [datetime(2024, 1, 1, hour) for hour in (10, 11, 12)],
-                    "stay_id": ["100"] * 3,
-                    "code": [f"INFUSION//{drug} (mcg/kg/min)"] * 3,
-                    "numeric_value": [0.25, 0.0625, 0.0],
-                    "text_value": [None] * 3,
-                },
-                schema_overrides={"numeric_value": pl.Float32, "text_value": pl.String},
-            ).write_parquet(source / "INFUSION.parquet")
-
-        ConceptStep.load(project, concept_config).run()
-        result = pl.read_parquet(concept_path(project, name))
-        assert "orderid" not in result.columns
-        assert "event" not in result.columns
-        assert result["code"].unique().to_list() == [f"{name}//mcg/kg/min"]
-        if dataset == "mimic-iv":
-            actual = result.sort("subject_id", "time", "linkorderid").select(
-                "subject_id", "time", "numeric_value", "stay_id", "linkorderid"
-            )
-            assert actual.rows() == [
-                (1, datetime(2024, 1, 1, 10), 0.25, "100", "101"),
-                (1, datetime(2024, 1, 1, 10), 0.125, "100", "201"),
-                (1, datetime(2024, 1, 1, 11), 0.0625, "100", "101"),
-                (1, datetime(2024, 1, 1, 12), 0.0, "100", "101"),
-                (1, datetime(2024, 1, 1, 13), 0.0, "100", "201"),
-                (1, datetime(2024, 1, 1, 14), 0.125, "100", None),
-                (1, datetime(2024, 1, 1, 15), 0.0, "100", None),
-                (2, datetime(2024, 1, 1, 10), 0.125, "200", "101"),
-                (2, datetime(2024, 1, 1, 12), 0.0, "200", "101"),
-            ]
-        else:
-            assert result.sort("time").select("time", "numeric_value", "stay_id").rows() == [
-                (datetime(2024, 1, 1, 10), 0.25, "100"),
-                (datetime(2024, 1, 1, 11), 0.0625, "100"),
-                (datetime(2024, 1, 1, 12), 0.0, "100"),
-            ]
-            assert "linkorderid" not in result.columns
 
 
 class TestDerivedConcepts:

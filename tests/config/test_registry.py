@@ -8,7 +8,7 @@ import pytest
 from pydantic import computed_field
 
 from weavehr.config.base import BaseConfig, BaseDatasetConfig
-from weavehr.config.registry import BaseConfigRegistry, load_configs
+from weavehr.config.registry import BaseConfigRegistry, _load_configs
 
 
 class RegConfig(BaseConfig):
@@ -173,11 +173,11 @@ class TestLoadConfigs:
         (config_dir / "notes.txt").write_text("not yaml at all")
 
         with caplog.at_level(logging.WARNING, logger="weavehr"):
-            configs = load_configs(config_dir, RegConfig)
+            configs = _load_configs(config_dir, RegConfig)
         assert [c.name for c in configs] == ["good"]
         # the warning names the file and the validation error
         assert "bad.yml" in caplog.text
         assert "version" in caplog.text and "Field required" in caplog.text
 
     def test_missing_path_returns_empty(self, tmp_path: Path) -> None:
-        assert load_configs(tmp_path / "does-not-exist", RegConfig) == []
+        assert _load_configs(tmp_path / "does-not-exist", RegConfig) == []

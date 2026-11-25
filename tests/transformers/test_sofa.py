@@ -293,10 +293,10 @@ def test_component_measurement_alignment_includes_its_boundary(
 class TestCardiovascular:
     @staticmethod
     def rates(*rows: tuple[int, float, float | None, str | None, str | None]) -> pl.LazyFrame:
-        """Rate events with native stay and infusion identifiers."""
+        """Rate events with stay and episode identifiers, as the rate concepts write them."""
         return frame(*[(subject, at(hour), rate) for subject, hour, rate, _, _ in rows]).with_columns(
             pl.Series("stay_id", [row[3] for row in rows], dtype=pl.String),
-            pl.Series("linkorderid", [row[4] for row in rows], dtype=pl.String),
+            pl.Series("stream_id", [row[4] for row in rows], dtype=pl.String),
         )
 
     @pytest.mark.parametrize(
@@ -445,19 +445,15 @@ class TestCardiovascular:
             == expected
         )
 
-    @pytest.mark.parametrize(
-        ("kwargs", "expected"), [({"pressor_id_column": "segment"}, [4.0, 4.0, 0.0]), ({}, [4.0, 0.0, 0.0])]
-    )
-    def test_pressor_id_column_names_the_infusion_identifier(self, kwargs: dict, expected: list[float]) -> None:
-        # The identifier lives in another column; only the configured name links the stop to its start.
-        rates = self.rates((1, 0, 0.2, "100", None), (1, 10, 0, "100", None)).with_columns(
-            segment=pl.lit("A", dtype=pl.String)
+    def test_a_native_order_id_is_not_the_stream_identifier(self) -> None:
+        """The rate concepts carry ``stream_id``; a stray ``linkorderid`` must not link events."""
+        rates = self.rates((1, 0, 0.2, "100", None), (1, 1, 0, "100", None)).with_columns(
+            pl.Series("linkorderid", ["A", "A"], dtype=pl.String)
         )
-        transformer = make(SofaCardiovascularTransformer, pressor_window="6h", **kwargs)
-        assert (
-            scores(transformer, {"norepinephrine_rate": rates, "mean_arterial_pressure": frame((1, at(8), 75))})
-            == expected
-        )
+        assert scores(
+            make(SofaCardiovascularTransformer, pressor_window="6h"),
+            {"norepinephrine_rate": rates, "mean_arterial_pressure": frame((1, at(8), 75))},
+        ) == [4.0, 0.0, 0.0]
 
     def test_a_pause_and_restart_do_not_bridge_the_stopped_period(self) -> None:
         assert scores(
@@ -511,7 +507,8 @@ class TestCardiovascular:
         ) == [4.0, 4.0]
 
     @pytest.mark.parametrize("stopped", [False, True])
-    def test_null_does_not_refresh_and_expiry_is_distinct_from_a_recorded_stop(self, stopped: bool) -> None:
+    def test_null_marks_the_rate_unknown_and_differs_from_a_recorded_stop(self, stopped: bool) -> None:
+        """A null rate ends the known rate without saying off; a recorded zero is off."""
         out = (
             make(SofaCardiovascularTransformer, pressor_window="6h")
             .transform(
@@ -525,7 +522,8 @@ class TestCardiovascular:
             .collect()
         )
         assert out.rows() == (
-            [(1, T0, 4.0), (1, at(1), 0.0), (1, at(7), 0.0)] if stopped else [(1, T0, 4.0), (1, at(1), 4.0)]
+            # Unknown from 1 h, with no MAP either: no assessment there.
+            [(1, T0, 4.0), (1, at(1), 0.0), (1, at(7), 0.0)] if stopped else [(1, T0, 4.0)]
         )
 
     @pytest.mark.parametrize("reverse", [False, True])
@@ -580,6 +578,19 @@ class TestRespiration:
             **{"ventilation_start" if vent else "ventilation_end": vent},
         )
         assert result == [expected_on if vent else expected_off]
+
+    @pytest.mark.parametrize("cutoff", [100, 200, 300, 400])
+    @pytest.mark.parametrize("offset", [-1, 0, 1])
+    def test_pafi_at_fractional_fio2(self, cutoff: int, offset: int) -> None:
+        fio2_tenths = 301
+        pao2_tenths = cutoff * fio2_tenths // 100 + offset
+        expected = sum(100 * pao2_tenths < limit * fio2_tenths for limit in (100, 200, 300, 400))
+        assert score(
+            make(SofaRespiratoryTransformer),
+            O2_partial_pressure=pao2_tenths / 10,
+            fraction_of_inspired_oxygen=fio2_tenths / 10,
+            ventilation_start=1.0,
+        ) == [expected]
 
     def test_unknown_ventilation_degrades_to_lower_tiers(self) -> None:
         # pafi 60 with no ventilation record -> cannot reach tier 3/4, scores 2
@@ -826,6 +837,17 @@ class TestRenalCreatinineScore:
 
 
 class TestRenalUrineScore:
+    @pytest.mark.parametrize(("cutoff_ml", "hourly_tenths"), [(200, 83), (500, 208)])
+    @pytest.mark.parametrize("offset", [-1, 0, 1])
+    def test_accumulated_volume_at_cutoff(
+        self, renal: SofaRenalTransformer, cutoff_ml: int, hourly_tenths: int, offset: int
+    ) -> None:
+        total = 10 * cutoff_ml + offset
+        volumes = [hourly_tenths] * 23 + [total - 23 * hourly_tenths]
+        urine = covered_urine(*[(hour, volume / 10) for hour, volume in enumerate(volumes, start=1)])
+        expected = 4 if total < 2000 else 3 if total < 5000 else 0
+        assert renal_scores(renal, frame(), urine) == [expected]
+
     @pytest.mark.parametrize(
         ("value", "expected"),
         [

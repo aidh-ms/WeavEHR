@@ -21,7 +21,7 @@ keeps the plan lazy all the way to a single streaming ``sink_parquet``.
 
 from abc import ABCMeta, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import polars as pl
 
@@ -56,6 +56,14 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
     """
 
     strict_dependencies: bool = True
+
+    extension_columns: ClassVar[dict[str, str]] = {}
+    """Extension columns every concept of this transformer has, as expressions on the transformed frame.
+
+    For a transformer that defines an event contract of its own, so that its
+    concepts need not each repeat it. The concept's own ``extension_columns``
+    are added after these and win on a name clash.
+    """
 
     def __init__(
         self,
@@ -152,8 +160,11 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
             text_value=pl.coalesce(pl.col("^text_value$"), pl.lit(None, dtype=pl.String)),
             numeric_value=pl.coalesce(pl.col("^numeric_value$"), pl.lit(None, dtype=pl.Float32)),
         )
+        # Limits mean the same for every concept type: out-of-range values become null.
+        lf = self._concept.limits.apply(lf)
 
-        for col_name, col_expr in self._concept.extension_columns.items():
+        extension_columns = {**self.extension_columns, **self._concept.extension_columns}
+        for col_name, col_expr in extension_columns.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
         lf = lf.select(
@@ -164,12 +175,12 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                 pl.col("numeric_value").cast(pl.Float32),
                 pl.col("text_value").cast(pl.String),
             ]
-            + [pl.col(col).cast(pl.String) for col in self._concept.extension_columns]
+            + [pl.col(col).cast(pl.String) for col in extension_columns]
         ).sort("subject_id", "time")
 
         output_file = self._output_file(self._concept)
         output_file.parent.mkdir(parents=True, exist_ok=True)
-        logger.info("Writing complex concept %s to %s", self._concept.identifier, output_file)
+        logger.debug("Writing complex concept %s to %s", self._concept.identifier, output_file)
         lf.sink_parquet(output_file)
 
     def _read_concept(self, concept_id: str) -> tuple[str, pl.LazyFrame] | None:

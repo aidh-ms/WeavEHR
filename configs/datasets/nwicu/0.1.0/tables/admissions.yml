@@ -136,6 +136,7 @@ events:
         - col(discharge_location)
       extension:
         available_time: col(dischtime)
+        hospital_expire_flag: replace(dischtime != None, hospital_expire_flag, None)
 
   - name: MEDS_DEATH
     columns:
@@ -144,15 +145,5 @@ events:
       time: col(deathtime)
       extension:
         available_time: col(deathtime)
-    filters:
-      - drop_na(time)
-  - name: IN_HOSPITAL_MORTALITY
-    columns:
-      time: col(dischtime)
-      code:
-        - const("IN_HOSPITAL_MORTALITY")
-      numeric_value: col(hospital_expire_flag)
-      extension:
-        available_time: col(dischtime)
     filters:
       - drop_na(time)

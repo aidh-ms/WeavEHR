@@ -1,13 +1,9 @@
-type: simple
-mappings:
-- pattern:
-    table: infusiondrug
-    event: INFUSION
-    code: (?i)^epinephrine.*\(mcg/kg/min\)$
-  columns:
-    numeric_value: col(numeric_value)
-    text_value: col(text_value)
-    extension:
-      stay_id: col(stay_id)
-  filters:
-  - drop_na(numeric_value)
+# vasopressor_infusion//epinephrine in the concept unit. The transformer is the same for every
+# dataset; see docs/user_guide/vasopressor_events.md.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.infusion.InfusionRateTransformer
+concepts:
+  - vasopressor_infusion.1.0.0
+  - patient_weight.1.0.0
+kwargs:
+  drug: epinephrine

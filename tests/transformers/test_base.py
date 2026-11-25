@@ -15,7 +15,7 @@ import polars as pl
 import pytest
 
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
-from weavehr.steps.concept.config.concept import ConceptConfig
+from weavehr.steps.concept.config.concept import ConceptConfig, ConceptLimits
 from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.concept.transformer.base import BaseConceptTransformer
 
@@ -125,6 +125,34 @@ def test_output_carries_the_meds_columns(tmp_path: Path, concept: ConceptConfig)
     assert written.schema["numeric_value"] == pl.Float32
     assert written["text_value"].to_list() == [None]  # filled in even though transform produced none
     assert written["dataset"].to_list() == [DATASET]  # extension column
+
+
+class Flagging(Recording):
+    """Declares extension columns of its own, as a transformer with an event contract does."""
+
+    extension_columns = {"flag": 'const("set")', "dataset": 'const("transformer")'}
+
+
+def test_transformer_extension_columns_and_concept_limits_apply(tmp_path: Path) -> None:
+    concept = ConceptConfig(
+        name="derived",
+        version="1.0.0",
+        unit="points",
+        limits=ConceptLimits(min=0, max=10),
+        extension_columns={"dataset": 'col("dataset")'},
+    )
+    creatinine = source("creatinine")
+    step = Step(tmp_path, creatinine)
+    write_output(step, creatinine, -1.0, 2.0, 50.0)
+
+    Flagging(concept, config(creatinine.identifier), cast(ConceptStep, step))()
+    written = output_of(step, concept)
+
+    # Out of limits: the value becomes null and the row stays, as for simple concepts.
+    assert written["numeric_value"].null_count() == 2
+    assert written["numeric_value"].drop_nulls().to_list() == [2.0]
+    assert written["flag"].to_list() == ["set"] * 3
+    assert written["dataset"].to_list() == [DATASET] * 3  # the concept's own expression wins
 
 
 def test_preserved_infusion_metadata_reaches_a_downstream_transform(tmp_path: Path, concept: ConceptConfig) -> None:
