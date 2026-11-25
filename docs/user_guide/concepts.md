@@ -348,9 +348,12 @@ retain their existing rules.
 SOFA and GCS ignore numeric `NaN` and positive or negative infinity inside
 their calculations. Those rows neither generate assessments nor refresh
 measurement or state validity, and invalid urine entries do not establish
-collection coverage or bridge recording gaps. Ordinary mapped concepts retain
-the original records. Finite zero values and valueless ventilation markers
-retain their usual meaning.
+collection coverage or bridge recording gaps. A urine record with a null value
+is an amount known to be unknown, e.g. HiRID's volume over an interval whose rate
+was out of range: urine coverage restarts at it, so no trailing window reaching
+back across it is scored, rather than reading it as no urine. Ordinary mapped
+concepts retain the original records. Finite zero values and valueless
+ventilation markers retain their usual meaning.
 
 ### Respiratory SOFA ventilation state
 

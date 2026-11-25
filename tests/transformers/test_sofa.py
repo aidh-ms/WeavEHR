@@ -252,6 +252,18 @@ def test_nonfinite_urine_does_not_bridge_a_recording_gap(invalid: float) -> None
     assert result.rows() == [(1, at(24), 2.0)]
 
 
+@pytest.mark.parametrize("with_volume", [False, True], ids=["alone", "beside-a-volume"])
+def test_unknown_urine_volume_restarts_the_covered_window(with_volume: bool) -> None:
+    """A null volume is urine known to be unknown: no 24h window across it is scored, not even as 0."""
+    urine = frame(
+        *[(1, at(hour), None if hour == 12 and not with_volume else 10.0) for hour in range(41)],
+        *([(1, at(12), None)] if with_volume else []),
+    )
+    result = make(SofaRenalTransformer).transform({"urine_output": urine, "creatinine": frame()}).collect()
+    # 240 mL over each full day after the unknown volume at 12h; none before 36h
+    assert result.rows() == [(1, at(hour), 3.0) for hour in range(36, 41)]
+
+
 def test_a_component_with_no_current_input_emits_nothing() -> None:
     """The zero that a total sums must come from a measurement, not from silence."""
     transformer = make(SofaCoagulationTransformer, window="24h")

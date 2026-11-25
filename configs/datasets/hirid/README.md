@@ -79,10 +79,12 @@ SOFA scores creatinine and urine output, described next.
 
 HiRID `urine_output` estimates volume in mL by multiplying the current 10020000
 urinary rate (mL/h) by the hours since the previous measurement in the same stay,
-up to 12 hours. It records the amount at the end of the interval. The first reading
-has no known interval. A missing rate, a rate outside 0–1,000 mL/h, or a duplicate
-timestamp gives no volume and cannot anchor the next estimate. The range comes
-from the HiRID benchmark and applies to the source rate before conversion.
+up to 12 hours. It records the amount at the end of the interval. A missing rate
+or a rate outside 0–1,000 mL/h gives an unknown (null) amount for its interval;
+the next interval still starts at that reading. The first reading has no known
+interval, and readings that share a timestamp leave their interval and the next
+one unknown, so these amounts are null too. The range comes from the HiRID
+benchmark and applies to the source rate before conversion.
 
 In a HiRID 1.1.1 audit, 501,065 of 501,108 rate timestamps coincided to the minute
 with the 30005110 fluid-balance counter. Across interval-length groups from 1 to
@@ -101,12 +103,13 @@ to 4,622. These are daily volume comparisons. Renal SOFA evaluates trailing
 24 h windows at event times.
 
 The HiRID renal SOFA mapping sets `urine_output_gap: 12h`. A gap over 12 h
-between emitted urine volumes starts a new segment. The urine component becomes
-available once that segment spans 24 h and the latest volume is at most 12 h old.
-At assessment time `t`, the 24 h sum counts each interval's full estimated volume
-if its chart time falls in `(t − 24 h, t]`, even when the interval began before
-the window. Hours after the latest reading contribute no volume.
-Creatinine can still supply the renal score while urine coverage is incomplete.
+between urine records starts a new segment, and so does an unknown amount, which
+renal SOFA does not count as no urine. The urine component becomes available once
+that segment spans 24 h and the latest record is at most 12 h old. At assessment
+time `t`, the 24 h sum counts each interval's full estimated volume if its chart
+time falls in `(t − 24 h, t]`, even when the interval began before the window.
+Hours after the latest reading contribute no volume. Creatinine can still supply
+the renal score while urine coverage is incomplete.
 
 A sensitivity analysis evaluated each distinct urine-volume or creatinine event,
 including events in the first 24 h of a stay and stays with only creatinine.
@@ -122,7 +125,8 @@ Allowing a 24 h gap yielded about 37,900 additional windows and 6,700 additional
 patient-days compared with a 12 h gap. At a fixed 12 h gap, removing the volume
 cap gave the same urine-class counts to the precision of the audit. At a fixed
 24 h gap, about 18,200 windows fell below 500 mL with the cap and 17,900 without
-it. The audit measured the urine component alone.
+it. The audit measured the urine component alone, before an unknown amount
+started a new segment.
 
 For comparison, ricu derives HiRID urine from increments of 30005110. The counter
 usually restarted at noon: 63,592 of its 68,864 decreases occurred at 12:00,

@@ -326,6 +326,12 @@ class SegmentedRollingSum(_Rolling):
     missingness. Where they do not, the input reads as missing and the concept
     can fall back to its other inputs.
 
+    A record without a value is an amount known to be unknown, e.g. urine
+    collected over an interval whose source rate was out of range. Counting it
+    as nothing would read the interval as anuria, so it opens a new segment at
+    its time instead: no window reaching back across it is reported. It decides
+    its timestamp even where another record of the input has a value then.
+
     ``gap`` defaults to ``window``.
     """
 
@@ -334,10 +340,12 @@ class SegmentedRollingSum(_Rolling):
         self._gap = gap or window
 
     def collapse(self, col: str) -> pl.Expr:
-        return pl.when(pl.col(col).is_not_null().any()).then(pl.col(col).sum()).otherwise(None)
+        unknown = (pl.col(_event(col)).is_not_null() & pl.col(col).is_null()).any()
+        return pl.when(unknown).then(None).when(pl.col(col).is_not_null().any()).then(pl.col(col).sum()).otherwise(None)
 
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         last, start = f"__last_{col}", f"__segment_start_{col}"
+        unknown = pl.col(_present(col)) & pl.col(col).is_null()
 
         # time of the most recent record of this input at or before t; the grid
         # is unique per (subject, time), so its value one row back is the
@@ -346,8 +354,8 @@ class SegmentedRollingSum(_Rolling):
             pl.when(pl.col(_present(col))).then(pl.col(_TIME)).otherwise(None).forward_fill().over(_SUBJECT).alias(last)
         )
 
-        # a record opens a new segment if nothing precedes it or the preceding
-        # record is more than `gap` old
+        # a record opens a new segment if nothing precedes it, the preceding
+        # record is more than `gap` old or its own amount is unknown
         lf = lf.with_columns(
             pl.when(
                 pl.col(_present(col))
@@ -355,6 +363,7 @@ class SegmentedRollingSum(_Rolling):
                     pl.col(last).shift(1).over(_SUBJECT).is_null()
                     | (pl.col(last).shift(1).over(_SUBJECT) < _ago(self._gap))
                 )
+                | unknown
             )
             .then(pl.col(_TIME))
             .otherwise(None)

@@ -503,15 +503,32 @@ def test_urine_output_uses_current_rate_over_the_preceding_interval(tmp_path: Pa
                 "dataset": "hirid",
                 "table": "observations",
             }
+            # None: the amount is unknown. The first reading has no interval; an invalid rate
+            # leaves its own interval unknown, but the next one starts at it; readings sharing a
+            # timestamp leave their interval and the next one unknown.
             for subject, hour, amount in [
+                (1, 0, None),
                 (1, 3, 150),
                 (1, 4.5, 15),
                 (1, 12, 150),
                 (1, 18, 12),
                 (1, 30, 12000),
                 (1, 50, 600),
+                (1, 51, None),
+                (1, 52, 10),
+                (2, 0, None),
                 (2, 1, 0),
+                (2, 2, None),
+                (2, 2, None),
+                (2, 3, None),
                 (2, 4, 20),
+                (3, 0, None),
+                (3, 1, None),
+                (3, 2, 10),
+                (3, 3, None),
+                (3, 4, None),
+                (3, 5, None),
+                (3, 6, 10),
                 (3, 7, 3),
             ]
         ],
@@ -539,6 +556,38 @@ def test_renal_sofa_requires_a_covered_urine_window(tmp_path: Path) -> None:
         outputs["sofa_renal"],
         [{"time": ADMISSION + timedelta(hours=h), "numeric_value": score} for h, score in [(25, 4), (39, 2), (62, 4)]],
         context="HiRID renal SOFA coverage",
+    )
+
+
+def test_renal_sofa_does_not_read_an_out_of_range_rate_as_no_urine(tmp_path: Path) -> None:
+    """A rate over 1000 mL/h leaves its interval unknown, so no 24h window across it is scored.
+
+    22 mL/h charted every 2h is 528 mL a day (SOFA 0). Counted as nothing, the unknown
+    interval would leave 484 mL (SOFA 3) in the windows across it; instead urine coverage
+    restarts at it and scores again once a full day has been charted after it.
+    """
+    rows = [
+        {
+            "time": ADMISSION + timedelta(hours=hour),
+            "code": observation_code(10020000, "ml/h"),
+            "numeric_value": 1001.0 if hour == 40 else 22.0,
+        }
+        for hour in range(0, 71, 2)
+    ]
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["urine_output", "creatinine", "sofa_renal"],
+        sources={"observations/OBSERVATION": rows},
+    )
+    assert_rows(
+        outputs["sofa_renal"],
+        [
+            {"time": ADMISSION + timedelta(hours=hour), "numeric_value": 0}
+            for hour in [*range(24, 39, 2), *range(64, 71, 2)]
+        ],
+        context="HiRID renal SOFA around an out-of-range rate",
     )
 
 
