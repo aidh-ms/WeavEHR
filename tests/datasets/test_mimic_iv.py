@@ -889,40 +889,74 @@ def extract_procedure(tmp_path: Path, *, chartdate: str, dischtime: str | None) 
     )["PROCEDURE"]
 
 
-def test_a_procedure_charted_before_the_discharge_date_is_dated_at_the_end_of_its_chart_date(tmp_path: Path) -> None:
-    """ICD procedures have a chart date only and are billing codes of the admission, known at discharge."""
+def test_a_procedure_charted_before_the_discharge_date_is_dated_at_the_start_of_its_chart_date(
+    tmp_path: Path,
+) -> None:
+    """ICD procedures have a chart date only, dated at its start, and are billing codes of the admission, known at
+    discharge."""
     procedures = extract_procedure(tmp_path, chartdate="2150-01-02", dischtime="2150-01-05 12:00:00")
 
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "available_time": datetime(2150, 1, 5, 12)}])
-    assert_end_of_day(procedures["time"][0], date(2150, 1, 2), context="procedure chart date")
+    assert_rows(
+        procedures,
+        [
+            {
+                "hadm_id": 100,
+                "code": PROCEDURE_CODE,
+                "time": datetime(2150, 1, 2, 0, 0),
+                "available_time": datetime(2150, 1, 5, 12),
+            }
+        ],
+    )
 
 
-def test_a_procedure_charted_on_the_discharge_date_is_dated_at_discharge(tmp_path: Path) -> None:
-    """The end of the discharge day lies after the discharge, by which the admission's procedures have been done."""
+def test_a_procedure_charted_on_the_discharge_date_is_dated_at_the_start_of_its_chart_date(tmp_path: Path) -> None:
+    """The start of the discharge day lies before the discharge, so the time is the chart date's start, not the
+    discharge; the procedure is still known at discharge."""
     procedures = extract_procedure(tmp_path, chartdate="2151-03-01", dischtime="2151-03-01 09:30:00")
 
-    discharge = datetime(2151, 3, 1, 9, 30)
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}])
+    assert_rows(
+        procedures,
+        [
+            {
+                "hadm_id": 100,
+                "code": PROCEDURE_CODE,
+                "time": datetime(2151, 3, 1, 0, 0),
+                "available_time": datetime(2151, 3, 1, 9, 30),
+            }
+        ],
+    )
 
 
-def test_a_procedure_charted_after_the_discharge_date_is_dated_at_discharge(tmp_path: Path) -> None:
-    """A chart date after the discharge still belongs to a procedure of the admission, so it moves to an earlier date."""
+def test_a_procedure_charted_after_the_discharge_date_keeps_its_chart_date(tmp_path: Path) -> None:
+    """The time is the start of the chart date as the release gives it, even after the discharge; it is not moved
+    to the discharge, which stays the time the procedure is known."""
     procedures = extract_procedure(tmp_path, chartdate="2152-06-03", dischtime="2152-06-02 18:00:00")
 
-    discharge = datetime(2152, 6, 2, 18)
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "time": discharge, "available_time": discharge}])
+    assert_rows(
+        procedures,
+        [
+            {
+                "hadm_id": 100,
+                "code": PROCEDURE_CODE,
+                "time": datetime(2152, 6, 3, 0, 0),
+                "available_time": datetime(2152, 6, 2, 18),
+            }
+        ],
+    )
 
 
-def test_a_procedure_without_an_admission_is_dated_at_the_end_of_its_chart_date(tmp_path: Path) -> None:
-    """Without a discharge time there is nothing to cap the end of the chart date at, nor a time it is known."""
+def test_a_procedure_without_an_admission_is_dated_at_the_start_of_its_chart_date(tmp_path: Path) -> None:
+    """Without a matching admission the procedure keeps the start of its chart date and has no time it is known."""
     procedures = extract_procedure(tmp_path, chartdate="2153-02-10", dischtime=None)
 
-    assert_rows(procedures, [{"hadm_id": 100, "code": PROCEDURE_CODE, "available_time": None}])
-    assert_end_of_day(procedures["time"][0], date(2153, 2, 10), context="procedure without an admission")
+    assert_rows(
+        procedures,
+        [{"hadm_id": 100, "code": PROCEDURE_CODE, "time": datetime(2153, 2, 10, 0, 0), "available_time": None}],
+    )
 
 
-def test_omr_records_are_dated_and_known_at_the_end_of_their_chart_date(tmp_path: Path) -> None:
-    """OMR records carry a chart date only, so both their time and their availability are the end of that day."""
+def test_omr_records_are_dated_and_known_at_the_start_of_their_chart_date(tmp_path: Path) -> None:
+    """OMR records carry a chart date only, so both their time and their availability are the start of that date."""
     omr = extract_native(
         tmp_path,
         dataset=DATASET,
@@ -946,13 +980,14 @@ def test_omr_records_are_dated_and_known_at_the_end_of_their_chart_date(tmp_path
         ],
     )["OMR"]
 
+    start = datetime(2150, 1, 2, 0, 0)
     assert_rows(
         omr,
-        [{"code": "OMR//Weight (Lbs)", "text_value": "135"}, {"code": "OMR//Blood Pressure", "text_value": "120/80"}],
+        [
+            {"code": "OMR//Weight (Lbs)", "text_value": "135", "time": start, "available_time": start},
+            {"code": "OMR//Blood Pressure", "text_value": "120/80", "time": start, "available_time": start},
+        ],
     )
-    for row in omr.to_dicts():
-        assert_end_of_day(row["time"], date(2150, 1, 2), context=f"OMR {row['code']} time")
-        assert_end_of_day(row["available_time"], date(2150, 1, 2), context=f"OMR {row['code']} available_time")
 
 
 def test_an_open_icu_stay_has_an_admission_but_no_discharge_or_length_of_stay(tmp_path: Path) -> None:

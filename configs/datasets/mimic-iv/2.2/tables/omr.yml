@@ -17,25 +17,19 @@ columns:
   - name: result_value
     type: string
 
-# chartdate has no time of day. The record has been made by the end of that
-# day, and placing it at midnight would put it before same-day events that
-# preceded it. Same convention as hcpcsevents and the date of death (patients);
-# procedures_icd starts from it too but caps the time at the admission's
-# discharge. Table-level post_join_callbacks also apply without a join.
-post_join_callbacks:
-  - set_time(chartdate, 23, 59, 59, output=chartdate_24)
-
 event_defaults:
   subject_id: col(subject_id)
 
 events:
   - name: OMR
     columns:
-      time: col(chartdate_24)
+      # chartdate has no time of day, so the record is dated at the start of its
+      # date (00:00).
+      time: col(chartdate)
       code:
         - col(result_name)
       text_value: col(result_value)
       extension:
         # The record carries only its date, so it is available when it happened.
-        available_time: col(chartdate_24)
+        available_time: col(chartdate)
         seq_num: col(seq_num)
