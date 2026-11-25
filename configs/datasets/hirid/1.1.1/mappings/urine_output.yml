@@ -1,0 +1,19 @@
+# HiRID 10020000 is hourly urinary output (mL/h). Estimate mL at the chart time
+# using the current rate over the preceding interval, up to 12 hours.
+# The HiRID benchmark accepts source rates from 0 to 1000 mL/h, inclusive. A missing or
+# out-of-range rate, the first reading and an ambiguous timestamp (and the reading after it)
+# give an unknown (null) amount, which renal SOFA does not read as no urine. Every other
+# reading's interval starts at the reading before it, valid or not.
+type: simple
+mappings:
+  - pattern:
+      table: observations
+      event: OBSERVATION
+      code: "^(10020000)(//.*)?$"
+    callbacks:
+      - previous_record(time, time, by=[subject_id], output=previous_time)
+      - datetime_diff(previous_time, time, unit="hours", output=hours_covered)
+    columns:
+      numeric_value: >-
+        replace(numeric_value >= 0 and numeric_value <= 1000, numeric_value, None)
+        * replace(hours_covered > 12, 12, hours_covered)

@@ -143,10 +143,11 @@ CareVue vasopressin charted as 1.2 `Umin`: the usual dose of 1.2 units per *hour
 `stream_id`; a zero stops the matching infusion, and an unknown rate ends its state like an
 expiry, counting neither as a rate nor as off. See
 [Cardiovascular SOFA](concepts.md#cardiovascular-sofa) for its expiry and overlap rules.
-HiRID's interval averages hold from the interval's start like charted rates. HiRID has no SOFA
-mapping yet; it records an infusion
-about every 15 minutes, and almost every infusion has a stop, so its mapping can use a short
-`pressor_window`.
+HiRID's average pressor rates apply from the start of each interval and hold until the next
+record of the infusion, which states a new rate, a stop or an unknown rate. Infusions are
+charted about every 15 minutes and almost all have a recorded stop, so HiRID's
+`pressor_window` (48h, the MIMIC-IV value) only bounds the rare longer interval between two
+records.
 
 ## Adding a dataset or drug
 

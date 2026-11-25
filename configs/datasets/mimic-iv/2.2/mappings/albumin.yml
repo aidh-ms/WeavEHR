@@ -1,12 +1,17 @@
 # mimic-code 303d26c623dcc9c49cc0f204468d4acc2f063797:
 # mimic-iv/concepts/measurement/chemistry.sql
 # Item selection and unit conversion only; preserve all source observations and values.
+# 53085 is a second "Albumin" item with the same fluid (Blood) and category (Chemistry)
+# in d_labitems; mimic-code uses only 50862, YAIB's ricu-extensions (chemistry) adds it.
+# 53085 is labelled mg/dL (valueuom), but its values are on the g/dL scale of 50862
+# (MIMIC-IV 3.1: 69 rows, median 3.9, 5th-95th percentile 3.1-4.6; 50862: median 3.9),
+# so it is not converted.
 type: simple
 mappings:
   - pattern:
       table: labevents
       event: LAB
-      code: ^(?:LAB//)?(?:50862)(?:$|//)
+      code: ^(?:LAB//)?(?:50862|53085)(?:$|//)
     columns:
       numeric_value: col(numeric_value)
       text_value: col(text_value)

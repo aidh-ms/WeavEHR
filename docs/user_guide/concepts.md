@@ -363,9 +363,12 @@ retain their existing rules.
 SOFA and GCS ignore numeric `NaN` and positive or negative infinity inside
 their calculations. Those rows neither generate assessments nor refresh
 measurement or state validity, and invalid urine entries do not establish
-collection coverage or bridge recording gaps. Ordinary mapped concepts retain
-the original records. Finite zero values and valueless ventilation markers
-retain their usual meaning.
+collection coverage or bridge recording gaps. A urine record with a null value
+is an amount known to be unknown, e.g. HiRID's volume over an interval whose rate
+was out of range: urine coverage restarts at it, so no trailing window reaching
+back across it is scored, rather than reading it as no urine. Ordinary mapped
+concepts retain the original records. Finite zero values and valueless
+ventilation markers retain their usual meaning.
 
 ### Respiratory SOFA ventilation state
 
@@ -448,6 +451,19 @@ with its own start and stop. The markers carry `record_id`, the record's
 sets `ventilation_id_column: record_id` with no fallback expiry, as ricu
 uses these windows as they are. See the AUMCdb README.
 
+HiRID's ventilation comes from the charted airway code (variableid 15001552,
+"Ventilator Airway Code" in the HiRID-ICU-Benchmark variable reference), ricu's
+only HiRID source of `mech_vent`. As in ricu, codes 1-2 start invasive and 3-6
+noninvasive ventilation; any other charted code is an end. The benchmark's
+ventilation endpoint reads 3-6 as no airway instead, and the code labels are not
+checked yet (see the HiRID README). Each code holds until the next one, and the
+HiRID mapping sets `ventilation_window: 12h`. ricu's `hirid_vent` holds a code
+until the next one if that is at most 12 hours later and otherwise for four
+hours, so the two agree between codes charted up to 12 hours apart, but the last
+code of a run is held for up to 12 hours rather than four. The same codes supply
+HiRID's `gcs_unable` (ricu's `ett_gcs`): 1 for invasive ventilation, 0 for any
+other code.
+
 ### Cardiovascular SOFA
 
 `sofa_cardiovascular` reassesses at every MAP or pressor input event, including
@@ -491,6 +507,7 @@ distributions**, not validated as clinical cutoffs:
 | MIMIC-IV 2.2 | `1h` | `48h` | Among 1,055 mapped rate segments, the longest was 31.9 h; the longest reconstructed linked start/stop episode was 40.57 h. The fallback rounds above both observed maxima. |
 | eICU-CRD 2.0 | `1h` | `6h` | Among 666 gaps after positive mapped rate observations, the median was 1 h and the 95th percentile was 5.99 h. Thirty-two gaps (4.8%) exceeded 6 h. |
 | AUMCdb 1.5.0 | `1h` | `48h` | Not measured (no AUMCdb data was available). Every rate segment carries its recorded stop, which ends it regardless of the timeout; the MIMIC-IV value only bounds a segment without one. |
+| HiRID 1.1.1 | `1h` | `48h` | In aggregate summaries of HiRID 1.1.1 (2026-11-20), 99% of intervals between records of one norepinephrine, epinephrine or dobutamine infusion were under 30 minutes; the longest lasted 15 to 23 days. Every rate holds until the next record of its infusion, which states a new rate, a stop or an unknown rate (`vasopressor_infusion`), so the MIMIC-IV value only bounds such a long interval. |
 
 The MIMIC analysis used
 [`inputevents.csv.gz` from demo 2.2](https://physionet.org/files/mimic-iv-demo/2.2/icu/inputevents.csv.gz),
@@ -519,7 +536,7 @@ validation and assessment on representative data.
 
 `suspected_infection` is the shared output concept. Each dataset's
 `suspected_infection.yml` selects its evidence rule: antibiotic/culture pairing
-for MIMIC-IV and AUMCdb, or sustained antibiotic treatment for eICU.
+for MIMIC-IV and AUMCdb, or sustained antibiotic treatment for eICU and HiRID.
 
 `AntibioticsWithCultureTransformer` pairs antibiotic treatment with body-fluid sampling:
 sampling follows antibiotics within 24 hours, or antibiotics follow sampling
@@ -659,6 +676,14 @@ by this transformer. Every qualifying start feeds the existing `sepsis3` SOFA-ri
 YAIB's additional cohort and prediction-label rules are not applied. eICU demo
 inherits both mappings. Calculations retain continuous timestamps rather than
 reproducing ricu's time-grid rounding.
+
+HiRID records no microbiology, so ricu has no HiRID body-fluid sampling and
+HiRID uses the same transformer and parameters, as YAIB-cohorts does
+(`si_mode = "abx"`). Each record of one of ricu's HiRID antibiotics is a marker
+covering one minute, YAIB's window for a HiRID record, so treatment is sustained
+while records are at most `max_gap` apart. HiRID's `death` is the `MEDS_DEATH`
+event that extraction places at the end of monitoring of a patient discharged
+dead; a HiRID subject is one ICU admission.
 
 For the missing eICU death events described in
 [issue #84](https://github.com/aidh-ms/WeavEHR/issues/84), we use the earliest

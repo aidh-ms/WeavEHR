@@ -101,7 +101,33 @@ ANTIBIOTICS_CASES = [
 ]
 
 
-@pytest.mark.parametrize("case", ANTIBIOTICS_CASES, ids=lambda case: f"{case.concept} {case.table}: {case.note}")
+# The unit a site reports a lab result in (labmeasurenameinterface, the column ricu reads the
+# unit from) decides whether it converts to the concept unit; labmeasurenamesystem in the code
+# does not.
+CALCIUM_CASES = [
+    Case(
+        concept="calcium",
+        table="lab",
+        event="LAB",
+        code="LAB//calcium//mg/dL",
+        value=value,
+        extra={"labmeasurenameinterface": interface},
+        expect=[{"numeric_value": expected}],
+        rel=1e-3,
+        note=note,
+    )
+    for interface, value, expected, note in [
+        ("mmol/L", 2.5, 10.02, "calcium 40.078 g/mol: 2.5 mmol/L is 10.0 mg/dL"),
+        ("MMOL/l", 2.5, 10.02, "the reported unit is matched in any case"),
+        ("mg/dL", 9.0, 9.0, "a value reported in mg/dL is kept"),
+        (None, 9.0, 9.0, "a value without a reported unit is kept"),
+    ]
+]
+
+
+@pytest.mark.parametrize(
+    "case", [*ANTIBIOTICS_CASES, *CALCIUM_CASES], ids=lambda case: f"{case.concept} {case.table}: {case.note}"
+)
 def test_mapping_case(case: Case) -> None:
     check_case(case, dataset=DATASET, version=VERSION)
 
@@ -400,6 +426,62 @@ def test_sepsis_chain_uses_both_antibiotic_sources_and_death(tmp_path: Path, dea
             outputs[name],
             [{"subject_id": subject, "time": time, "numeric_value": 1} for subject in subjects],
             context=name,
+        )
+
+
+@pytest.mark.parametrize(
+    ("interface_unit", "expected"),
+    [
+        ("L/min", None),
+        ("l/min", None),
+        (" L / min ", None),
+        ("mm(hg)", None),
+        (" MM (Hg) ", None),
+        ("mmHg", None),
+        ("mm Hg", None),
+        ("%", 40.0),
+        (None, 40.0),
+    ],
+)
+def test_fio2_filters_lab_rows_by_reported_unit(
+    tmp_path: Path,
+    interface_unit: str | None,
+    expected: float | None,
+) -> None:
+    """Exclude flow and pressure readings from lab FiO2, even when the system unit is %."""
+    row = FIO2_SOURCES["lab"](Fio2Text("40", 40, 40, "unit filtering"))
+    row["labmeasurenameinterface"] = interface_unit
+
+    ((event, extracted),) = extract_native(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        table="lab",
+        rows=[row],
+        joins=PATIENT_JOIN,
+    ).items()
+
+    result = map_rows(
+        "fraction_of_inspired_oxygen",
+        dataset=DATASET,
+        version=VERSION,
+        table="lab",
+        event=event,
+        rows=extracted.to_dicts(),
+    )
+
+    if expected is None:
+        assert result.is_empty()
+    else:
+        assert_rows(
+            result,
+            [
+                {
+                    "code": "fraction_of_inspired_oxygen//%",
+                    "numeric_value": expected,
+                    "text_value": "40",
+                }
+            ],
         )
 
 
