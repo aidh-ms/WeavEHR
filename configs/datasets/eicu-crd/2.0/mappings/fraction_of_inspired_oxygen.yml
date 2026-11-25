@@ -2,10 +2,9 @@
 # Convert numeric fractions in [0.2, 1] to percent.
 # Recover percentage text when the numeric value is absent; retain source text
 # and numeric values outside the conversion interval without range filtering.
-# ricu 0.6.3 reads the charted text with percent_as_numeric (as.numeric() after removing
-# "%"), does not convert fractions such as 0.4 (its 21-100 % limits then drop them) and
-# sets lab FiO2 to missing where the unit matches mm(hg).
-# Implementation difference; not reported upstream.
+# ricu 0.6.3 strips "%" from respiratory chart text and applies 21–100% limits,
+# so a fraction such as 0.4 is dropped. This mapping converts 0.4 to 40%.
+# Both mappings exclude mm(hg)-labelled lab values from numeric FiO2.
 type: simple
 mappings:
   - pattern:

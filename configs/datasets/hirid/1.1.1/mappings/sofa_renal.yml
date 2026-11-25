@@ -4,4 +4,6 @@ concepts:
   - urine_output.1.0.0
   - creatinine.1.0.0
 kwargs:
+  # Keep this gap at or below the 12 h cap in urine_output.yml. A larger gap
+  # would count hours beyond the volume estimate as covered.
   urine_output_gap: 12h

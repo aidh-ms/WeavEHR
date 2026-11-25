@@ -97,6 +97,9 @@ to 4,622. These are daily volume comparisons. Renal SOFA evaluates trailing
 The HiRID renal SOFA mapping sets `urine_output_gap: 12h`. A gap over 12 h
 between emitted urine volumes starts a new segment. The urine component becomes
 available once that segment spans 24 h and the latest volume is at most 12 h old.
+At assessment time `t`, the 24 h sum counts each interval's full estimated volume
+if its chart time falls in `(t − 24 h, t]`, even when the interval began before
+the window. Hours after the latest reading contribute no volume.
 Creatinine can still supply the renal score while urine coverage is incomplete.
 
 A sensitivity analysis evaluated each distinct urine-volume or creatinine event,
