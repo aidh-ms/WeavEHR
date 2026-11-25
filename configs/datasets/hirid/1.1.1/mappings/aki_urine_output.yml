@@ -1,0 +1,9 @@
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.aki.AkiUrineOutputTransformer
+concepts:
+  - urine_output.1.0.0
+  - patient_weight.1.0.0
+kwargs:
+  # Each estimated interval volume is counted at its chart time. Break all
+  # windows at gaps longer than the shortest (6 h) AKI assessment window.
+  urine_output_gap: 6h
