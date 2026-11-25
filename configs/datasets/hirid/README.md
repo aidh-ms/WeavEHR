@@ -63,7 +63,7 @@ concept's declared `unit` before being applied.
 Currently mapped (`simple` unless noted): the laboratory panels (blood gas,
 chemistry, haematology) from `observations`, vital signs, GCS components
 (eye/motor/verbal) and RASS, height/weight, the demographics (`patient_sex`,
-`patient_age`) and `death` from `general`, antibiotics from `pharma`, and
+`patient_age`) from `general`, antibiotics from `pharma`, and
 ventilation start/end and the GCS correction from the airway code. The
 HiRID-ICU-Benchmark variable reference lists lymphocytes only as a count
 ("Lymphocytes [#/volume] in Blood", `lymphocytes_absolute`); `lymphocytes` (%)
@@ -141,8 +141,8 @@ mapping does not use. [HiRID benchmark variable reference](https://github.com/ra
 `aki` combines `aki_creatinine` with `aki_urine_output`. The urine criterion
 uses measured body weight and the interval volumes described above. Each volume
 counts in full at its chart time, including volumes that cross a window boundary.
-A gap over 6 h between emitted volumes breaks coverage for all three urine
-windows (6, 12 and 24 h). This keeps the maximum gap within the shortest
+A gap over 6 h between urine readings, or a reading with an unknown amount (see
+above), breaks coverage for all three urine windows (6, 12 and 24 h). This keeps the maximum gap within the shortest
 assessment window. Creatinine can still provide a stage during these gaps.
 
 ### Other mappings

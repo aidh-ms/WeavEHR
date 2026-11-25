@@ -699,7 +699,7 @@ def test_sepsis_chain_uses_sustained_antibiotics_and_death(tmp_path: Path) -> No
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["antibiotics", "death", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
+        concepts=["antibiotics", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
         mapping_overrides=sofa_component_stubs(),
         sources={
             "pharma/PHARMA": [
@@ -720,7 +720,6 @@ def test_sepsis_chain_uses_sustained_antibiotics_and_death(tmp_path: Path) -> No
         },
     )
 
-    assert_rows(outputs["death"], [{"subject_id": 3, "time": at(20)}], context="death")
     for name, time in [("suspected_infection", at(0)), ("sepsis3", at(1))]:
         assert_rows(outputs[name], [{"subject_id": subject, "time": time} for subject in (1, 3)], context=name)
 
@@ -817,14 +816,15 @@ def test_aki_from_intermittent_urine_rates_and_creatinine(tmp_path: Path) -> Non
         },
     )
     # Each three-hour interval contributes 60 mL. Coverage starts at the first
-    # emitted volume (3 h) and resets across the final eight-hour gap.
-    urine_stages = [(9, 1), (12, 1), (15, 2), (18, 2), (21, 2), (24, 2), (27, 3)]
+    # reading (0 h), whose own amount is unknown, and resets across the final
+    # eight-hour gap.
+    urine_stages = [(6, 1), (9, 1), (12, 2), (15, 2), (18, 2), (21, 2), (24, 3), (27, 3)]
     assert_rows(
         outputs["aki_urine_output"],
         [{"time": ADMISSION + timedelta(hours=h), "numeric_value": stage} for h, stage in urine_stages],
         context="HiRID urine AKI",
     )
-    combined_stages = [(0, 0), (3, 2), (9, 2), (12, 2), (15, 2), (18, 2), (21, 2), (24, 2), (27, 3)]
+    combined_stages = [(0, 0), (3, 2), (6, 2), (9, 2), (12, 2), (15, 2), (18, 2), (21, 2), (24, 3), (27, 3)]
     assert_rows(
         outputs["aki"],
         [{"time": ADMISSION + timedelta(hours=h), "numeric_value": stage} for h, stage in combined_stages],
