@@ -160,10 +160,12 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
             text_value=pl.coalesce(pl.col("^text_value$"), pl.lit(None, dtype=pl.String)),
             numeric_value=pl.coalesce(pl.col("^numeric_value$"), pl.lit(None, dtype=pl.Float32)),
         )
-        # Limits mean the same for every concept type: out-of-range values become null.
-        lf = self._concept.limits.apply(lf)
+        # Apply the same global limit policy as simple and derived concepts.
+        lf = self._step.apply_concept_limits(self._concept, lf)
 
         extension_columns = {**self.extension_columns, **self._concept.extension_columns}
+        if "out_of_range" in extension_columns:
+            raise ValueError("out_of_range is reserved for concept limit validation")
         for col_name, col_expr in extension_columns.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
@@ -174,6 +176,7 @@ class BaseConceptTransformer(ConceptTransformerProtocol, metaclass=ABCMeta):
                 pl.col("code").cast(pl.String),
                 pl.col("numeric_value").cast(pl.Float32),
                 pl.col("text_value").cast(pl.String),
+                pl.col("out_of_range").cast(pl.Boolean),
             ]
             + [pl.col(col).cast(pl.String) for col in extension_columns]
         ).sort("subject_id", "time")

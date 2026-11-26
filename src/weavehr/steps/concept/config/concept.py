@@ -66,24 +66,65 @@ def _validate_dataset_concepts(
 
 
 class ConceptLimits(BaseModel):
-    """Configuration for concept limits.
+    """Optional inclusive numeric bounds for a harmonised concept."""
 
-    Attributes:
-        min: Minimum value for the concept.
-        max: Maximum value for the concept.
-    """
+    min: float | None = Field(
+        None,
+        allow_inf_nan=False,
+        description="Inclusive minimum value for the concept.",
+    )
+    max: float | None = Field(
+        None,
+        allow_inf_nan=False,
+        description="Inclusive maximum value for the concept.",
+    )
 
-    min: float | None = Field(None, description="Minimum value for the concept.")
-    max: float | None = Field(None, description="Maximum value for the concept.")
+    @model_validator(mode="after")
+    def _validate_bounds(self) -> Self:
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError("minimum concept limit must not exceed maximum")
+        return self
 
-    def apply(self, lf: pl.LazyFrame) -> pl.LazyFrame:
-        """Set ``numeric_value`` to null where it lies outside the limits; the rows are kept."""
+    def apply(
+        self,
+        lf: pl.LazyFrame,
+        *,
+        enabled: bool = True,
+    ) -> pl.LazyFrame:
+        """Apply concept limits without removing events.
+
+        Invalid numeric values become null and are marked by
+        ``out_of_range``. Originally missing values are not marked as
+        out of range.
+
+        Explicitly propagated upstream violations are preserved.
+        When disabled, no limit validation is performed.
+        """
+        if not enabled:
+            return lf.with_columns(pl.lit(None, dtype=pl.Boolean).alias("out_of_range"))
+
         value = pl.col("numeric_value")
+        upstream = pl.col("out_of_range").fill_null(False) if "out_of_range" in lf.collect_schema() else pl.lit(False)
+
+        if self.min is None and self.max is None:
+            return lf.with_columns(
+                pl.when(upstream).then(None).otherwise(value).alias("numeric_value"),
+                pl.when(upstream).then(True).otherwise(pl.lit(None, dtype=pl.Boolean)).alias("out_of_range"),
+            )
+
+        invalid = ~value.is_finite()
+
         if self.min is not None:
-            value = pl.when(value < self.min).then(None).otherwise(value)
+            invalid = invalid | (value < self.min)
         if self.max is not None:
-            value = pl.when(value > self.max).then(None).otherwise(value)
-        return lf.with_columns(value.alias("numeric_value"))
+            invalid = invalid | (value > self.max)
+
+        invalid = (value.is_not_null() & invalid).fill_null(False) | upstream
+
+        return lf.with_columns(
+            pl.when(invalid).then(None).otherwise(value).alias("numeric_value"),
+            invalid.alias("out_of_range"),
+        )
 
 
 class ConceptConfig(ConceptReference):

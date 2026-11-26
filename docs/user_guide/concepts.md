@@ -37,19 +37,50 @@ unit: bpm
 extension_columns:           # optional extra output columns
   dataset: col("dataset")    # provenance columns added automatically per row
   table: col("table")
-# limits: {min: 0, max: 3}   # optional; only to catch conversion errors, see below
+# limits: {min: 0}           # optional inclusive numeric bounds
 ```
 
 The output code for every matched event becomes `<name>//<unit>` (e.g. `heart_rate//bpm`). Unitless concepts omit `unit` and their code is just `<name>`: categories such as `patient_sex`, binary markers such as `antibiotics` (values mapped to `1`/`"true"`), dimensionless values such as pH, file paths and free text. `unit: None` is rejected, because YAML reads it as the string `"None"`.
 
 A unitless concept can declare `levels`, the allowed sub-types of its events, e.g. `levels: [invasive, noninvasive]` for `ventilation_start`. A simple or derived mapping sets one with `level`, and its events get the code `<name>//<level>` (e.g. `ventilation_start//invasive`). Events without a level keep the code `<name>`, so matching the prefix `<name>` finds every level. Levels are not supported for concepts with a unit.
 
-A concept can declare `limits`, a `min` and/or a `max`. A value outside them becomes null; the
-event itself is kept. Limits apply to every concept type, and there is no option yet to switch
-them off. **Limits only catch conversion errors**, such as a rate charted in mg where mcg was
-meant, and are set well beyond any clinical value. They do not clean clinical outliers: concepts
-otherwise keep every source value, including implausible ones such as an SpO2 of 101, and leave
-plausibility filtering to the analysis. So far only the vasopressor rates declare limits; see
+A concept can declare `limits`, an inclusive `min` and/or `max`,
+in its global concept definition. Limits apply to simple, derived and complex
+concepts after harmonisation.
+
+The concept step controls whether limits are applied through `apply_limits`,
+which defaults to `true`. Setting `config.apply_limits` to `false` disables
+global concept limits for all datasets and concepts processed by the step.
+
+If the concept step has already completed, changing `apply_limits` requires
+`overwrite: true` in the concept step configuration to regenerate its output.
+Otherwise, the existing concept output is reused.
+
+When enabled, numeric values outside their configured bounds become null;
+the events themselves are retained. Non-finite values are also considered
+invalid when bounds are configured.
+
+Concept outputs carry a nullable Boolean column, `out_of_range`:
+
+| Flag | Meaning |
+| --- | --- |
+| `true` | A value was invalidated by concept limits. |
+| `false` | No limit violation was detected, including originally missing values. |
+| `null` | No local limit validation was performed and no upstream violation was propagated. |
+
+This distinguishes originally missing numeric values from values invalidated
+by concept limits without changing the numeric column's data type.
+
+Transformers performing direct conversions may explicitly preserve upstream
+limit violations. The `out_of_range` column is reserved for limit validation
+and cannot be configured as a custom extension column.
+
+Limits are defined globally rather than in dataset-specific mappings.
+Dataset-specific event selection, unit conversion, structural validity
+checks and source-specific exclusions remain independent of this setting.
+
+The shipped limits primarily catch conversion errors and invalid infusion
+rates rather than general clinical outliers. See
 [Vasopressor rates](vasopressor_events.md#weights-units-and-limits).
 
 During processing, each row is annotated with `dataset`, `version`, `table`, and `event` columns describing where it came from; `extension_columns` chooses which of these (or any other [expression](expressions.md)) to keep in the output.
@@ -221,7 +252,7 @@ class VentilationWindows(BaseConceptTransformer):
 A transformer may declare `extension_columns` of its own, as expressions on its output, so
 that every concept it computes carries them without repeating them in each concept file; the
 concept's own `extension_columns` are added after these. A concept's `limits` apply to complex
-concepts as to the others: values outside them become null.
+concepts as to the others, according to the concept step's `apply_limits` setting. Out-of-range values become null and are flagged.
 
 Complex concepts don't apply levels yet: a transformer built on `BaseConceptTransformer` writes the concept code without a level. A concept's `levels` can still describe the sub-types its transformer distinguishes, as metadata that is neither applied nor checked.
 

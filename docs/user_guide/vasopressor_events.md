@@ -121,8 +121,15 @@ unknown units are dropped: no concentration, dilution or default weight is ever 
 dropped rate does not end the rate before it, as eICU, for example, charts one infusion both per
 volume and per dose. A null passes through as an unknown rate.
 
-The rate concepts declare `limits`; out-of-range values become null, as for every concept type.
+The infusion-event concept declares a non-negative lower bound, and the
+harmonised rate concepts declare their own `limits`. When `apply_limits` is
+enabled in the concept step (the default), out-of-range values become null
+and are marked with `out_of_range: true`; the events are retained.
+The rate transformer preserves upstream limit violations during conversion.
 A nulled rate is an unknown rate, so it ends the rate before it.
+
+Setting `apply_limits: false` disables these global limits without disabling
+unit conversion or structural validity checks.
 The upper limits catch mislabelled units, the main source of implausible values, rather than
 unusual dosing:
 

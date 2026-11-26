@@ -16,6 +16,7 @@ import pytest
 
 from weavehr.steps.concept.config.complex import ComplexDatasetConceptConfig
 from weavehr.steps.concept.config.concept import ConceptConfig, ConceptLimits
+from weavehr.steps.concept.config.step import ConceptStepConfig
 from weavehr.steps.concept.step import ConceptStep
 from weavehr.steps.concept.transformer.base import BaseConceptTransformer
 
@@ -27,9 +28,24 @@ DATASET_VERSION = "1.0"
 class Step:
     """Minimal stand-in for the concept step: a registry and an output root."""
 
-    def __init__(self, root: Path, *concepts: ConceptConfig) -> None:
+    apply_concept_limits = ConceptStep.apply_concept_limits
+
+    def __init__(
+        self,
+        root: Path,
+        *concepts: ConceptConfig,
+        apply_limits: bool = True,
+    ) -> None:
         self._registry = {concept.identifier: concept for concept in concepts}
         self._root = root
+        self._config = ConceptStepConfig(
+            name="Concept",
+            version="1.0.0",
+            config={
+                "extraction_step": "Extraction",
+                "apply_limits": apply_limits,
+            },
+        )
 
     def concept_output_file(self, concept: ConceptConfig, dataset: str, version: str) -> Path:
         return self._root / concept.name / concept.version / dataset / f"{version}.parquet"
@@ -133,7 +149,8 @@ class Flagging(Recording):
     extension_columns = {"flag": 'const("set")', "dataset": 'const("transformer")'}
 
 
-def test_transformer_extension_columns_and_concept_limits_apply(tmp_path: Path) -> None:
+@pytest.mark.parametrize("apply_limits", [True, False])
+def test_transformer_extension_columns_and_concept_limits_apply(tmp_path: Path, apply_limits: bool) -> None:
     concept = ConceptConfig(
         name="derived",
         version="1.0.0",
@@ -142,15 +159,20 @@ def test_transformer_extension_columns_and_concept_limits_apply(tmp_path: Path) 
         extension_columns={"dataset": 'col("dataset")'},
     )
     creatinine = source("creatinine")
-    step = Step(tmp_path, creatinine)
+    step = Step(tmp_path, creatinine, apply_limits=apply_limits)
     write_output(step, creatinine, -1.0, 2.0, 50.0)
 
     Flagging(concept, config(creatinine.identifier), cast(ConceptStep, step))()
     written = output_of(step, concept)
 
-    # Out of limits: the value becomes null and the row stays, as for simple concepts.
-    assert written["numeric_value"].null_count() == 2
-    assert written["numeric_value"].drop_nulls().to_list() == [2.0]
+    assert written.height == 3
+
+    if apply_limits:
+        assert written["numeric_value"].to_list() == [None, 2.0, None]
+        assert written["out_of_range"].to_list() == [True, False, True]
+    else:
+        assert written["numeric_value"].to_list() == [-1.0, 2.0, 50.0]
+        assert written["out_of_range"].to_list() == [None, None, None]
     assert written["flag"].to_list() == ["set"] * 3
     assert written["dataset"].to_list() == [DATASET] * 3  # the concept's own expression wins
 

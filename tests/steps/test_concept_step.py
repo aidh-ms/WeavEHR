@@ -768,3 +768,53 @@ config:
         shard = pl.read_parquet(project.datasets_path / "sharding" / "data" / "shard_00000.parquet")
         assert shard["code"].unique().to_list() == ["heart_rate//bpm"]
         assert sorted(shard["numeric_value"].to_list()) == expected
+
+
+@pytest.mark.parametrize("apply_limits", [True, False])
+def test_configurable_global_limits(
+    tmp_path: Path,
+    extraction_config: Path,
+    concept_config: Path,
+    apply_limits: bool,
+) -> None:
+    """Global limits follow the step configuration for simple and derived concepts."""
+    config = tmp_path / "config"
+    dataset = config / "testdb" / "1.0"
+
+    for name, maximum in (("heart_rate", 81), ("bmi", 25)):
+        path = config / "concepts" / f"{name}.yml"
+        definition = yaml.safe_load(path.read_text())
+        definition["limits"] = {"max": maximum}
+        path.write_text(yaml.safe_dump(definition))
+
+    step_config = yaml.safe_load(concept_config.read_text())
+    step_config["config"]["apply_limits"] = apply_limits
+    concept_config.write_text(yaml.safe_dump(step_config))
+
+    load_extracation_config(dataset / "tables")
+    load_concept_config(config / "concepts", [dataset / "mappings"])
+
+    project = WeavEHRProject(tmp_path / "project")
+    ExtractionStep.load(project, extraction_config).run()
+    ConceptStep.load(project, concept_config).run()
+
+    heart_rate = pl.read_parquet(concept_path(project, "heart_rate")).sort("time")
+
+    bmi = pl.read_parquet(concept_path(project, "bmi")).sort("subject_id")
+
+    assert heart_rate.height == 2
+    assert bmi.height == 2
+
+    assert heart_rate.schema["out_of_range"] == pl.Boolean
+    assert bmi.schema["out_of_range"] == pl.Boolean
+
+    if apply_limits:
+        assert heart_rate["numeric_value"].to_list() == [80.0, None]
+        assert bmi["numeric_value"].to_list() == [20.0, None]
+        assert heart_rate["out_of_range"].to_list() == [False, True]
+        assert bmi["out_of_range"].to_list() == [False, True]
+    else:
+        assert heart_rate["numeric_value"].to_list() == [80.0, 82.0]
+        assert bmi["numeric_value"].to_list() == pytest.approx([20.0, 26.666666], abs=1e-4)
+        assert heart_rate["out_of_range"].to_list() == [None, None]
+        assert bmi["out_of_range"].to_list() == [None, None]

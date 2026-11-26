@@ -32,10 +32,18 @@ class CustomConfig(BaseModel):
 
     Attributes:
         extraction_step: Name of the extraction step
+        apply_limits: Whether to apply global concept limits
         mapping_configs: List of dataset-specific concept configuration values
     """
 
     extraction_step: str = Field(description="Name of the extraction step.")
+    apply_limits: bool = Field(
+        default=True,
+        description=(
+            "Apply global concept limits, setting out-of-range numeric values "
+            "to null and flagging them without removing events."
+        ),
+    )
     mapping_configs: list[DatasetConfig] = Field(
         default_factory=list, description="List of mapping-specific concept configuration values."
     )

@@ -3,6 +3,9 @@ version: 1.0.0
 
 config:
   extraction_step: Extraction
+  # Set out-of-range numeric values to null and flag them.
+  # Events are retained regardless of this setting.
+  apply_limits: true
   mapping_configs:
     - name: mimic-iv
       version: "3.1"

@@ -46,7 +46,6 @@ mappings:
             max(available_time, time))
       filters:
         - col(given)
-        - numeric_value == None or numeric_value >= 0
 
   - level: epinephrine
     pattern: {table: pharma, event: PHARMA, code: '^(?:1000649|1000650)(?:$|//)'}
