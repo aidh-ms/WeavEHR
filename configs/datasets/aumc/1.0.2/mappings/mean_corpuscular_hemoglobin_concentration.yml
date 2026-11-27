@@ -1,0 +1,14 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6783: M.C.H.C. [mmol/l]
+#   11910: MCHC (bloed)-LabZis2 [mmol/cel]
+#   18666: MCHC (bloed) [mmol/cel]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6783|11910|18666)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value) * 1.611
+      text_value: col(text_value)

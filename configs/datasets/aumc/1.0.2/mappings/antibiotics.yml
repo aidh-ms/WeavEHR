@@ -1,0 +1,41 @@
+# Same systemic antibiotic selection as 1.5.0, including route/category restrictions.
+# Topical/eye and selective-decontamination products are excluded; IV cefotaxime is retained.
+# ricu abx also contains record counts mistaken for item IDs; those are not used here.
+type: simple
+mappings:
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(6834|6847|6871|6917|6919|6948|6953|6958|7044|7064|7123|7185|7187|7208|7227|7235|8127|8394|9029|9030|9047|9128|9133|9151|9152|12398|19137|19773)(//.*)?$
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
+    filters:
+      - ordercategoryid == 15
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(6847|6948|6953|6958|7044|7064|7187|7208|8546|9029|9052|12398|13057|19137)(//.*)?$
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
+    filters:
+      - ordercategoryid == 21
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(8942)(//.*)?$
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
+    filters:
+      - ordercategoryid == 55
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(6847|6871|7064|7227|8127)(//.*)?$
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
+    filters:
+      - ordercategoryid == 65

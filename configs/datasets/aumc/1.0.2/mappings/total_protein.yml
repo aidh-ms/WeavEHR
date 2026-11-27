@@ -1,0 +1,15 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6826: Eiwit totaal [g/l]
+#   8908: Serum Eiwit [g/l]
+#   9939: Pls.Totaal Eiwit (bloed) [g/l]
+#   10051: Serum Totaal Eiwit (bloed) [g/l]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6826|8908|9939|10051)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value) / 10
+      text_value: col(text_value)

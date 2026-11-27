@@ -1,0 +1,19 @@
+# ricu samp items, with SDD/MRSA/research screening excluded from suspected infection, as in 1.5.0.
+type: simple
+mappings:
+  - pattern:
+      table: procedureorderitems
+      event: PROCEDURE_ORDER
+      code: ^(8097|8418|9189|9190|9191|9192|9193|9194|9195|9197|9198|9200|9202|9203|9205)(//.*)?$
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
+    level: diagnostic
+  - pattern:
+      table: procedureorderitems
+      event: PROCEDURE_ORDER
+      code: ^(8588|9204|13024|19663|19664)(//.*)?$
+    columns:
+      numeric_value: const(1)
+      text_value: col(text_value)
+    level: screening

@@ -1,0 +1,46 @@
+# Procedure orders are dated at registration, as in ricu; they are not completed-procedure markers.
+path: procedureorderitems.csv
+columns:
+  - name: admissionid
+    type: int64
+  - name: orderid
+    type: int64
+  - name: ordercategoryid
+    type: int64
+  - name: ordercategoryname
+    type: string
+  - name: itemid
+    type: int64
+  - name: item
+    type: string
+  - name: registeredat
+    type: int64
+  - name: registeredby
+    type: string
+join:
+  - path: admissions.csv
+    columns:
+      - name: admissionid
+        type: int64
+      - name: patientid
+        type: int64
+    both_on:
+      - admissionid
+event_defaults:
+  subject_id: col(patientid)
+  time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), registeredat, offset_unit="milliseconds")
+  extension:
+    admissionid: col(admissionid)
+    orderid: col(orderid)
+    ordercategoryid: col(ordercategoryid)
+    ordercategoryname: col(ordercategoryname)
+    available_time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), registeredat, offset_unit="milliseconds")
+    registeredby: col(registeredby)
+events:
+  - name: PROCEDURE_ORDER
+    columns:
+      code:
+        - col(itemid)
+        - col(item)
+    filters:
+      - drop_na(time)

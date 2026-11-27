@@ -1,0 +1,24 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6707: End tidal CO2 concentratie [mmHg]
+#   8885: End Tidal CO2 mmHG [mmHg]
+#   12356: End tidal CO2 concentratie (2) [mmHg]
+#   8884: End Tidal CO2 % [None]
+#   9658: End Tidal CO2% (2) [None]
+#   12805: EtCO2 (%) [Geen]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6707|8885|12356)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(8884|9658|12805)(//.*)?$
+    columns:
+      numeric_value: replace(numeric_value <= 15, numeric_value * 7.6, numeric_value)
+      text_value: col(text_value)

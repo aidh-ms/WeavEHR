@@ -1,0 +1,9 @@
+# Shared transformer and settings as in AUMCdb 1.5.0, applied to native inputs.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sepsis.AntibioticsWithCultureTransformer
+concepts:
+  - antibiotics.1.0.0
+  - body_fluid_sampling.1.0.0
+kwargs:
+  sampling_levels:
+    - diagnostic

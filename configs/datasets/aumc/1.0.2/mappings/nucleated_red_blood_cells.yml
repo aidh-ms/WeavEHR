@@ -1,0 +1,13 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   11490: ERYTHROBL. (bloed) [/100 leuc]
+#   11539: Erythroblasten (bloed) [/100 leuc]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(11490|11539)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)

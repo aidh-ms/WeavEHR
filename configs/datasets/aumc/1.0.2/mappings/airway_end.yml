@@ -1,0 +1,25 @@
+# Tube and tracheostomy processes with recorded endpoints; no stop is inferred for a spot observation.
+type: simple
+mappings:
+  - pattern:
+      table: processitems
+      event: PROCESS_END
+      code: ^(12634)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+      extension:
+        stay_id: col(admissionid)
+        record_id: col(record_id)
+    level: endotracheal_tube
+  - pattern:
+      table: processitems
+      event: PROCESS_END
+      code: ^(12635)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+      extension:
+        stay_id: col(admissionid)
+        record_id: col(record_id)
+    level: tracheostomy

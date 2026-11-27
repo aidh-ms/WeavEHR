@@ -1,0 +1,15 @@
+# Native admission gender, as in ricu; unknown values are not assigned a sex.
+type: simple
+mappings:
+  - pattern:
+      table: admissions
+      event: GENDER
+      code: ^Vrouw$
+    columns:
+      text_value: const("Female")
+  - pattern:
+      table: admissions
+      event: GENDER
+      code: ^Man$
+    columns:
+      text_value: const("Male")

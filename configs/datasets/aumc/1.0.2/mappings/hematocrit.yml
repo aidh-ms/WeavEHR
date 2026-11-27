@@ -1,0 +1,14 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6777: Hematocriet [l]
+#   11423: Ht (bloed) [Geen]
+#   11545: Ht(v.Bgs) (bloed) [Geen]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6777|11423|11545)(//.*)?$
+    columns:
+      numeric_value: replace(numeric_value <= 1, numeric_value * 100, numeric_value)
+      text_value: col(text_value)

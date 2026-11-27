@@ -2,7 +2,7 @@
 
 Configurations for [HiRID](https://physionet.org/content/hirid/1.1.1/), the
 high time-resolution ICU dataset from Bern University Hospital (requires
-credentialed PhysioNet access). Unlike [AmsterdamUMCdb](../aumc/), HiRID is read
+credentialed PhysioNet access). Unlike [AmsterdamUMCdb 1.5.0](../aumc/), HiRID is read
 in its **native long format**, not through an OMOP export — so it ships its own
 table configs rather than extending the [`omop` reference](../omop/).
 

@@ -1,0 +1,19 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   8658: Temp Bloed [°C]
+#   13058: Temp Rectaal [°C]
+#   13060: Temp Axillair [°C]
+#   13061: Temp Oraal [°C]
+#   13062: Temp Oor [°C]
+#   13952: Temp Blaas [°C]
+#   14047: PiCCO Tb blood temperature [°C]
+#   16110: Temp Oesophagus [°C]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(8658|13058|13060|13061|13062|13952|14047|16110)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)

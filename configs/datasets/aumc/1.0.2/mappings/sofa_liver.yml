@@ -1,0 +1,5 @@
+# Shared transformer and settings as in AUMCdb 1.5.0, applied to native inputs.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaLiverTransformer
+concepts:
+  - total_bilirubin.1.0.0

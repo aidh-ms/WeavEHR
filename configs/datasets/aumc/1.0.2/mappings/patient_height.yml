@@ -1,0 +1,15 @@
+# Admission group representatives from ricu; original group is kept as text_value.
+type: simple
+mappings:
+  - pattern:
+      table: admissions
+      event: HEIGHT
+      code: ^HEIGHT$
+    columns:
+      numeric_value: replace(text_value == "159-", 150, replace(text_value == "160-169", 165, replace(text_value
+        == "170-179", 175, replace(text_value == "180-189", 185, replace(text_value == "190+", 200, None)))))
+      text_value: col(text_value)
+      extension:
+        stay_id: col(admissionid)
+    filters:
+      - drop_na(numeric_value)

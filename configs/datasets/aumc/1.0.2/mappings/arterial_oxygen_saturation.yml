@@ -1,0 +1,12 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   12311: O2-Saturatie (bloed) [Geen]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(12311)(//.*)?$
+    columns:
+      numeric_value: replace(numeric_value <= 1.5, numeric_value * 100, numeric_value)
+      text_value: col(text_value)

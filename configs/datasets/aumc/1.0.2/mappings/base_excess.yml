@@ -1,0 +1,14 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6807: B.E. [mmol/l]
+#   9994: B.E. (bloed) [mmol/l]
+# A separate minus tag carries the sign of positive magnitudes (ricu aumc_bxs).
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6807|9994)(//.*)?$
+    columns:
+      numeric_value: replace((tag == "-") and (numeric_value > 0), -numeric_value, numeric_value)
+      text_value: col(text_value)

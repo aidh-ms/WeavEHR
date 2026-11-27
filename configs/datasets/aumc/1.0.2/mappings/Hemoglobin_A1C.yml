@@ -1,0 +1,20 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   11812: HbA1c (bloed) [Geen]
+#   16166: HbA1c  (bloed) [mmol/mol]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(11812)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(16166)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value) * 0.09148 + 2.152
+      text_value: col(text_value)

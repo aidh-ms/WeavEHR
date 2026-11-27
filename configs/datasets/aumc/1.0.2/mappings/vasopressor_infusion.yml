@@ -1,0 +1,118 @@
+# Syringe-pump (category 65) dose-rate segments, from ricu and the official SOFA extraction.
+# doseunit + doserateperkg + doserateunit describe the dose rate; rate/rateunit describe fluid.
+# Never infer a dose from fluid rate or turn boluses into continuous rates.
+# Distinct segment IDs preserve rate changes and overlapping pumps when their ends coincide.
+type: simple
+mappings:
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(7229)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: norepinephrine
+    filters: &id001
+      - drop_na(dose)
+      - ordercategoryid == 65
+      - (doserateperkg == 0) or (doserateperkg == 1)
+      - drop_na(doseunit)
+      - drop_na(doserateunit)
+      - str_contains(doseunit, "(?i)^(mg|µg|μg|mcg|ug|g|ng)$")
+      - str_contains(doserateunit, "(?i)^(min|uur|h|hr|hour|s)$")
+      - drop_na(numeric_value)
+  - pattern:
+      table: drugitems
+      event: DRUG_END
+      code: ^(7229)(//.*)?$
+    columns:
+      numeric_value: const(0)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: norepinephrine
+    filters: *id001
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(6818)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: epinephrine
+    filters: *id001
+  - pattern:
+      table: drugitems
+      event: DRUG_END
+      code: ^(6818)(//.*)?$
+    columns:
+      numeric_value: const(0)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: epinephrine
+    filters: *id001
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(7179)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: dopamine
+    filters: *id001
+  - pattern:
+      table: drugitems
+      event: DRUG_END
+      code: ^(7179)(//.*)?$
+    columns:
+      numeric_value: const(0)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: dopamine
+    filters: *id001
+  - pattern:
+      table: drugitems
+      event: DRUG_START
+      code: ^(7178)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: dobutamine
+    filters: *id001
+  - pattern:
+      table: drugitems
+      event: DRUG_END
+      code: ^(7178)(//.*)?$
+    columns:
+      numeric_value: const(0)
+      text_value: col(text_value)
+      extension:
+        rate_unit: concat_str(doseunit, replace(doserateperkg == 1, "/kg/", "/"), doserateunit)
+        stay_id: cast(admissionid, "string")
+        stream_id: col(record_id)
+    level: dobutamine
+    filters: *id001

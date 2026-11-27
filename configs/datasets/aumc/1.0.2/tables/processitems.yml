@@ -1,0 +1,48 @@
+# Native process intervals have no row ID; their admission, item and endpoints link start to stop.
+path: processitems.csv
+columns:
+  - name: admissionid
+    type: int64
+  - name: itemid
+    type: int64
+  - name: item
+    type: string
+  - name: start
+    type: int64
+  - name: stop
+    type: int64
+  - name: duration
+    type: int64
+join:
+  - path: admissions.csv
+    columns:
+      - name: admissionid
+        type: int64
+      - name: patientid
+        type: int64
+    both_on:
+      - admissionid
+event_defaults:
+  subject_id: col(patientid)
+  extension:
+    admissionid: col(admissionid)
+    duration: col(duration)
+    record_id: concat_str("processitems:", admissionid, ":", itemid, ":", start, ":", replace(stop == None, "open",
+      cast(stop, "string")))
+events:
+  - name: PROCESS_START
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), start, offset_unit="milliseconds")
+      code:
+        - col(itemid)
+        - col(item)
+    filters:
+      - drop_na(time)
+  - name: PROCESS_END
+    columns:
+      time: add_offset(to_datetime(2000, 1, 1, "00:00:00"), stop, offset_unit="milliseconds")
+      code:
+        - col(itemid)
+        - col(item)
+    filters:
+      - drop_na(time)

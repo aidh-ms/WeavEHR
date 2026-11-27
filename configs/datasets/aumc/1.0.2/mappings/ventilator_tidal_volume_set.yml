@@ -1,0 +1,24 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   12291: Teugvolume (Set) [ml]
+#   8851: Tidal Volume (Set) [ml]
+#   9646: Tidal Volume (set)(2) [ml]
+# 8851/9646 are labelled ml but store litres; 2.0 l device maxima are excluded, as in 1.5.0.
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(12291)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(8851|9646)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value) * 1000
+      text_value: col(text_value)
+    filters:
+      - drop_if(col(numeric_value) == 2000)

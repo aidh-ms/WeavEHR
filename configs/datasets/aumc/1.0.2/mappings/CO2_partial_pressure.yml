@@ -1,0 +1,21 @@
+# AUMCdb 1.0.2 native numericitems; same source selection/conversions as the 1.5.0 mapping.
+# Item IDs and labels checked against the legacy dictionary and reprodICU/AMSTEL mappings.
+#   6846: PCO2 [mmHg]
+#   9990: pCO2 (bloed) [mmHg]
+#   21213: PCO2 (bloed) - kPa [kPa]
+type: simple
+mappings:
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(6846|9990)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value)
+      text_value: col(text_value)
+  - pattern:
+      table: numericitems
+      event: NUMERIC
+      code: ^(21213)(//.*)?$
+    columns:
+      numeric_value: col(numeric_value) * 7.50062
+      text_value: col(text_value)
