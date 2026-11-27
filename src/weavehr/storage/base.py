@@ -27,14 +27,26 @@ class FileStorage:
         self,
         path: Path,
         overwrite: bool = False,
+        *,
+        read_only: bool = False,
     ) -> None:
         """Initialize the file storage.
 
         Args:
             path: Directory path to manage
             overwrite: If True, remove existing directory before creating
+            read_only: Open an existing directory without modifying it
         """
         self._path = path
+        self._read_only = read_only
+
+        if read_only:
+            if overwrite:
+                raise ValueError("Cannot overwrite read-only storage")
+            if not path.is_dir():
+                path.stat()  # Propagate filesystem errors, including FileNotFoundError for a missing project.
+                raise NotADirectoryError(f"Expected a storage directory: {path}")
+            return
 
         logger.debug(
             "Initializing storage at %s with overwrite=%s",
@@ -49,11 +61,17 @@ class FileStorage:
 
         self._path.mkdir(parents=True, exist_ok=True)
 
+    def require_writable(self) -> None:
+        """Raise before an operation that would modify read-only storage."""
+        if self._read_only:
+            raise PermissionError(f"Storage is read-only: {self.path}")
+
     def cleanup(self) -> None:
         """Remove the managed directory and all its contents.
 
         Uses shutil.rmtree to recursively delete the directory if it exists.
         """
+        self.require_writable()
         if self._path.exists():
             logger.debug("Removing directory at %s", self._path)
             rmtree(self._path)

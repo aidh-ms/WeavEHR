@@ -28,7 +28,7 @@ single expression, so multi-stage features (segmentation, completeness flags)
 are expressible; helper columns are namespaced ``__`` and dropped again.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from copy import copy
 from logging import ERROR, WARNING
 from re import escape
@@ -48,6 +48,11 @@ logger = get_logger(__name__)
 
 _SUBJECT = "subject_id"
 _TIME = "time"
+
+
+def _grid_value() -> pl.Expr:
+    """Round MEDS Float32 inputs to six significant digits before Float64 window arithmetic."""
+    return pl.col("numeric_value").cast(pl.Float64).round_sig_figs(6)
 
 
 def _event(name: str) -> str:
@@ -215,7 +220,7 @@ class ActiveState(Aggregation):
             events.select(
                 pl.col(_SUBJECT).cast(pl.Int64),
                 pl.col(_TIME).cast(pl.Datetime("us")),
-                pl.col("numeric_value").cast(pl.Float32).alias("__value"),
+                _grid_value().alias("__value"),
                 _optional_string(self._stay_column).alias("__stay"),
                 _optional_string(self._id_column).alias("__state"),
                 self._stop_when.fill_null(False).alias("__is_stop"),
@@ -326,6 +331,12 @@ class SegmentedRollingSum(_Rolling):
     missingness. Where they do not, the input reads as missing and the concept
     can fall back to its other inputs.
 
+    A record without a value is an amount known to be unknown, e.g. urine
+    collected over an interval whose source rate was out of range. Counting it
+    as nothing would read the interval as anuria, so it opens a new segment at
+    its time instead: no window reaching back across it is reported. It decides
+    its timestamp even where another record of the input has a value then.
+
     ``gap`` defaults to ``window``.
     """
 
@@ -334,10 +345,12 @@ class SegmentedRollingSum(_Rolling):
         self._gap = gap or window
 
     def collapse(self, col: str) -> pl.Expr:
-        return pl.when(pl.col(col).is_not_null().any()).then(pl.col(col).sum()).otherwise(None)
+        unknown = (pl.col(_event(col)).is_not_null() & pl.col(col).is_null()).any()
+        return pl.when(unknown).then(None).when(pl.col(col).is_not_null().any()).then(pl.col(col).sum()).otherwise(None)
 
     def align(self, lf: pl.LazyFrame, col: str) -> pl.LazyFrame:
         last, start = f"__last_{col}", f"__segment_start_{col}"
+        unknown = pl.col(_present(col)) & pl.col(col).is_null()
 
         # time of the most recent record of this input at or before t; the grid
         # is unique per (subject, time), so its value one row back is the
@@ -346,8 +359,8 @@ class SegmentedRollingSum(_Rolling):
             pl.when(pl.col(_present(col))).then(pl.col(_TIME)).otherwise(None).forward_fill().over(_SUBJECT).alias(last)
         )
 
-        # a record opens a new segment if nothing precedes it or the preceding
-        # record is more than `gap` old
+        # a record opens a new segment if nothing precedes it, the preceding
+        # record is more than `gap` old or its own amount is unknown
         lf = lf.with_columns(
             pl.when(
                 pl.col(_present(col))
@@ -355,6 +368,7 @@ class SegmentedRollingSum(_Rolling):
                     pl.col(last).shift(1).over(_SUBJECT).is_null()
                     | (pl.col(last).shift(1).over(_SUBJECT) < _ago(self._gap))
                 )
+                | unknown
             )
             .then(pl.col(_TIME))
             .otherwise(None)
@@ -455,7 +469,10 @@ class WindowedConceptTransformer(BaseConceptTransformer):
 
     A declared input that is absent from the dependency mapping is treated as
     never measured, so a concept degrades gracefully on datasets that do not
-    carry all of its inputs.
+    carry all of its inputs. Such an input is logged as a warning, since it
+    usually means a dependency is misnamed, unless it is optional: the class
+    declares it so, or the mapping's ``optional_inputs`` names the inputs its
+    dataset does not have.
     """
 
     #: concept name -> aggregation carrying it onto the grid
@@ -477,8 +494,20 @@ class WindowedConceptTransformer(BaseConceptTransformer):
         *,
         inputs: dict[str, Aggregation] | None = None,
         triggers: set[str] | None = None,
+        optional_inputs: Collection[str] | None = None,
         **kwargs,
     ) -> None:
+        """Bind the transformer and settle its inputs.
+
+        Args:
+            inputs: Replace the class's ``inputs``; otherwise ``build_inputs`` supplies them.
+            triggers: Replace the class's ``triggers``.
+            optional_inputs: Further inputs the mapping's dataset does not have, exempt
+                from the missing-input warning; each must be one of the inputs.
+
+        Raises:
+            ValueError: ``optional_inputs`` names something that is not an input.
+        """
         super().__init__(concept, complex_config, step, **kwargs)
         if inputs is not None:
             self.inputs = inputs
@@ -486,6 +515,13 @@ class WindowedConceptTransformer(BaseConceptTransformer):
             self.triggers = set(triggers)
         if not self.inputs:
             self.inputs = self.build_inputs()
+        if optional_inputs is not None:
+            if unknown := sorted(set(optional_inputs) - set(self.inputs)):
+                raise ValueError(
+                    f"{type(self).__name__}: optional_inputs {unknown} are not inputs of this transformer; "
+                    f"its inputs are {sorted(self.inputs)}"
+                )
+            self.optional_inputs = self.optional_inputs | set(optional_inputs)
 
     @property
     def window(self) -> str:
@@ -612,7 +648,7 @@ class WindowedConceptTransformer(BaseConceptTransformer):
                 lf.select(
                     pl.col(_SUBJECT).cast(pl.Int64),
                     pl.col(_TIME).cast(pl.Datetime(time_unit="us")),
-                    pl.col("numeric_value").cast(pl.Float32).alias(name),
+                    _grid_value().alias(name),
                     pl.lit(1, dtype=pl.Int32).alias(_event(name)),
                     *[_optional_string(column).alias(_context(column)) for column in context],
                 )

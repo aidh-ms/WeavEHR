@@ -32,17 +32,24 @@ WeavEHR is the spiritual successor to dataset-harmonisation tools like [`ricu`](
 WeavEHR organises processing as a pipeline of **steps** that operate inside a **project** directory:
 
 ```mermaid
-flowchart LR
-    A[Raw source data<br>Parquet / CSV / CSV.GZ] -->|ExtractionStep| B[Dataset-level MEDS events<br>e.g. mimic-iv//chartevents//220045//Heart Rate//bpm]
-    B -->|ConceptStep| C[Harmonised concepts<br>e.g. heart_rate//bpm]
-    C --> D[Your analysis /<br>MEDS ecosystem tools]
+flowchart TD
+    raw["Raw source tables"] -->|ExtractionStep| native["Native MEDS events"]
+    native -->|ConceptStep| concepts["Harmonised concepts"]
+    subgraph export["Export"]
+        shards["Subject-oriented MEDS shards"]
+        selection["Interactive cohort selection"]
+    end
+    native --> shards
+    concepts --> shards
+    native --> selection
+    concepts --> selection
 ```
 
 1. **Extraction step** — reads the raw tables of each dataset (typed Parquet/CSV scan, lookup-table joins, timestamp reconstruction) and emits one MEDS event stream per configured event. Event codes preserve full provenance: `dataset//table//itemid//label//unit`.
 2. **Concept step** — maps dataset-specific event codes onto shared, dataset-agnostic clinical concepts using pattern matching (*simple* concepts), computation over other concepts and extracted events (*derived* concepts), or custom Python transformers (*complex* concepts). A dataset's mapping file may contain several YAML documents separated by `---`, each defining a mapping of any type; their outputs are combined. Concept dependencies are resolved automatically.
-3. **Sharding step** *(in development)* — re-partitions concept or extraction output into subject-oriented, analysis-ready shards; datasets that share subject IDs can be merged per subject through opt-in subject groups.
+3. **Export phase** — use `ShardingStep` to write subject-oriented MEDS shards, or call `scan_events()` to query selected concepts and native events for a cohort in Python. Both exporters read the collected outputs of earlier steps. [Export guide](docs/user_guide/export.md)
 
-Each step reads its inputs and writes its outputs as a self-contained MEDS dataset inside the project, so intermediate results are inspectable and individual steps can be re-run in isolation.
+Extraction and harmonisation each write a self-contained MEDS dataset. A later session can query these datasets directly.
 
 ## Supported datasets
 
@@ -62,7 +69,7 @@ WeavEHR ships with ready-to-use extraction and concept configurations under [`co
 | [NWICU](https://physionet.org/content/nwicu/0.1.0/) | 0.1.0 | 9 tables | in progress |
 | [OMOP CDM](https://ohdsi.github.io/CommonDataModel/) | 5.3.1, 5.4 | 11 tables (reusable model reference, read from Parquet; 5.4 extends 5.3.1) | — *(added per OMOP dataset)* |
 | [AmsterdamUMCdb](https://github.com/AmsterdamUMC/AmsterdamUMCdb) (OMOP, via [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL)) | 1.5.0 | inherited from OMOP CDM via `extends` | ~60 concepts (in progress) |
-| [HiRID](https://physionet.org/content/hirid/1.1.1/) | 1.1.1 | 3 tables (native long format) | ~60 concepts (in progress) |
+| [HiRID](https://physionet.org/content/hirid/1.1.1/) | 1.1.1 | 3 tables (native long format) | ~80 concepts (in progress) |
 | [SICdb](https://physionet.org/content/sicdb/1.0.6/) | 1.0.6 | 4 tables (native long format) | ~55 concepts (in progress) |
 
 The **OMOP CDM** entry (5.3.1 as the reference, 5.4 extending it) is a reusable *model* configuration rather than a single dataset: any data exported to the OMOP Common Data Model inherits its table configs via `extends` and adds only concept mappings. **AmsterdamUMCdb** is the first such dataset, read through its [AMSTEL](https://github.com/AmsterdamUMC/AMSTEL) OMOP CDM 5.4 export, with concept mappings keyed on the OMOP `concept_id`s that AMSTEL assigns. **HiRID** is read in its native long format (`observations`/`pharma`/`general`), with concept mappings keyed on HiRID `variableid`s and unit conversions ported from [`ricu`](https://github.com/eth-mds/ricu).  **SICdb** is read in its native long format, with concept mappings keyed on SICdb `LaboratoryID`/`DataID`s and unit conversions ported from `ricu`.
@@ -165,14 +172,14 @@ output/project/
         └── metadata/{dataset.json, codes.parquet}
 ```
 
-Read it with any Parquet-capable tool, e.g.:
+For an interactive export, use `project.available_inputs()` to discover concept and event selectors,
+then pass your selection to `scan_events()`:
 
 ```python
-import polars as pl
+from weavehr import scan_events
 
-heart_rate = pl.scan_parquet(
-    project_path / "datasets" / "concept" / "data" / "heart_rate" / "1.0.0" / "mimic-iv.parquet"
-).collect()
+events = scan_events(project_path, "heart_rate.1.0.0", codes="MEDS_DEATH", dataset="mimic-iv/3.1")
+print(events.head(10).collect())
 ```
 
 A complete runnable example lives in [`example/pipeline.ipynb`](example/pipeline.ipynb).
@@ -268,7 +275,6 @@ WeavEHR is in active development (pre-1.0); configuration formats may still chan
 
 - Completing concept mappings for eICU-CRD, NWICU, AmsterdamUMCdb, HiRID, and SICdb
 
-- The sharding step for analysis-ready data partitioning
 - Additional datasets and broader OMOP CDM coverage
 
 Contributions of dataset configurations and concept definitions are especially welcome — they are pure YAML and require no changes to the framework itself.

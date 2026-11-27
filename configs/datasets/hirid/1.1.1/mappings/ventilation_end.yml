@@ -1,0 +1,18 @@
+# HiRID v1.1.1 -- observations variableid 15001552, the airway code [ricu mech_vent]
+#
+# A charted code that ricu does not map to invasive (1, 2) or noninvasive (3 to 6)
+# ventilation ends the preceding one (see ventilation_start): ricu's window still ends at
+# it, but the code itself is no ventilation. A code without a value is dropped.
+# The end marker has no level: it ends ventilation of either kind.
+type: simple
+mappings:
+  - pattern:
+      table: observations
+      event: OBSERVATION
+      code: "^(15001552)(//.*)?$"
+    columns:
+      extension:
+        airway_code: col(numeric_value)
+    filters:
+      - drop_na(airway_code)
+      - not ((airway_code == 1) | (airway_code == 2) | (airway_code == 3) | (airway_code == 4) | (airway_code == 5) | (airway_code == 6))

@@ -168,6 +168,12 @@ class BaseConfig(BaseModel, metaclass=ABCMeta):
             yaml.safe_dump(self.model_dump(mode="json", exclude_computed_fields=True), f)
 
 
+class ConceptReference(BaseConfig):
+    """A concept's versioned identity, shared by mapping configs and stored output."""
+
+    __weavehr_config_type__ = "concept"
+
+
 class BaseDatasetConfig(BaseConfig):
     """Base configuration class for dataset configurations.
 

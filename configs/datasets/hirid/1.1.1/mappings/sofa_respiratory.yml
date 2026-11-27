@@ -1,0 +1,14 @@
+# The airway code (ventilation_start, ventilation_end) is a charted state without an
+# episode identifier: each charted code holds until the next one, and ventilation_window
+# ends a code that no other code follows within 12h. ricu (hirid_vent) holds a code until
+# the next one if that is at most 12h later, and otherwise for 4h. So this follows ricu
+# between codes charted up to 12h apart, but holds the last code of a run for 12h, not 4h.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaRespiratoryTransformer
+concepts:
+  - O2_partial_pressure.1.0.0
+  - fraction_of_inspired_oxygen.1.0.0
+  - ventilation_start.1.0.0
+  - ventilation_end.1.0.0
+kwargs:
+  ventilation_window: 12h

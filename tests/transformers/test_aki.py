@@ -74,6 +74,29 @@ class TestCreatinineCriterion:
         out = stages(make(AkiCreatinineTransformer), {"creatinine": series((0, 1.0), (24, value))})
         assert out[24.0] == expected
 
+    @pytest.mark.parametrize("baseline", [100, 371, 2970])
+    @pytest.mark.parametrize("rise", [29, 30, 31])
+    def test_absolute_rise_in_hundredths(self, baseline: int, rise: int) -> None:
+        current = baseline + rise
+        creatinine = series((0, baseline / 100), (24, current / 100))
+        stage_after_rise = 3 if current >= 400 else 1
+        expected = stage_after_rise if rise >= 30 else 0
+        assert stages(make(AkiCreatinineTransformer), {"creatinine": creatinine})[24] == expected
+
+    @pytest.mark.parametrize("boundary", [90, 120, 180])
+    @pytest.mark.parametrize("offset", [-1, 0, 1])
+    def test_ratio_in_hundredths(self, boundary: int, offset: int) -> None:
+        baseline, current = 60, boundary + offset
+        creatinine = series((0, baseline / 100), (72, current / 100))
+        expected = sum((2 * current >= 3 * baseline, current >= 2 * baseline, current >= 3 * baseline))
+        assert stages(make(AkiCreatinineTransformer), {"creatinine": creatinine})[72] == expected
+
+    @pytest.mark.parametrize(("value", "expected"), [(3.99, 1), (3.999999, 3), (4.0, 3)])
+    def test_absolute_stage_three_at_grid_precision(self, value: float, expected: int) -> None:
+        # At six significant digits 3.999999 rounds to 4.0 before the stage rule is evaluated.
+        creatinine = series((0, 3.5), (24, value))
+        assert stages(make(AkiCreatinineTransformer), {"creatinine": creatinine})[24] == expected
+
     def test_absolute_rise_counts_only_inside_the_acute_window(self) -> None:
         inside = stages(make(AkiCreatinineTransformer), {"creatinine": series((0, 1.0), (40, 1.35))})
         assert inside[40.0] == 1.0  # +0.35 within 48h
@@ -127,6 +150,24 @@ class TestUrineOutputCriterion:
     @pytest.fixture
     def weight(self) -> pl.LazyFrame:
         return series((0, 70.0))
+
+    @pytest.mark.parametrize(
+        ("hours", "weight_tenths", "rate_tenths", "stage_below", "stage_at"),
+        [(6, 604, 5, 1, 0), (12, 604, 5, 2, 0), (24, 605, 3, 3, 2)],
+    )
+    @pytest.mark.parametrize("offset", [-1, 0, 1])
+    def test_rate_cutoffs_in_tenths_of_a_millilitre(
+        self, hours: int, weight_tenths: int, rate_tenths: int, stage_below: int, stage_at: int, offset: int
+    ) -> None:
+        cutoff = hours * weight_tenths * rate_tenths // 10
+        total = cutoff + offset
+        hourly = cutoff // hours
+        volumes = [0, *([hourly] * (hours - 1)), total - (hours - 1) * hourly]
+        inputs = {
+            "urine_output": series(*[(hour, volume / 10) for hour, volume in enumerate(volumes)]),
+            "patient_weight": series((0, weight_tenths / 10)),
+        }
+        assert stages(make(AkiUrineOutputTransformer), inputs)[hours] == (stage_below if total < cutoff else stage_at)
 
     def test_moderate_oliguria_stages_by_duration(self, weight: pl.LazyFrame) -> None:
         # 0.4 mL/kg/h sustained: stage 1 once 6h is covered, stage 2 once 12h is

@@ -36,15 +36,18 @@ step = ExtractionStep.load(project, Path("config/extraction.yml"))
 step.run()
 ```
 
-Two steps are currently available, with a third in development:
+Extraction and optional harmonisation produce the inputs to the export phase.
 
 | Step | Input | Output |
 | --- | --- | --- |
 | `ExtractionStep` | Raw source tables (CSV/CSV.GZ) | Dataset-level MEDS events |
 | `ConceptStep` | An extraction step's output | Harmonised, dataset-agnostic concept events |
-| `ShardingStep` *(in development)* | A concept or extraction step's output | Analysis-ready, subject-oriented data shards ([details](sharding.md)) |
+| Export with `ShardingStep` | A concept or extraction step's output | Subject-oriented MEDS shards on disk |
+| Export with `scan_events()` | Selected concepts and/or extracted events for a cohort | An interactive Polars query |
 
-Every step's `run()` follows the same lifecycle:
+See the [export guide](export.md) for both options. An interactive query reads the completed project directly.
+
+Steps executed with `run()` follow the same lifecycle:
 
 1. **Load configurations** — each entry in the step's `config_files` list is read recursively from disk into the step's configuration registry, honouring `includes`/`excludes` and `overwrite`. The merged registry is saved to `<project>/configs/`.
 2. **Set up directories** — a workspace directory (`workspace/<step name>`) and a MEDS dataset (`datasets/<step name>`) are created.

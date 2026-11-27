@@ -1,7 +1,8 @@
 """Shared event alignment and selection, using invented observations."""
 
+import logging
 from datetime import datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
 import polars as pl
 import pytest
@@ -27,11 +28,16 @@ class RateTransformer(WindowedConceptTransformer):
         return pl.col("rate").fill_null(-1)
 
 
-@pytest.fixture
-def transformer() -> RateTransformer:
+def build_transformer(**kwargs: Any) -> RateTransformer:
+    """A ``RateTransformer`` built as a mapping with these ``kwargs`` would build it."""
     concept = ConceptConfig(name="feature", version="1.0.0", unit="mcg/kg/min")
     config = ComplexDatasetConceptConfig(name="feature", version="1.0", dataset="testdb", concept_transformer="unused")
-    return RateTransformer(concept, config, cast(ConceptStep, None))
+    return RateTransformer(concept, config, cast(ConceptStep, None), **kwargs)
+
+
+@pytest.fixture
+def transformer() -> RateTransformer:
+    return build_transformer()
 
 
 def events(hours: list[float], values: list[float | None], **metadata: list[str]) -> pl.LazyFrame:
@@ -166,3 +172,34 @@ def test_coincident_update_stop_and_unknown_resolve_by_precedence(transformer: R
     source = events([0, 0, 1, 1], [0.2, None, 0.0, None], pump=["A"] * 4)
     result = transformer.transform({"dose": source.reverse() if reverse else source}).collect()
     assert result["numeric_value"].to_list() == pytest.approx([0.2, 0.0])
+
+
+MISSING_INPUT = "absent from the resolved dependencies"
+
+
+def test_a_missing_input_is_never_measured_and_warns(caplog: pytest.LogCaptureFixture) -> None:
+    """Without events for the rate (a misnamed dependency, say), it is unknown, and the transformer warns."""
+    with caplog.at_level(logging.DEBUG, logger="weavehr"):
+        result = build_transformer().transform({"pulse": events([0.5], [80.0])}).collect()
+    assert result["numeric_value"].to_list() == [-1]
+    reports = [(record.levelno, record.getMessage()) for record in caplog.records]
+    assert [(level, "['dose']" in message) for level, message in reports if MISSING_INPUT in message] == [
+        (logging.WARNING, True)
+    ]
+
+
+def test_a_mapping_can_declare_an_input_its_dataset_does_not_have(caplog: pytest.LogCaptureFixture) -> None:
+    """``optional_inputs`` names the rate's input; its source is still never measured, but only logged at debug."""
+    with caplog.at_level(logging.DEBUG, logger="weavehr"):
+        result = build_transformer(optional_inputs=["rate"]).transform({"pulse": events([0.5], [80.0])}).collect()
+    assert result["numeric_value"].to_list() == [-1]
+    assert [record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING] == []
+    assert any("optional input(s) ['dose'] not available" in record.getMessage() for record in caplog.records)
+    assert RateTransformer.optional_inputs == set()  # the mapping's declaration stays with its transformer
+
+
+@pytest.mark.parametrize("name", ["dose", "temperature"])
+def test_optional_inputs_must_name_inputs(name: str) -> None:
+    """``dose`` is the concept the rate input reads, not the input's name."""
+    with pytest.raises(ValueError, match=rf"optional_inputs \['{name}'\] are not inputs"):
+        build_transformer(optional_inputs=[name])

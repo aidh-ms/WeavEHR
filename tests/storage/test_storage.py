@@ -128,6 +128,33 @@ class TestWeavEHRProject:
         project = WeavEHRProject(tmp_path / "project")
         assert project.datasets == {}
 
+    def test_read_only_project_preserves_partial_datasets(self, tmp_path: Path) -> None:
+        partial = tmp_path / "datasets" / "raw"
+        partial.mkdir(parents=True)
+        marker = partial / ".complete"
+        marker.touch()
+        with pytest.raises(NotADirectoryError):
+            WeavEHRProject(marker, read_only=True)
+        project = WeavEHRProject(tmp_path, read_only=True)
+        dataset = project.datasets["raw"]
+        with pytest.raises(FileNotFoundError, match="Missing data directory"):
+            project.completed_dataset("Raw")
+        with pytest.raises(ValueError, match="overwrite"):
+            WeavEHRProject(tmp_path, read_only=True, overwrite=True)
+        with pytest.raises(PermissionError):
+            project.add_dataset("raw", overwrite=True)
+        with pytest.raises(PermissionError):
+            project.add_workspace_dir("raw")
+        with pytest.raises(PermissionError):
+            project.cleanup()
+        with pytest.raises(PermissionError):
+            dataset.write_metadata({"dataset_name": "db", "dataset_version": "1"})
+        with pytest.raises(PermissionError):
+            dataset.write_codes()
+        with pytest.raises(PermissionError):
+            dataset.cleanup()
+        assert list(partial.iterdir()) == [marker]
+
 
 class TestMEDSDataset:
     def test_write_metadata(self, tmp_path: Path) -> None:
