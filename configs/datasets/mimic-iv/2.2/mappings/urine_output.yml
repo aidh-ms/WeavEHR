@@ -1,3 +1,8 @@
+# ricu 0.6.3 (urine) also maps 227510 "TF Residual" (d_items category "Output"); per
+# https://github.com/MIT-LCP/mimic-code/issues/753 it is gastric residual aspirated before
+# tube feeding, not urine. mimic-code's mimic-iv/concepts/measurement/urine_output.sql
+# does not use it (its older MIMIC-III cookbook uo.sql did).
+# Independently identified; not reported to ricu.
 type: simple
 mappings:
   - pattern:

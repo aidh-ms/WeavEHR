@@ -1,0 +1,17 @@
+# ricu has HiRID rates for norepinephrine, epinephrine and dobutamine but none for
+# dopamine, which is therefore not an input: optional_inputs records that it is absent
+# on purpose, so the transformer does not warn about it. Each rate holds until the next
+# record of its infusion, which states a new rate, a stop or an unknown rate (see
+# vasopressor_infusion), so pressor_window only bounds an interval between two records
+# that is longer than it.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.sofa.SofaCardiovascularTransformer
+concepts:
+  - mean_arterial_pressure.1.0.0
+  - dobutamine_rate.1.0.0
+  - epinephrine_rate.1.0.0
+  - norepinephrine_rate.1.0.0
+kwargs:
+  window: 1h
+  pressor_window: 48h
+  optional_inputs: [dopamine_rate]

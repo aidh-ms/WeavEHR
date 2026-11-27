@@ -155,6 +155,8 @@ events:
       extension:
         available_time: col(admission_timestamp)
 
+  # text_value: unitdischargestatus (eICU: Alive, Expired or NULL), as HOSPITAL_DISCHARGE
+  # carries hospitaldischargestatus.
   - name: ICU_DISCHARGE
     columns:
       time: col(discharge_timestamp)

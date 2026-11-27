@@ -34,6 +34,9 @@ jobs:
     - name: Lint with ruff
       run: uv run ruff check . --output-format=github
 
+    - name: Check formatting with ruff
+      run: uv run ruff format --check .
+
     - name: Check types with ty
       run: uv run ty check . --output-format=github
 

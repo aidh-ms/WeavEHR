@@ -1,0 +1,29 @@
+# HiRID v1.1.1 -- lymphocytes in % of the white cells [ricu lymph, blood_cell_ratio]:
+# 100 * lymphocyte count (24000480, lymphocytes_absolute) / white cell count
+# (20000700, white_blood_cell_count) recorded at the same time. ricu instead divides by
+# the median white cell count of the same hour (add_concept on its hourly grid).
+# The HiRID-ICU-Benchmark variable reference lists no lymphocyte percentage.
+type: derived
+table:
+  concept: lymphocytes_absolute.1.0.0
+  columns:
+    - subject_id
+    - time
+    - numeric_value
+    - dataset
+    - table
+join:
+  - concept: white_blood_cell_count.1.0.0
+    columns:
+      - subject_id
+      - time
+      - numeric_value
+    both_on:
+      - subject_id
+      - time
+    how: inner
+event:
+  numeric_value: 100 * numeric_value / numeric_value_right
+filters:
+  - drop_na(numeric_value)
+  - drop_if(col(numeric_value_right) <= 0)

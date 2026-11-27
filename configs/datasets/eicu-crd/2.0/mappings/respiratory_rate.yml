@@ -1,5 +1,9 @@
 # vitalperiodic: monitor values. nursecharting: nurse-charted values; rows at the same
 # time as a monitor value are kept.
+# YAIB's ricu-extensions add the nurse-charted rates for eICU-CRD but not for the eICU
+# demo, while their temperature and blood pressure add the extra rows for both
+# The demo has the same tables, so eicu-demo inherits this mapping in full.
+# Not reported upstream; whether the YAIB difference is intended is unknown.
 type: simple
 mappings:
 - pattern:

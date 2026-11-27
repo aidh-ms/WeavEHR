@@ -2,6 +2,9 @@
 # Convert numeric fractions in [0.2, 1] to percent.
 # Recover percentage text when the numeric value is absent; retain source text
 # and numeric values outside the conversion interval without range filtering.
+# ricu 0.6.3 strips "%" from respiratory chart text and applies 21–100% limits,
+# so a fraction such as 0.4 is dropped. This mapping converts 0.4 to 40%.
+# Both mappings exclude mm(hg)-labelled lab values from numeric FiO2.
 type: simple
 mappings:
   - pattern:
@@ -25,3 +28,11 @@ mappings:
       event: LAB
       code: ^(FiO2)(//.*)?$
     columns: *fio2_columns
+    # The interface unit can identify flow (L/min) or pressure (mmHg, mm(hg))
+    # even when the system unit is %. Keep lab rows with no reported unit.
+    filters:
+      - >-
+        replace(
+          labmeasurenameinterface == None, True,
+          not str_contains(labmeasurenameinterface, "(?i)^\\s*(?:l\\s*/\\s*min|mm\\s*(?:hg|\\(hg\\)))\\s*$")
+        )

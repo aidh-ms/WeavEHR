@@ -1,0 +1,9 @@
+# HiRID records no GCS total (ricu has no hirid tgcs), so the total is the sum of the
+# current components; invasive ventilation (gcs_unable, ricu's ett_gcs) sets it to 15.
+type: complex
+concept_transformer: weavehr.steps.concept.transformer.gcs.GcsTransformer
+concepts:
+  - gcs_eye.1.0.0
+  - gcs_motor.1.0.0
+  - gcs_verbal.1.0.0
+  - gcs_unable.1.0.0

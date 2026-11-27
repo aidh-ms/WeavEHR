@@ -86,8 +86,10 @@ ITEMS: Final[Mapping[int, str]] = {
     # hosp/d_labitems
     50816: "Oxygen",
     50817: "Oxygen Saturation",
+    50862: "Albumin",
     51133: "Absolute Lymphocyte Count",
     52769: "Absolute Lymphocyte Count",
+    53085: "Albumin",
 }
 """Item labels of the MIMIC-IV 2.2 item dictionaries, as the extraction joins them into codes."""
 
@@ -168,6 +170,7 @@ CONVERSIONS = [
         ("patient_height", "CHART", 226707, "Inch", 70, 177.8, "inches are converted to cm (x 2.54)"),
         ("lymphocytes_absolute", "LAB", 52769, "#/uL", 1550, 1.55, "#/uL is converted to K/uL (mimic-code)"),
         ("lymphocytes_absolute", "LAB", 51133, "K/uL", 1.55, 1.55, "K/uL is the concept unit and is not converted"),
+        ("albumin", "LAB", 53085, "mg/dL", 3.9, 3.9, "header: 53085's mg/dL label is wrong, its values are in g/dL"),
     ]
 ]
 
