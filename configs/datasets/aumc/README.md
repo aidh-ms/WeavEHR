@@ -43,7 +43,7 @@ Currently mapped (`simple`, from the OMOP `measurement` table): the
 laboratory panels (blood gas, chemistry, haematology), vital signs, the core
 respiratory numerics (SpO2, respiratory rate, FiO2) and urine output. Sex,
 age, the ventilation windows, GCS, suspected infection, the vasopressor rates,
-SOFA and Sepsis-3 are described below.
+SOFA, AKI and Sepsis-3 are described below.
 
 The measurements from mimic-code that AUMCdb records are mapped too: further
 blood gas and differential values, NT-proBNP, anion gap, total protein,
@@ -222,6 +222,13 @@ cardiovascular SOFA are described above. The other four read:
 FiO2 has no plausibility limits here or for the other datasets; ricu drops
 FiO2 outside 21 to 100 %. A value above 100 lowers PaO2/FiO2 and can raise the
 respiratory score, but on AUMCdb 1.5.0 only 21 rows (20 patients) exceed 100.
+
+#### Acute kidney injury
+
+`aki` combines `aki_creatinine` and `aki_urine_output`. The urine criterion
+uses the admission weight-group midpoint in kg and the deduplicated urine
+volumes in mL. Serum creatinine can supply a stage when weight or urine
+coverage is missing.
 
 #### Sepsis-3
 

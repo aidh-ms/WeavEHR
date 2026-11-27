@@ -791,3 +791,41 @@ def test_invasive_ventilation_sets_the_gcs_to_15(tmp_path: Path) -> None:
     )
 
     assert_rows(outputs["gcs"], [{"time": at(0), "numeric_value": 15}, {"time": at(1), "numeric_value": 3}])
+
+
+def test_aki_from_intermittent_urine_rates_and_creatinine(tmp_path: Path) -> None:
+    def observation(hour: int, variable: int, unit: str, value: float) -> dict[str, Any]:
+        return {
+            "time": ADMISSION + timedelta(hours=hour),
+            "code": observation_code(variable, unit),
+            "numeric_value": value,
+        }
+
+    outputs = run_concepts(
+        tmp_path,
+        dataset=DATASET,
+        version=VERSION,
+        concepts=["creatinine", "patient_weight", "urine_output", "aki_creatinine", "aki_urine_output", "aki"],
+        sources={
+            "observations/OBSERVATION": [
+                observation(0, 10000400, "kg", 80),
+                observation(0, 20000600, "umol/l", 100),
+                observation(3, 20000600, "umol/l", 220),
+                *[observation(h, 10020000, "ml/h", 20) for h in [*range(0, 28, 3), 35]],
+            ]
+        },
+    )
+    # The first reading starts the segment at hour 0. Each later three-hour
+    # interval contributes 60 mL. The final eight-hour gap resets coverage.
+    urine_stages = [(6, 1), (9, 1), (12, 2), (15, 2), (18, 2), (21, 2), (24, 3), (27, 3)]
+    assert_rows(
+        outputs["aki_urine_output"],
+        [{"time": ADMISSION + timedelta(hours=h), "numeric_value": stage} for h, stage in urine_stages],
+        context="HiRID urine AKI",
+    )
+    combined_stages = [(0, 0), (3, 2), (6, 2), (9, 2), (12, 2), (15, 2), (18, 2), (21, 2), (24, 3), (27, 3)]
+    assert_rows(
+        outputs["aki"],
+        [{"time": ADMISSION + timedelta(hours=h), "numeric_value": stage} for h, stage in combined_stages],
+        context="HiRID combined AKI",
+    )
