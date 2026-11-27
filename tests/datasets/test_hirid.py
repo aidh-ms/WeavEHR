@@ -699,7 +699,7 @@ def test_sepsis_chain_uses_sustained_antibiotics_and_death(tmp_path: Path) -> No
         tmp_path,
         dataset=DATASET,
         version=VERSION,
-        concepts=["antibiotics", "death", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
+        concepts=["antibiotics", "suspected_infection", "sepsis3", *SOFA_COMPONENTS],
         mapping_overrides=sofa_component_stubs(),
         sources={
             "pharma/PHARMA": [
@@ -720,7 +720,6 @@ def test_sepsis_chain_uses_sustained_antibiotics_and_death(tmp_path: Path) -> No
         },
     )
 
-    assert_rows(outputs["death"], [{"subject_id": 3, "time": at(20)}], context="death")
     for name, time in [("suspected_infection", at(0)), ("sepsis3", at(1))]:
         assert_rows(outputs[name], [{"subject_id": subject, "time": time} for subject in (1, 3)], context=name)
 

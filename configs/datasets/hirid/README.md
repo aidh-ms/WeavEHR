@@ -63,7 +63,7 @@ concept's declared `unit` before being applied.
 Currently mapped (`simple` unless noted): the laboratory panels (blood gas,
 chemistry, haematology) from `observations`, vital signs, GCS components
 (eye/motor/verbal) and RASS, height/weight, the demographics (`patient_sex`,
-`patient_age`) and `death` from `general`, antibiotics from `pharma`, and
+`patient_age`) from `general`, antibiotics from `pharma`, and
 ventilation start/end and the GCS correction from the airway code. The
 HiRID-ICU-Benchmark variable reference lists lymphocytes only as a count
 ("Lymphocytes [#/volume] in Blood", `lymphocytes_absolute`); `lymphocytes` (%)
@@ -164,7 +164,8 @@ Not yet mapped / not cleanly mappable as `simple`:
   HiRID cohort (`si_mode = "abx"`): HiRID records no microbiology, so ricu has no
   HiRID `samp` and antibiotics cannot be paired with cultures. Each antibiotic
   record (ricu's `abx` `pharmaid`s) covers one minute, as in YAIB, so treatment
-  is sustained while records are at most 24h apart over 72h, or until death.
+  is sustained while records are at most 24h apart over 72h, or until the
+  `MEDS_DEATH` event from `general`.
 - **Ventilation** comes from the charted airway code (variableid 15001552),
   ricu's only HiRID source of `mech_vent`. The HiRID-ICU-Benchmark
   [variable reference](https://github.com/ratschlab/HIRID-ICU-Benchmark/blob/bee770094bf8389920bc09823895b87e09a563dd/preprocessing/resources/varref.tsv#L158-L165) names it "Ventilator Airway Code" and lists the

@@ -668,9 +668,9 @@ HiRID records no microbiology, so ricu has no HiRID body-fluid sampling and
 HiRID uses the same transformer and parameters, as YAIB-cohorts does
 (`si_mode = "abx"`). Each record of one of ricu's HiRID antibiotics is a marker
 covering one minute, YAIB's window for a HiRID record, so treatment is sustained
-while records are at most `max_gap` apart. HiRID's `death` is the `MEDS_DEATH`
-event that extraction places at the end of monitoring of a patient discharged
-dead; a HiRID subject is one ICU admission.
+while records are at most `max_gap` apart. The HiRID mapping reads `MEDS_DEATH`
+directly from `general`. Extraction places this event at the end of monitoring
+of a patient discharged dead. A HiRID subject is one ICU admission.
 
 For the missing eICU death events described in
 [issue #84](https://github.com/aidh-ms/WeavEHR/issues/84), we use the earliest
