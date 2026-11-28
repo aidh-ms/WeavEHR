@@ -170,6 +170,11 @@ class InfusionRateTransformer(BaseConceptTransformer):
         """The drug's events with typed columns, each event's unit factor and whether it needs a weight."""
         if infusions is None:
             infusions = pl.LazyFrame(schema=_NO_EVENTS)
+
+        # Older concept outputs may not carry limit flags.
+        if "out_of_range" not in infusions.collect_schema():
+            infusions = infusions.with_columns(pl.lit(None, dtype=pl.Boolean).alias("out_of_range"))
+
         factor, divide_by_weight = unit_conversion(pl.col("rate_unit"), self._target)
         stream = ["subject_id", "stay_id", "stream_id"]
         unit = pl.col("rate_unit").cast(pl.String)
@@ -184,6 +189,7 @@ class InfusionRateTransformer(BaseConceptTransformer):
                 pl.col("time").cast(pl.Datetime("us")),
                 *[pl.col(name).cast(pl.String) for name in ("table", *_PASSTHROUGH)],
                 pl.col("numeric_value").cast(pl.Float64).alias("value"),
+                pl.col("out_of_range").cast(pl.Boolean),
                 # The source's status text, e.g. "Paused" on a MetaVision stop.
                 pl.col("text_value").cast(pl.String),
                 pl.col("rate_unit").cast(pl.String).alias("unit"),
@@ -237,7 +243,7 @@ class InfusionRateTransformer(BaseConceptTransformer):
         divides = pl.col("needs_weight") & ~zero
         weight = pl.when(divides).then(pl.col("weight"))
         rate = value * pl.col("factor") / pl.when(divides).then(weight).otherwise(1.0)
-        convertible = value.is_finite() & (value >= 0) & rate.is_finite()
+        convertible = value.is_finite() & rate.is_finite()
         known = pl.col("available_time")
         return events.with_columns(
             numeric_value=pl.when(zero).then(0.0).when(convertible).then(rate),

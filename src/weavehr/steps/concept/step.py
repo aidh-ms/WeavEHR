@@ -56,6 +56,17 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         config = ConceptStepConfig.load(config_path)
         return cls(project, config, concept_config_registry)
 
+    def apply_concept_limits(
+        self,
+        concept: ConceptConfig,
+        lf: pl.LazyFrame,
+    ) -> pl.LazyFrame:
+        """Apply global limits according to the concept step configuration."""
+        return concept.limits.apply(
+            lf,
+            enabled=self._config.config.apply_limits,
+        )
+
     def extract(self) -> None:
         datasets = {
             (dataset_config.name, dataset_config.version): dataset_config
@@ -583,7 +594,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
                     dataset_extension_columns=dataset_extension_columns,
                 )
 
-                lf = concept.limits.apply(lf)
+                lf = self.apply_concept_limits(concept, lf)
 
                 tmp_output_file = output_dataset_path / f"{str(uuid4())}.parquet"
                 logger.debug(
@@ -658,6 +669,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         extension_columns = concept.extension_columns.copy()
         extension_columns.update(dataset_extension_columns or {})
         extension_columns.update(mapping.columns.extension)
+        if "out_of_range" in extension_columns:
+            raise ValueError("out_of_range is reserved for concept limit validation")
         for col_name, col_expr in extension_columns.items():
             lf = lf.with_columns(parse_expr(lf, col_expr).alias(col_name))
 
@@ -754,6 +767,8 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
         columns = dataset_concept.event.model_dump()
         extension = concept.extension_columns.copy()
         extension.update(columns.pop("extension") or {})
+        if "out_of_range" in extension:
+            raise ValueError("out_of_range is reserved for concept limit validation")
         # Keyed by output column name so several columns may share the same expression.
         mapping = {col_name: col_expr for col_name, col_expr in (columns | extension).items() if col_expr is not None}
 
@@ -829,7 +844,7 @@ class ConceptStep(ConfigurableBaseStep[ConceptStepConfig, ConceptConfig]):
             )
             return
 
-        lf = concept.limits.apply(lf)
+        lf = self.apply_concept_limits(concept, lf)
 
         output_file = self.concept_output_file(concept, dataset_concept.dataset, dataset_concept.version)
         output_file.parent.mkdir(parents=True, exist_ok=True)

@@ -110,7 +110,8 @@ def run(
         (8, "units/kg/min", 80, "units/min", None),
         (8, "Unknown", 80, "mcg/kg/min", None),
         (8, None, 80, "mcg/kg/min", None),
-        (-1, "mcg/kg/min", None, "mcg/kg/min", None),
+        # Negative rates are convertible; global concept limits handle validity.
+        (-1, "mcg/kg/min", None, "mcg/kg/min", -1.0),
         (float("nan"), "mcg/kg/min", None, "mcg/kg/min", None),
         (float("inf"), "mcg/kg/min", None, "mcg/kg/min", None),
     ],
@@ -302,3 +303,18 @@ def test_input_without_an_infusion_event_column_is_an_error() -> None:
 def test_a_unit_outside_the_conversions_is_rejected() -> None:
     with pytest.raises(ValueError, match="InfusionRateTransformer needs a unit"):
         make("mmHg")
+
+
+def test_upstream_limit_violation_survives_conversion() -> None:
+    infusion = events(
+        {"numeric_value": None, "time": at(0)},
+        {"numeric_value": None, "time": at(1)},
+        {"numeric_value": 0.1, "time": at(2)},
+    ).with_columns(pl.Series("out_of_range", [True, False, False]))
+
+    result = run(make(), infusion)
+
+    assert result.height == 3
+    assert result["out_of_range"].to_list() == [True, False, False]
+    assert result["numeric_value"].to_list()[:2] == [None, None]
+    assert result["numeric_value"][2] == pytest.approx(0.1)
